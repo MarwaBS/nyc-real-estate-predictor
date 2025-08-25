@@ -6,6 +6,25 @@ This project aims to classify real estate properties into predefined price zones
 
 ---
 
+## **Data Cleaning**
+- Loaded and merged the original and geocoded datasets.
+- Validated key columns (STATE, LOCALITY, SUBLOCALITY, POSTCODE) for consistency.
+- Flagged and saved discrepancies for review (`discrepancies.csv`).
+- Ensured missing values, duplicates, and data types were handled appropriately.
+- Documented all steps in the `Data_Cleaning_Preparation.ipynb` notebook.
+
+---
+
+## **Exploratory Data Analysis (EDA) & Feature Engineering**
+- Explored data distributions, missing values, and summary statistics.
+- Visualized key features using histograms, boxplots, and correlation heatmaps.
+- Identified and handled outliers and missing data.
+- Engineered new features (e.g., `price_per_sqft`), encoded categorical variables, and scaled numerical features.
+- Documented all steps in the `EDA_and_Feature_Engineering.ipynb` notebook.
+- Summarized key findings and prepared the dataset for modeling.
+
+---
+
 ## **Data Features and Preprocessing**
 ### **Feature Engineering**
 1. **Derived Features:**
