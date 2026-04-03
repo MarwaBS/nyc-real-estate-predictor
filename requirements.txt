@@ -1,0 +1,49 @@
+# Core
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+scipy>=1.13
+
+# Gradient Boosting
+xgboost>=2.1
+lightgbm>=4.3
+catboost>=1.2
+
+# Deep Learning
+torch>=2.3
+pytorch-tabnet>=4.1
+
+# Explainability
+shap>=0.45
+
+# Geospatial
+geopy>=2.4
+h3>=3.7
+folium>=0.16
+
+# Encoding
+category-encoders>=2.6
+
+# Imbalanced Learning
+imbalanced-learn>=0.12
+
+# Experiment Tracking
+mlflow>=2.12
+
+# API
+fastapi>=0.111
+uvicorn>=0.29
+pydantic>=2.7
+
+# UI
+streamlit>=1.35
+plotly>=5.22
+
+# Config
+python-dotenv>=1.0
+
+# Hyperparameter Tuning
+optuna>=3.6
+
+# Data validation
+pandera>=0.20
