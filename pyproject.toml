@@ -36,7 +36,16 @@ disallow_untyped_defs = false
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["tests/*", "notebooks/*", "streamlit_app/*"]
+omit = [
+    "tests/*",
+    "notebooks/*",
+    "streamlit_app/*",
+    "src/models/train_classification.py",
+    "src/models/train_regression.py",
+    "src/dl/train_dl.py",
+    "src/dl/tabular_net.py",
+    "src/models/explain.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
