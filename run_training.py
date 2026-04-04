@@ -10,6 +10,18 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+try:
+    import mlflow
+    _HAS_MLFLOW = True
+except ImportError:
+    _HAS_MLFLOW = False
+
+try:
+    import mlflow
+    _HAS_MLFLOW = True
+except ImportError:
+    _HAS_MLFLOW = False
+
 from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
@@ -154,6 +166,17 @@ def train_classification(
             name, metrics["accuracy"], metrics["macro_f1"], metrics["cohen_kappa"],
         )
 
+        # MLflow experiment tracking
+        if _HAS_MLFLOW:
+            mlflow.set_experiment("price_zone_classification")
+            with mlflow.start_run(run_name=f"clf_{name}"):
+                mlflow.log_params({"model": name, "n_features": len(X_train.columns),
+                                   "train_size": len(X_train), "test_size": len(X_test)})
+                mlflow.log_metrics({"accuracy": metrics["accuracy"],
+                                    "macro_f1": metrics["macro_f1"],
+                                    "cohen_kappa": metrics["cohen_kappa"]})
+                mlflow.sklearn.log_model(pipeline, f"model_{name}")
+
         if metrics["macro_f1"] > best_f1:
             best_f1 = metrics["macro_f1"]
             best_name = name
@@ -215,6 +238,17 @@ def train_regression(
             "%s: R2=%.4f, RMSE=%.4f, MAE_USD=$%.0f",
             name, metrics["r2"], metrics["rmse"], metrics.get("mae_usd", 0),
         )
+
+        # MLflow experiment tracking
+        if _HAS_MLFLOW:
+            mlflow.set_experiment("price_regression")
+            with mlflow.start_run(run_name=f"reg_{name}"):
+                mlflow.log_params({"model": name, "target": "LOG_PRICE",
+                                   "train_size": len(X_train), "test_size": len(X_test)})
+                mlflow.log_metrics({"r2": metrics["r2"], "rmse": metrics["rmse"],
+                                    "mae": metrics["mae"],
+                                    "mae_usd": metrics.get("mae_usd", 0)})
+                mlflow.sklearn.log_model(pipeline, f"model_{name}")
 
         if metrics["r2"] > best_r2:
             best_r2 = metrics["r2"]
