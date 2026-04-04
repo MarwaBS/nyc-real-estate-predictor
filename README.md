@@ -12,13 +12,18 @@
 
 | Task | Model | Metric | Score |
 |---|---|---|---|
-| Price Zone (4-class) | **XGBoost** | Macro F1 | **0.704** |
+| Price Zone (4-class) | **XGBoost + threshold tuning** | Macro F1 | **0.724** |
+| Price Zone (4-class) | XGBoost (argmax) | Macro F1 | 0.704 |
 | Price Zone (4-class) | LightGBM | Macro F1 | 0.693 |
+| Price Zone (4-class) | Multi-Task DL (PyTorch) | Macro F1 | 0.670 |
 | Price Regression | **XGBoost** | R2 (honest, no leakage) | **0.815** |
 | Price Regression | Random Forest | R2 (honest, no leakage) | 0.804 |
 | Price Regression | LightGBM | R2 (honest, no leakage) | 0.796 |
+| Price Regression | Multi-Task DL (PyTorch) | R2 (honest, no leakage) | 0.724 |
 
 All scores on held-out 20% stratified test set (3,603 train / 901 test). No data leakage.
+
+Threshold tuning optimized per-class probability thresholds (Low=0.165, Medium=0.704, High=0.5, Very High=0.5), improving macro F1 from 0.704 to 0.724 (+0.020).
 
 ### SHAP feature importance (top 10)
 

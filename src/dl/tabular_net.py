@@ -51,18 +51,21 @@ class MultiTaskTabNet(nn.Module):
         hidden_dims = hidden_dims or [256, 128, 64]
 
         # Numeric branch
+        self._has_categoricals = len(categorical_dims) > 0
         self.bn_numeric = nn.BatchNorm1d(n_numeric)
-        self.numeric_fc = nn.Linear(n_numeric, hidden_dims[0] // 2)
 
-        # Categorical embedding layers
-        self.embeddings = nn.ModuleList([
-            nn.Embedding(cardinality, embed_dim)
-            for cardinality, embed_dim in categorical_dims
-        ])
-        total_embed_dim = sum(dim for _, dim in categorical_dims)
-
-        # Embedding projection
-        self.embed_fc = nn.Linear(total_embed_dim, hidden_dims[0] // 2)
+        if self._has_categoricals:
+            self.numeric_fc = nn.Linear(n_numeric, hidden_dims[0] // 2)
+            self.embeddings = nn.ModuleList([
+                nn.Embedding(cardinality, embed_dim)
+                for cardinality, embed_dim in categorical_dims
+            ])
+            total_embed_dim = sum(dim for _, dim in categorical_dims)
+            self.embed_fc = nn.Linear(total_embed_dim, hidden_dims[0] // 2)
+        else:
+            self.numeric_fc = nn.Linear(n_numeric, hidden_dims[0])
+            self.embeddings = nn.ModuleList()
+            self.embed_fc = nn.Identity()  # type: ignore[assignment]
 
         # Shared trunk
         trunk_layers: list[nn.Module] = []
@@ -97,13 +100,13 @@ class MultiTaskTabNet(nn.Module):
         x_num = self.bn_numeric(x_numeric)
         x_num = func.relu(self.numeric_fc(x_num))
 
-        # Embedding path
-        embeds = [emb(x_cat) for emb, x_cat in zip(self.embeddings, x_categorical, strict=False)]
-        x_embed = torch.cat(embeds, dim=1)
-        x_embed = func.relu(self.embed_fc(x_embed))
-
-        # Merge + trunk
-        x = torch.cat([x_num, x_embed], dim=1)
+        if self._has_categoricals and x_categorical:
+            embeds = [emb(x_cat) for emb, x_cat in zip(self.embeddings, x_categorical, strict=False)]
+            x_embed = torch.cat(embeds, dim=1)
+            x_embed = func.relu(self.embed_fc(x_embed))
+            x = torch.cat([x_num, x_embed], dim=1)
+        else:
+            x = x_num
         x = self.trunk(x)
 
         # Heads
