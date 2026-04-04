@@ -1,0 +1,5 @@
+outs:
+- md5: 5fa36a1cca4cd7df83df8cefc223fb83
+  size: 238160
+  hash: md5
+  path: address_sublocality_map.csv

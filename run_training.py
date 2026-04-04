@@ -317,6 +317,109 @@ def main() -> None:
     except Exception as exc:
         logger.warning("SHAP analysis failed (non-critical): %s", exc)
 
+    # 7. Threshold tuning (per-class optimal thresholds)
+    logger.info("=" * 60)
+    logger.info("STEP 6: Threshold tuning")
+    logger.info("=" * 60)
+    try:
+        best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
+        proba = best_clf.predict_proba(X_test)
+        from src.models.threshold import optimize_thresholds
+        thresholds, tuned_f1 = optimize_thresholds(proba, y_zone_test, PRICE_ZONE_LABELS)
+        logger.info("Optimized thresholds: %s", thresholds)
+        logger.info("Tuned macro F1: %.4f", tuned_f1)
+        joblib.dump(thresholds, MODELS_DIR / "optimal_thresholds.joblib")
+    except Exception as exc:
+        logger.warning("Threshold tuning failed (non-critical): %s", exc)
+
+    # 8. Deep learning training
+    logger.info("=" * 60)
+    logger.info("STEP 7: Deep learning (multi-task)")
+    logger.info("=" * 60)
+    try:
+        from src.dl.train_dl import prepare_dl_data, train_multitask
+        from src.dl.tabular_net import MultiTaskTabNet, MultiTaskLoss
+
+        best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
+        preprocessor = best_clf.named_steps["preprocessor"]
+
+        # Transform features
+        X_train_t = preprocessor.transform(X_train)
+        X_test_t = preprocessor.transform(X_test)
+        n_features = X_train_t.shape[1]
+
+        import torch
+        # Build model — all numeric (no separate categorical embeddings in transformed space)
+        model = MultiTaskTabNet(
+            n_numeric=n_features,
+            categorical_dims=[],
+            num_classes=len(PRICE_ZONE_LABELS),
+            hidden_dims=[256, 128, 64],
+            dropout=0.3,
+        )
+
+        # Prepare data loaders
+        train_loader = prepare_dl_data(
+            X_train_t, [], y_zone_train, y_price_train.values, batch_size=256,
+        )
+        val_loader = prepare_dl_data(
+            X_test_t, [], y_zone_test, y_price_test.values, batch_size=256, shuffle=False,
+        )
+
+        # Focal loss with class weights
+        from collections import Counter
+        counts = Counter(y_zone_train)
+        total = sum(counts.values())
+        class_weights = [total / (len(counts) * counts.get(i, 1)) for i in range(len(PRICE_ZONE_LABELS))]
+        loss_fn = MultiTaskLoss(alpha=0.6, focal_gamma=2.0, class_weights=class_weights)
+
+        history = train_multitask(
+            model, loss_fn, train_loader, val_loader,
+            n_categorical=0, epochs=80, lr=1e-3, patience=15,
+        )
+
+        # Evaluate DL model
+        model.eval()
+        with torch.no_grad():
+            x_test_tensor = torch.tensor(X_test_t, dtype=torch.float32)
+            cls_logits, reg_pred = model(x_test_tensor, [])
+            dl_cls_pred = cls_logits.argmax(dim=1).numpy()
+            dl_reg_pred = reg_pred.numpy()
+
+        from src.models.evaluate import evaluate_classifier, evaluate_regressor
+        dl_cls_metrics = evaluate_classifier(y_zone_test, dl_cls_pred, PRICE_ZONE_LABELS)
+        dl_reg_metrics = evaluate_regressor(y_price_test.values, dl_reg_pred, log_target=True)
+        logger.info(
+            "DL Classification: accuracy=%.4f, macro_f1=%.4f",
+            dl_cls_metrics["accuracy"], dl_cls_metrics["macro_f1"],
+        )
+        logger.info(
+            "DL Regression: R2=%.4f, RMSE=%.4f",
+            dl_reg_metrics["r2"], dl_reg_metrics["rmse"],
+        )
+
+        if _HAS_MLFLOW:
+            mlflow.set_experiment("price_zone_classification")
+            with mlflow.start_run(run_name="dl_multitask"):
+                mlflow.log_metrics({
+                    "accuracy": dl_cls_metrics["accuracy"],
+                    "macro_f1": dl_cls_metrics["macro_f1"],
+                    "reg_r2": dl_reg_metrics["r2"],
+                })
+    except Exception as exc:
+        logger.warning("DL training failed (non-critical): %s", exc)
+
+    # 9. Save drift baseline
+    logger.info("=" * 60)
+    logger.info("STEP 8: Drift baseline")
+    logger.info("=" * 60)
+    try:
+        from src.models.drift import save_baseline
+        save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
+        logger.info("Drift baseline saved")
+    except Exception as exc:
+        logger.warning("Drift baseline failed (non-critical): %s", exc)
+
     logger.info("=" * 60)
     logger.info("TRAINING COMPLETE")
     logger.info("Models saved to: %s", MODELS_DIR)
