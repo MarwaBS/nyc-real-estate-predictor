@@ -17,7 +17,7 @@
 # Base image: python:3.12-slim-bookworm. Dependabot (see .github/dependabot.yml)
 # tracks the docker ecosystem and will open a PR when a newer digest or patch
 # is published.
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
