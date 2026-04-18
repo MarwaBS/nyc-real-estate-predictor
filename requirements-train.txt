@@ -27,4 +27,4 @@ shap==0.45.1
 imbalanced-learn==0.12.4
 
 # Experiment Tracking
-mlflow==2.22.0  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)
+mlflow==3.11.0rc1  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)
