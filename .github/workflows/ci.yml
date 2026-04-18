@@ -72,6 +72,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Free disk space (GH Actions runner)
+        # Default runner has ~14GB free. Our builder stage pulls pandas +
+        # numpy + xgboost + lightgbm + streamlit + their transitives, plus
+        # GHA cache layers; buildx occasionally runs out of inodes before
+        # the runtime layer is assembled. Jlumbroso's action frees ~15GB
+        # by removing preinstalled Android SDK, .NET, dotnet, CodeQL, etc.
+        # — tools we don't use in the build.
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build multi-stage Dockerfile
