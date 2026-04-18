@@ -1,0 +1,8 @@
+# Trivy container-scan ignores.
+#
+# Currently empty — this project has no documented managed-risk CVEs. Add
+# CVE / GHSA IDs here only with inline rationale when a breaking fix is
+# not feasible, matching the ResumeForge pattern.
+#
+# Example (not active):
+#     CVE-YYYY-NNNNN   # rationale: fix only in langchain 1.x (breaking)

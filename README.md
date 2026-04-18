@@ -245,14 +245,14 @@ pytest tests/test_no_leakage.py -v
 pytest tests/test_api.py -v
 ```
 
-**6 test files** covering:
+**14 test files** covering:
 - Data cleaning pipeline correctness
 - Feature engineering (derived features, target creation, cardinality capping)
 - **Data leakage prevention** — PRICE_PER_SQFT blocked in config AND validated at runtime
 - Geospatial utilities (haversine, clusters)
 - FastAPI endpoints (health, predict, validation errors)
 
-CI runs 3 jobs: `lint` (ruff + mypy), `test` (pytest + 70% coverage gate), `security` (pip-audit).
+CI runs 4 jobs: `lint` (ruff + mypy + bandit), `test` (pytest + 80% coverage gate), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run).
 
 ---
 
@@ -302,7 +302,7 @@ Price_Prediction/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        6 test files, 70% coverage gate
+├── tests/                        14 test files, 70% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
@@ -316,7 +316,7 @@ Price_Prediction/
 │
 ├── notebooks/                    EDA + analysis (import from src/)
 ├── models/                       Serialized artifacts (gitignored)
-├── .github/workflows/ci.yml      3-job CI: lint + test + security
+├── .github/workflows/ci.yml      4-job CI: lint + test + security + docker-build
 ├── Dockerfile                    Non-root, health check
 ├── docker-compose.yml            API + Streamlit stack
 ├── requirements.txt
@@ -330,7 +330,7 @@ Price_Prediction/
 
 | Category | Technology |
 |---|---|
-| Language | Python 3.11 |
+| Language | Python 3.12 |
 | ML | scikit-learn, XGBoost, LightGBM, CatBoost |
 | DL | PyTorch 2.x (multi-task TabNet, Focal Loss, entity embeddings) |
 | Tuning | Optuna (Bayesian optimization) |
@@ -340,10 +340,11 @@ Price_Prediction/
 | Imbalanced learning | imbalanced-learn (SMOTE-ENN) |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (6 test files, 70% coverage gate) |
+| Testing | pytest (14 test files, 80% coverage gate) |
 | Linting | ruff, mypy (strict), bandit |
-| Infra | Docker, docker-compose |
-| CI | GitHub Actions (lint + test + pip-audit) |
+| Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
+| CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
+| Supply chain | Dependabot (pip + docker + actions), Trivy, CycloneDX SBOM |
 
 ---
 
