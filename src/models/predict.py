@@ -40,8 +40,15 @@ def get_regressor(path: Path | None = None) -> Any:
     return _regressor_cache
 
 
-def predict_price_zone(features: pd.DataFrame) -> dict[str, Any]:
-    """Predict price zone + probabilities for one or more properties."""
+def predict_price_zone(
+    features: pd.DataFrame,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    """Predict price zone + probabilities for one or more properties.
+
+    Returns a single dict when a single row is passed, a list of dicts when
+    multiple rows are passed. This dual return shape is historical; new
+    callers should prefer the single-row form.
+    """
     clf = get_classifier()
     proba = clf.predict_proba(features)
     predicted_class = clf.predict(features)
@@ -61,8 +68,14 @@ def predict_price_zone(features: pd.DataFrame) -> dict[str, Any]:
     return results[0] if len(results) == 1 else results
 
 
-def predict_price(features: pd.DataFrame) -> dict[str, Any]:
-    """Predict actual price (in USD) for one or more properties."""
+def predict_price(
+    features: pd.DataFrame,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    """Predict actual price (in USD) for one or more properties.
+
+    Mirrors `predict_price_zone` — single dict for a single row, list for
+    multiple. New callers should prefer the single-row form.
+    """
     reg = get_regressor()
     log_price = reg.predict(features)
 
