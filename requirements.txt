@@ -19,7 +19,7 @@ lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
 # Geospatial (feature engineering runs at request time)
 geopy==2.4.1
-h3==3.7.7
+h3==4.4.2
 
 # Encoding (target encoder applied at inference)
 category-encoders==2.6.3
