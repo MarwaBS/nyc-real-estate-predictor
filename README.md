@@ -1,6 +1,6 @@
 # NYC Real Estate Price Prediction
 
-[![CI](https://github.com/MarwaBS/Price_Prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/Price_Prediction/actions/workflows/ci.yml)
+[![CI](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml)
 
 **Classify NYC properties into price zones and predict actual values using gradient boosting ensembles and multi-task deep learning on 4,500+ listings with geospatial features.**
 
@@ -274,7 +274,7 @@ R2=0.997 was not a real prediction — it was circular computation. After removi
 ## Project structure
 
 ```
-Price_Prediction/
+nyc-real-estate-predictor/
 ├── src/                          Core ML pipeline
 │   ├── config.py                 All paths, constants, feature lists
 │   ├── data/
