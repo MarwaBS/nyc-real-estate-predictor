@@ -1,0 +1,28 @@
+# Exclude everything by default — we COPY explicit paths in the HF Dockerfile.
+# This keeps the build context small (faster pushes, smaller images).
+*
+
+# Re-include the files actually needed for the HF deployment.
+!api/**
+!src/**
+!streamlit_app/**
+!models/**
+!requirements.txt
+!deploy/huggingface/start.sh
+
+# Always exclude these even if matched above
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/*.pyc
+.venv
+.git
+.github
+tests/
+notebooks/
+docs/
+mlruns/
+.dvc/
+*.csv
