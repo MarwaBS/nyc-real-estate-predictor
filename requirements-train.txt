@@ -1,0 +1,30 @@
+# Training-only dependencies — NOT shipped in the production Docker image.
+#
+# Split from requirements.txt so the runtime image stays small (~300MB)
+# and the CI security scan on requirements.txt doesn't flag CVEs in
+# packages that never run in prod (mlflow has 19 pending CVEs; none
+# of them reach the serving path).
+#
+# Pulled in by requirements-dev.txt so local devs + CI's test job get
+# the full toolchain. The CI security job scans requirements.txt only.
+
+-r requirements.txt
+
+# Deep Learning
+torch==2.5.1  # bumped 2.3.1 → 2.5.1 (fixes PYSEC-2024-259, PYSEC-2025-41)
+pytorch-tabnet==4.1.0
+
+# Gradient Boosting (training-only)
+catboost==1.2.7
+
+# Hyperparameter Tuning
+optuna==3.6.1
+
+# Explainability (training + evaluation)
+shap==0.45.1
+
+# Imbalanced Learning
+imbalanced-learn==0.12.4
+
+# Experiment Tracking
+mlflow==2.22.0  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)

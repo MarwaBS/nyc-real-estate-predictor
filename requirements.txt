@@ -1,55 +1,52 @@
-# Runtime dependencies — pinned to exact versions for reproducibility.
+# Runtime dependencies — what the API + Streamlit need to SERVE predictions.
+# Training-only deps live in `requirements-train.txt` (pulled in by
+# requirements-dev.txt). This split keeps the production Docker image
+# small (~300MB vs ~3GB) and means CI's pip-audit on this file only
+# flags CVEs in code that actually ships to users.
+#
 # Dependabot (see .github/dependabot.yml) manages weekly patch + minor
 # upgrades. Major-version bumps are always isolated PRs.
-#
+
 # Core
 pandas==2.2.3
 numpy==1.26.4
 scikit-learn==1.5.2
 scipy==1.13.1
 
-# Gradient Boosting
+# Gradient Boosting (inference only — primary is XGBoost per ADR-002)
 xgboost==2.1.2
-lightgbm==4.3.0
-catboost==1.2.7
+lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
-# Deep Learning
-torch==2.3.1
-pytorch-tabnet==4.1.0
-
-# Explainability
-shap==0.45.1
-
-# Geospatial
+# Geospatial (feature engineering runs at request time)
 geopy==2.4.1
 h3==3.7.7
-folium==0.16.0
 
-# Encoding
+# Encoding (target encoder applied at inference)
 category-encoders==2.6.3
 
-# Imbalanced Learning
-imbalanced-learn==0.12.4
-
-# Experiment Tracking
-mlflow==2.16.2
-
-# API
-fastapi==0.115.6
+# API. fastapi's transitive pin controls starlette; newer fastapi brings
+# newer starlette automatically (the 0.41.3-era fastapi had two starlette
+# CVEs — CVE-2025-54121, CVE-2025-62727 — fixed in starlette 0.47.2 / 0.49.1).
+fastapi>=0.118,<1.0
 uvicorn==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
 slowapi==0.1.9
+httpx==0.28.1
 
 # UI
-streamlit==1.38.0
+streamlit==1.54.0  # bumped 1.38.0 → 1.54.0 (fixes CVE-2026-33682)
 plotly==5.24.1
+folium==0.16.0
+
+# Image processing (transitive via streamlit / plotly; pin explicitly for CVE fixes)
+pillow==12.2.0  # new explicit pin (was 10.4.0 transitive; fixes CVE-2026-25990, CVE-2026-40192)
 
 # Config
 python-dotenv==1.0.1
 
-# Hyperparameter Tuning
-optuna==3.6.1
-
-# Data validation
+# Data validation (schema + runtime checks)
 pandera==0.20.4
+
+# Model loading
+joblib==1.4.2
