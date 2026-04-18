@@ -179,3 +179,32 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 /address_sublocality_map.csv
+
+# === Private internal artifacts ===
+# Broad patterns so individual private filenames never leak. Mirrors the
+# ResumeForge .gitignore.
+#
+# SENIOR_PLAN.md is intentionally NOT gitignored on this repo — it is the
+# public "Senior engineering plan" artifact the project is built to
+# demonstrate, and it is already in origin/main's history. If future plan
+# docs should be private, name them without the `_PLAN.md` suffix or adjust
+# this file.
+*_REPORT.md
+*_STATE.md
+*_NOTES.md
+*_TASKS.md
+*_PRIVATE.md
+*_VERDICT.md
+*_REVIEW.md
+*_SUMMARY.md
+AUDIT_*.md
+FAANG_*.md
+INTERVIEW_*.md
+CLAUDE.md
+Private_test/
+Private/
+private/
+internal/
+audits/
+.claude/
+sbom.cyclonedx.json

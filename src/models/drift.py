@@ -49,7 +49,8 @@ def save_baseline(df: pd.DataFrame, path: Path) -> None:
 def load_baseline(path: Path) -> dict[str, dict[str, float]]:
     """Load saved baseline."""
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        data: dict[str, dict[str, float]] = json.load(f)
+    return data
 
 
 def detect_drift(
