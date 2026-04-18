@@ -39,7 +39,9 @@ def haversine_vectorized(
         np.sin(dlat / 2) ** 2
         + np.cos(lat1_r) * math.cos(lat2_r) * np.sin(dlon / 2) ** 2
     )
-    return earth_radius * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    # numpy's ufunc return type widens to Any under default stubs; cast via
+    # pd.Series to match the declared return type and silence no-any-return.
+    return pd.Series(earth_radius * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a)))
 
 
 def add_distance_features(
