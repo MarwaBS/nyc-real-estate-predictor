@@ -14,7 +14,7 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "python"
@@ -26,6 +26,13 @@ updates:
         update-types: ["patch"]
       python-minor-updates:
         update-types: ["minor"]
+    ignore:
+      # Major-version bumps are breaking by definition — manage manually
+      # in a dedicated branch after reading the changelog. Otherwise
+      # Dependabot fires off weekly pandas 2->3 / optuna 3->4 / h3 3->4
+      # style PRs that always need rejection. This rule suppresses them.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/"
