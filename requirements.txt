@@ -5,51 +5,51 @@
 # Core
 pandas==2.2.3
 numpy==1.26.4
-scikit-learn==1.5.2
-scipy==1.13.1
+scikit-learn==1.8.0
+scipy==1.17.1
 
 # Gradient Boosting
 xgboost==2.1.2
-lightgbm==4.3.0
+lightgbm==4.6.0
 catboost==1.2.7
 
 # Deep Learning
-torch==2.3.1
+torch==2.11.0
 pytorch-tabnet==4.1.0
 
 # Explainability
-shap==0.45.1
+shap==0.51.0
 
 # Geospatial
 geopy==2.4.1
 h3==3.7.7
-folium==0.16.0
+folium==0.20.0
 
 # Encoding
-category-encoders==2.6.3
+category-encoders==2.9.0
 
 # Imbalanced Learning
-imbalanced-learn==0.12.4
+imbalanced-learn==0.14.1
 
 # Experiment Tracking
 mlflow==2.16.2
 
 # API
-fastapi==0.115.6
-uvicorn==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
+fastapi==0.136.0
+uvicorn==0.44.0
+pydantic==2.13.2
+pydantic-settings==2.13.1
 slowapi==0.1.9
 
 # UI
-streamlit==1.38.0
+streamlit==1.56.0
 plotly==5.24.1
 
 # Config
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # Hyperparameter Tuning
 optuna==3.6.1
 
 # Data validation
-pandera==0.20.4
+pandera==0.31.1
