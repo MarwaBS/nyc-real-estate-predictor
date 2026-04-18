@@ -43,3 +43,35 @@ The `.trivyignore` file (if present) lists CVE IDs this project has triaged and
 accepted as managed risk. Each entry has inline rationale. These are not
 vulnerabilities we are hiding — they are vulnerabilities in dependencies whose
 fix requires a breaking migration that is scheduled but not yet executed.
+
+## Dependabot alerts on training-only dependencies
+
+GitHub's Dependabot scans the full dependency tree of every `requirements*.txt`
+file in the repo. This project deliberately splits dependencies into:
+
+- **`requirements.txt`** — runtime: what ships in the production Docker image
+  (pandas, numpy, scikit-learn, xgboost, lightgbm, fastapi, slowapi, streamlit, etc.).
+- **`requirements-train.txt`** — training-only: torch, pytorch-tabnet, catboost,
+  optuna, shap, mlflow, imbalanced-learn. These are required to RE-TRAIN the
+  model from scratch but are NEVER copied into the production image (see
+  `Dockerfile` and `deploy/huggingface/Dockerfile`).
+
+Most Dependabot alerts on this repo's default branch originate from
+`requirements-train.txt` packages (mlflow has 19 pending CVEs, torch has
+2-5, catboost transitives). **None of these reach the production serving
+path.** They are training-time tools used in a developer's local environment
+or in CI's scheduled retraining workflow, not in the public-facing inference
+container.
+
+Triage policy:
+
+1. Alerts originating SOLELY from `requirements-train.txt` are acknowledged
+   and will be addressed when the upstream package ships a non-breaking fix.
+2. Alerts originating from `requirements.txt` (runtime) are HIGH priority and
+   will be addressed within the patch window via Dependabot pull request.
+3. Alerts where both files share an affected package are treated as runtime
+   alerts (HIGH priority).
+
+This file documents the policy so reviewers understand why the alert count
+is non-zero despite the runtime surface being CVE-clean (verified by the
+CI `security` job running `pip-audit -r requirements.txt`).
