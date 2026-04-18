@@ -182,16 +182,14 @@ cython_debug/
 
 # === Private internal artifacts ===
 # Broad patterns so individual private filenames never leak. Mirrors the
-# ResumeForge .gitignore.
-#
-# SENIOR_PLAN.md is intentionally NOT gitignored on this repo — it is the
-# public "Senior engineering plan" artifact the project is built to
-# demonstrate, and it is already in origin/main's history. If future plan
-# docs should be private, name them without the `_PLAN.md` suffix or adjust
-# this file.
+# ResumeForge .gitignore. SENIOR_PLAN.md was previously kept public; on
+# 2026-04-18 user decision was to treat all detailed engineering plans as
+# PRIVATE — SENIOR_PLAN.md was removed from the repo and moved to
+# private memory. The *_PLAN.md pattern is now active.
 *_REPORT.md
 *_STATE.md
 *_NOTES.md
+*_PLAN.md
 *_TASKS.md
 *_PRIVATE.md
 *_VERDICT.md
@@ -201,6 +199,7 @@ AUDIT_*.md
 FAANG_*.md
 INTERVIEW_*.md
 CLAUDE.md
+SENIOR_PLAN.md
 Private_test/
 Private/
 private/
