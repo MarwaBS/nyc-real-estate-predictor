@@ -14,7 +14,7 @@ scikit-learn==1.5.2
 scipy==1.13.1
 
 # Gradient Boosting (inference only — primary is XGBoost per ADR-002)
-xgboost==2.1.2
+xgboost==2.1.4
 lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
 # Geospatial (feature engineering runs at request time)
