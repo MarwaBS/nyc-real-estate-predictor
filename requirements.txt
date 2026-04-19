@@ -10,7 +10,7 @@
 # Core
 pandas==2.2.3
 numpy==1.26.4
-scikit-learn==1.5.2
+scikit-learn==1.8.0  # MUST match the version models were trained on (1.5.2 silently corrupts predictions)
 scipy==1.13.1
 
 # Gradient Boosting (inference only — primary is XGBoost per ADR-002)
@@ -22,7 +22,7 @@ geopy==2.4.1
 h3==3.7.7
 
 # Encoding (target encoder applied at inference)
-category-encoders==2.6.3
+category-encoders==2.8.1  # bumped 2.6.3 → 2.8.1 (2.6.x incompatible with sklearn 1.8.0)
 
 # API. fastapi's transitive pin controls starlette; newer fastapi brings
 # newer starlette automatically (the 0.41.3-era fastapi had two starlette

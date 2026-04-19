@@ -21,9 +21,12 @@ CLEANED_DATASET = PROJECT_ROOT / "output" / "cleaned_house_dataset.csv"
 GEOCODE_FILE = DATA_RAW_DIR / "housing_geocode_extraction.csv"
 SUBWAY_STATIONS_FILE = DATA_RAW_DIR / "subway_stations.csv"
 
-# Ensure output dirs exist
-DATA_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure output dirs exist (best-effort — read-only runtimes like HF Spaces skip silently)
+for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
+    try:
+        _dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
 
 # ---------------------------------------------------------------------------
 # API Keys (from environment — never hardcoded)
