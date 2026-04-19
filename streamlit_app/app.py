@@ -137,11 +137,18 @@ with col2:
             st.metric("Estimated Price", f"${price:,.0f}")
             st.caption(f"Range: ${price * 0.85:,.0f} - ${price * 1.15:,.0f}")
 
-            # Probability chart
-            proba_dict = {label: round(float(p), 3)
-                          for label, p in zip(PRICE_ZONE_LABELS, proba, strict=False)}
-            proba_df = pd.DataFrame([proba_dict])
-            st.bar_chart(proba_df.T.rename(columns={0: "Probability"}))
+            # Probability chart — plotly preserves zone ordering (st.bar_chart sorts alphabetically and truncates "Very High")
+            import plotly.express as px
+            chart_df = pd.DataFrame({
+                "Zone": PRICE_ZONE_LABELS,
+                "Probability": [round(float(p), 3) for p in proba],
+            })
+            fig = px.bar(
+                chart_df, x="Zone", y="Probability",
+                category_orders={"Zone": PRICE_ZONE_LABELS},
+            )
+            fig.update_layout(height=300, margin={"l": 10, "r": 10, "t": 10, "b": 10}, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Enter property details and click **Predict**.")
 

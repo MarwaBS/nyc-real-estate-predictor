@@ -51,7 +51,7 @@ COPY --chown=user:user api/             ./api/
 COPY --chown=user:user src/             ./src/
 COPY --chown=user:user streamlit_app/   ./streamlit_app/
 COPY --chown=user:user models/          ./models/
-COPY --chown=user:user deploy/huggingface/start.sh ./start.sh
+COPY --chown=user:user start.sh ./start.sh
 
 RUN chmod +x ./start.sh
 

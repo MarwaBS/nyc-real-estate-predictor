@@ -3,6 +3,7 @@
 models/*.joblib
 models/*.pkl
 models/*.pt
+models/*.bak
 mlruns/
 data/raw/
 data/processed/
