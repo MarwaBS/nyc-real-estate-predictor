@@ -1,6 +1,7 @@
 """Centralized configuration — all paths, constants, and env vars in one place."""
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -23,10 +24,8 @@ SUBWAY_STATIONS_FILE = DATA_RAW_DIR / "subway_stations.csv"
 
 # Ensure output dirs exist (best-effort — read-only runtimes like HF Spaces skip silently)
 for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
-    try:
+    with contextlib.suppress(PermissionError, OSError):
         _dir.mkdir(parents=True, exist_ok=True)
-    except (PermissionError, OSError):
-        pass
 
 # ---------------------------------------------------------------------------
 # API Keys (from environment — never hardcoded)
