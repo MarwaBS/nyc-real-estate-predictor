@@ -6,6 +6,15 @@
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
+This repository contains **two separate evaluation surfaces** that should not be conflated:
+
+| Surface | Data | Purpose | Primary result |
+|---|---|---|---|
+| Trained-model evaluation | Kaggle 2023 listings (4,504 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.815 on 20% holdout |
+| External benchmark | NYC.gov 2024 Rolling Sales (81,567 rows; no BEDS / BATH / LAT/LON) | Leakage-firewall + schema-lock behaviour under real-world distribution shift | Zero predictions by design — see [§External Benchmark](#external-benchmark--nycgov-2024) |
+
+The external benchmark **is not a prediction system**. It is a controlled, versioned firewall that exposes what the trained model can and cannot be evaluated against once the data source changes. It is scoped this way deliberately — see that section for the full information-boundary statement.
+
 ---
 
 ## Results
@@ -49,6 +58,80 @@ Threshold tuning optimized per-class probability thresholds (Low=0.165, Medium=0
 | Brooklyn | 0.664 |
 | Queens | 0.625 |
 | Manhattan | 0.619 |
+
+---
+
+## External Benchmark — NYC.gov 2024
+
+**What this is.** A schema-constrained, leakage-proof evaluation pipeline that runs the trained regressor against the City of New York's public Rolling Sales dataset.
+**What this is not.** A production housing-price predictor. Not a model comparison. Not an accuracy claim under shift.
+**Why results are structurally limited.** NYC.gov Rolling Sales 2024 is transaction data, not listings. It does not publish BEDS, BATH, LAT/LON, or SUBLOCALITY. The trained model (§Results) was built on 15 features that depend on those fields; they cannot be reconstructed from this data source.
+
+### Layer separation (the whole point)
+
+The benchmark is composed of three independent layers. Each has its own success condition. Conflating them is the most common misread.
+
+**A. Data validity layer** — [SCHEMA_MAP.md](benchmarks/SCHEMA_MAP.md) v1 + [`benchmarks/mapping.py`](benchmarks/mapping.py)
+Row-wise, stateless column mapping. Residential-only filter (`BUILDING CLASS CATEGORY` prefix `R*`). Structural drop rules (non-positive price, out-of-range price, missing sqft, missing year). Success = deterministic, auditable, target-independent; verified by the ten-test adversarial suite in [`tests/benchmarks/test_schema_firewall.py`](tests/benchmarks/test_schema_firewall.py) (18 tests incl. parametrisations, all green).
+
+**B. Evaluation layer** — [`benchmarks/invariants.py`](benchmarks/invariants.py)
+Four firewall checks: name-based leakage (`FORBIDDEN_COLUMNS`), semantic leakage (Pearson + Spearman + normalised MI), drop-log consistency, schema-SHA lock vs [`SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json). Prediction-health checks (NaN, Inf, constant collapse) run only when the model produces output. Success = these invariants hold regardless of model performance.
+
+**C. Benchmark layer** — [`benchmarks/run_benchmark.py`](benchmarks/run_benchmark.py) + [`benchmarks/results.json`](benchmarks/results.json) + [`benchmarks/POSTMORTEMS.md`](benchmarks/POSTMORTEMS.md)
+One-shot orchestration: download → map → invariant checks → attempt inference → write results. No tuning, no retry, no schema edits after seeing results. Success = reproducible, version-stamped output; the first-run number is the shipped number.
+
+### Run 1 results (2026-04-20, SCHEMA_MAP v1, commit `00edb77`)
+
+| | Value |
+|---|---|
+| Raw rows | 81,567 |
+| Scored | **0** |
+| Dropped | 81,567 |
+| Leakage — name-based | not triggered |
+| Leakage — semantic (Pearson + Spearman + MI) | not triggered |
+| Schema SHA vs registry | match |
+| Determinism | ✓ |
+| Model inference | failed (schema mismatch: 15 expected vs 6 produced) |
+| Prediction health | skipped (no predictions) |
+| Performance | unobservable |
+
+Drop reasons:
+
+| Reason | Count | Share |
+|---|---:|---:|
+| `non_residential_class` | 50,799 | 62.3% |
+| `sale_price_non_positive` | 27,704 | 34.0% |
+| `sale_price_out_of_range` | 2,037 | 2.5% |
+| `missing_gross_sqft` | 1,027 | 1.3% |
+
+### Information-boundary statement
+
+**Model performance is bounded by the observable features in NYC.gov 2024, not by model quality.** The trained regressor requires BEDS, BATH, distance-to-Manhattan-centre, distance-to-Central-Park, distance-to-nearest-subway, and SUBLOCALITY (target-encoded). NYC.gov Rolling Sales publishes none of these. Price prediction on this data source is partially underdetermined by information theory — cleaning, feature engineering, or model retraining cannot recover information that the data source does not contain.
+
+The 62% `non_residential_class` rate reflects an **intentional domain restriction in SCHEMA_MAP v1** (condominiums only, `R*` prefix), not a modelling failure. Broadening scope to coops (`09`/`10`) and family dwellings (`01`/`02`/`03`) is a deliberate v2 decision under the versioning rule — it would invalidate current `results.json` and require a fresh benchmark run.
+
+### What the benchmark validated on Run 1
+
+| Claim | Status |
+|---|---|
+| Pipeline runs end-to-end on real public data | ✓ |
+| No leakage detected (name-based + semantic) | ✓ |
+| Drop-log consistent with row counts | ✓ |
+| Schema-SHA lock held through the run | ✓ |
+| Determinism preserved (same raw → same output) | ✓ |
+| Failures surface as structured output, not crashes | ✓ |
+| Model output free of NaN / Inf / collapse | not exercised (no predictions) |
+
+Full narrative: [`benchmarks/POSTMORTEMS.md`](benchmarks/POSTMORTEMS.md). Reproduce locally: `python -m benchmarks.run_benchmark` (requires `pip install -r requirements.txt` + `openpyxl`).
+
+### What will NOT change to "improve" this number
+
+- `SCHEMA_MAP.md` v1 (locked by SHA in `SCHEMA_MAP_VERSIONS.json` and enforced by CI).
+- Drop rules (changing them post-run = outcome shaping, not benchmarking).
+- Model features (the trained model is the trained model; retraining is new-version work).
+- Prediction-health thresholds (they are invariants, not performance gates).
+
+These constraints are the point of the firewall. Loosening any of them converts this from a verifiable system into a tunable demo.
 
 ---
 
@@ -345,6 +428,26 @@ nyc-real-estate-predictor/
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
 | Supply chain | Dependabot (pip + docker + actions), Trivy, CycloneDX SBOM |
+
+---
+
+## Reproducibility
+
+The training environment and the serving environment MUST run the **same** `scikit-learn` line. A silent prediction-corruption incident on 2026-04-19 (Manhattan condo predicted at $2) traced to a `scikit-learn==1.5.2` runtime loading a pickle produced under 1.8.0 — sklearn emitted `InconsistentVersionWarning` but the pipeline continued with corrupted internal state. Postmortem in [`MODEL_CARD.md`](MODEL_CARD.md#production-incidents-postmortem).
+
+Exact pins — training + runtime are now identical:
+
+| Library | Pinned version | Notes |
+|---|---|---|
+| Python | 3.12 | |
+| scikit-learn | `==1.8.0` | MUST match; 1.5.x loads pickles as garbage without erroring |
+| xgboost | `==2.1.2` | `.ubj` format is stable across 2.1.x patch releases |
+| lightgbm | `==4.6.0` | bumped from 4.3.0 (PYSEC-2024-231) |
+| category-encoders | `==2.8.1` | 2.6.x is incompatible with sklearn 1.8 (`_get_tags` removed) |
+| numpy | `==1.26.4` | |
+| pandas | `==2.2.3` | |
+
+All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: Optuna, SHAP, imbalanced-learn). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
 
 ---
 
