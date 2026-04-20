@@ -1,20 +1,36 @@
-"""Pure validation layer for the external benchmark firewall.
+"""Flagship-specific firewall layer — backed by the schema-firewall package.
 
-Implements the enforcement functions referenced by SCHEMA_MAP.md sections
-6 and 10. No ML logic. No feature transforms. No I/O. Validation only.
+Historically this file implemented the firewall checks in-place. It has
+been refactored to delegate to ``schema-firewall`` (published on PyPI,
+imported as ``schema_firewall``) so the flagship's firewall and the
+external library share one implementation. The flagship now *depends on*
+its own published library. If the library breaks, this file breaks.
+That is deliberate.
 
-Every function either returns None (pass) or raises ``LeakageError`` /
-``HealthError`` (fail). Exceptions carry diagnostic context for CI logs.
+Three things remain local:
 
-Scope boundary: this module does not transform data, does not load
-artefacts, and does not know about model internals. It receives arrays
-and frames from the caller and answers one question: does this satisfy
-the stated invariant.
+1. ``SCHEMA_MAP_VERSION`` — pinned to this repository's SCHEMA_MAP.md.
+2. ``FORBIDDEN_COLUMNS`` — the flagship's concrete set, passed to the
+   library via a ``SchemaContract``.
+3. ``check_predictions_healthy`` + ``HealthError`` — prediction-array
+   collapse detection is flagship-specific (the public library
+   intentionally declines to include it, per its 3-entry-point cap).
+
+All other names (``LeakageError``, ``check_no_forbidden_columns``,
+``check_target_independence``) are preserved as thin wrappers so that
+the existing adversarial test suite keeps passing without edits.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from schema_firewall import (
+    LeakageError,
+    SchemaContract,
+    SchemaError,
+    check_leakage,
+    check_schema,
+)
 
 
 SCHEMA_MAP_VERSION = "v1"
@@ -31,24 +47,29 @@ FORBIDDEN_COLUMNS: frozenset[str] = frozenset(
 )
 
 
-class LeakageError(Exception):
-    """A forbidden column or a target-correlated feature was detected in X."""
+_FLAGSHIP_CONTRACT = SchemaContract(forbidden_columns=FORBIDDEN_COLUMNS)
 
 
 class HealthError(Exception):
-    """The prediction array failed distribution-free sanity checks."""
+    """The prediction array failed distribution-free sanity checks.
+
+    Flagship-specific; not part of the schema-firewall public surface.
+    """
 
 
 def check_no_forbidden_columns(X: pd.DataFrame) -> None:
-    """Fail if any column in ``FORBIDDEN_COLUMNS`` is present in ``X``.
+    """Fail if any FORBIDDEN_COLUMNS entry is present in ``X``.
 
-    This is the first, cheapest leakage check. It complements
-    :func:`check_target_independence`, which catches semantic (renamed)
-    leaks by measuring statistical dependency with the target.
+    Thin wrapper over ``schema_firewall.check_schema`` with the
+    flagship's forbidden set. The exception class is translated from
+    ``SchemaError`` (library) to ``LeakageError`` (flagship) so the
+    existing test suite, which matches on ``LeakageError``, keeps
+    working unchanged.
     """
-    present = [c for c in X.columns if c in FORBIDDEN_COLUMNS]
-    if present:
-        raise LeakageError(f"forbidden column(s) present in X: {present}")
+    try:
+        check_schema(X, _FLAGSHIP_CONTRACT)
+    except SchemaError as exc:
+        raise LeakageError(str(exc)) from exc
 
 
 def check_target_independence(
@@ -58,57 +79,14 @@ def check_target_independence(
     max_abs_corr: float = 0.95,
     mi_threshold: float = 0.8,
 ) -> None:
-    """Fail if any column in ``X`` shows suspicious dependency with the target.
+    """Fail if any column in ``X`` shows suspicious dependency with ``target``.
 
-    Three complementary detectors:
-
-    - Pearson |r|  — linear leakage
-    - Spearman |rho| — monotonic (including log-target) leakage
-    - normalised mutual information — general, including non-monotonic
-
-    MI is normalised by the target's histogram-based Shannon entropy so
-    the threshold is scale-free in [0, 1]. The normalisation is a
-    thresholding heuristic, not a scientific measurement.
+    Thin wrapper over ``schema_firewall.check_leakage``. Preserves the
+    flagship's keyword-argument defaults.
     """
-    from sklearn.feature_selection import mutual_info_regression
-
-    numeric = X.select_dtypes(include=[np.number])
-    if numeric.empty:
-        return
-
-    target_arr = target.to_numpy(dtype=float)
-    target_entropy = _shannon_entropy(target_arr)
-    if target_entropy <= 0:
-        raise LeakageError("target is constant; MI normalisation undefined")
-
-    violations: list[str] = []
-    for col in numeric.columns:
-        feat = numeric[col].to_numpy(dtype=float)
-        if not np.isfinite(feat).any():
-            continue
-
-        pearson = abs(_safe_corr(feat, target_arr, method="pearson"))
-        spearman = abs(_safe_corr(feat, target_arr, method="spearman"))
-        mi = float(
-            mutual_info_regression(feat.reshape(-1, 1), target_arr, random_state=0)[0]
-        )
-        mi_norm = mi / target_entropy
-
-        if (
-            pearson > max_abs_corr
-            or spearman > max_abs_corr
-            or mi_norm > mi_threshold
-        ):
-            violations.append(
-                f"{col}: pearson={pearson:.3f} "
-                f"spearman={spearman:.3f} mi_norm={mi_norm:.3f}"
-            )
-
-    if violations:
-        raise LeakageError(
-            "target-correlated features detected; likely semantic leakage:\n  "
-            + "\n  ".join(violations)
-        )
+    check_leakage(
+        X, target, max_abs_corr=max_abs_corr, mi_threshold=mi_threshold
+    )
 
 
 def check_predictions_healthy(
@@ -119,16 +97,9 @@ def check_predictions_healthy(
 ) -> None:
     """Distribution-free collapse / degeneracy detector.
 
-    Checks only invariants, not distribution shape:
-
-    - enough predictions produced (``n_min``)
-    - zero NaN / Inf
-    - no single value covers more than ``max_identical_fraction`` of outputs
-
-    These are collapse detectors, not performance gates. No threshold on
-    R-squared; no expectation about prediction range, spread, or shape.
-    A healthy model predicting garbage with high variance passes these
-    checks and still fails on R-squared in the public results.
+    Flagship-specific; remains in this module because the public
+    schema-firewall library caps at three check functions (leakage,
+    schema, statelessness). Keeps the existing behaviour exactly.
     """
     arr = np.asarray(predictions, dtype=float)
 
@@ -151,44 +122,6 @@ def check_predictions_healthy(
             f"prediction collapse: {max_fraction:.3%} of outputs equal "
             f"{dominant}; threshold {max_identical_fraction:.0%}"
         )
-
-
-def _safe_corr(a: np.ndarray, b: np.ndarray, *, method: str) -> float:
-    """Correlation with zero-variance and NaN guards.
-
-    Returns 0.0 when the correlation is undefined (fewer than two
-    finite paired observations, or zero variance in either series).
-    """
-    a = np.asarray(a, dtype=float)
-    b = np.asarray(b, dtype=float)
-    mask = np.isfinite(a) & np.isfinite(b)
-    if mask.sum() < 2:
-        return 0.0
-    a, b = a[mask], b[mask]
-    if a.std() == 0 or b.std() == 0:
-        return 0.0
-
-    if method == "pearson":
-        return float(np.corrcoef(a, b)[0, 1])
-    if method == "spearman":
-        return float(pd.Series(a).corr(pd.Series(b), method="spearman"))
-    raise ValueError(f"unknown method: {method}")
-
-
-def _shannon_entropy(x: np.ndarray, *, bins: int = 64) -> float:
-    """Histogram-based Shannon entropy in nats.
-
-    Used to normalise ``mutual_info_regression`` output into a
-    ratio suitable for thresholding. Precision is not critical because
-    the value only drives a pass/fail gate, not a reported metric.
-    """
-    x = x[np.isfinite(x)]
-    if x.size < 2 or x.std() == 0:
-        return 0.0
-    hist, _ = np.histogram(x, bins=bins, density=False)
-    p = hist / hist.sum()
-    p = p[p > 0]
-    return float(-np.sum(p * np.log(p)))
 
 
 __all__ = [
