@@ -73,6 +73,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
           # openpyxl is used exclusively by the benchmark downloader.
           pip install openpyxl==3.1.5
 
