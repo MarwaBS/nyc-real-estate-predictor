@@ -25,15 +25,14 @@ import pytest
 
 from benchmarks.invariants import (
     FORBIDDEN_COLUMNS,
+    SCHEMA_MAP_VERSION,
     HealthError,
     LeakageError,
-    SCHEMA_MAP_VERSION,
     check_no_forbidden_columns,
     check_predictions_healthy,
     check_target_independence,
 )
 from benchmarks.mapping import apply_schema_map
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_MAP_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP.md"
@@ -47,10 +46,10 @@ VERSIONS_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP_VERSIONS.json"
 @pytest.mark.parametrize("forbidden_col", sorted(FORBIDDEN_COLUMNS))
 def test_forbidden_column_rejected(nyc_rolling_sales_fixture, forbidden_col):
     """Smuggling any FORBIDDEN_COLUMNS entry into X must raise LeakageError."""
-    X, _target, _report = apply_schema_map(nyc_rolling_sales_fixture)
-    X[forbidden_col] = 1.0
+    x, _target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    x[forbidden_col] = 1.0
     with pytest.raises(LeakageError, match=forbidden_col):
-        check_no_forbidden_columns(X)
+        check_no_forbidden_columns(x)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -59,11 +58,11 @@ def test_forbidden_column_rejected(nyc_rolling_sales_fixture, forbidden_col):
 
 def test_target_independence_catches_renamed_target(nyc_rolling_sales_fixture):
     """A renamed, nearly-identical copy of the target must be caught."""
-    X, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
     noise = np.random.default_rng(0).normal(0, 1e-9, len(target))
-    X["neighborhood_affluence_index"] = target.to_numpy() + noise
+    x["neighborhood_affluence_index"] = target.to_numpy() + noise
     with pytest.raises(LeakageError, match="correlated"):
-        check_target_independence(X, target)
+        check_target_independence(x, target)
 
 
 def test_target_independence_catches_nonlinear_target_encoding(nyc_rolling_sales_fixture):
@@ -73,10 +72,10 @@ def test_target_independence_catches_nonlinear_target_encoding(nyc_rolling_sales
     relationship is non-linear; Spearman and normalised MI still
     flag it.
     """
-    X, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
-    X["smoothed_signal"] = np.expm1(target.to_numpy())
+    x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    x["smoothed_signal"] = np.expm1(target.to_numpy())
     with pytest.raises(LeakageError, match="correlated"):
-        check_target_independence(X, target)
+        check_target_independence(x, target)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -85,9 +84,9 @@ def test_target_independence_catches_nonlinear_target_encoding(nyc_rolling_sales
 
 def test_mapping_is_deterministic(nyc_rolling_sales_fixture):
     """Same input frame must produce bitwise-identical output frames."""
-    X_a, _, _ = apply_schema_map(nyc_rolling_sales_fixture)
-    X_b, _, _ = apply_schema_map(nyc_rolling_sales_fixture)
-    pd.testing.assert_frame_equal(X_a, X_b)
+    x_a, _, _ = apply_schema_map(nyc_rolling_sales_fixture)
+    x_b, _, _ = apply_schema_map(nyc_rolling_sales_fixture)
+    pd.testing.assert_frame_equal(x_a, x_b)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -128,12 +127,12 @@ def test_mapping_ignores_target_identity(nyc_rolling_sales_fixture):
     shuffled["SALE PRICE"] = np.random.default_rng(42).permutation(
         shuffled["SALE PRICE"].to_numpy()
     )
-    X_a, _, _ = apply_schema_map(raw)
-    X_b, _, _ = apply_schema_map(shuffled)
+    x_a, _, _ = apply_schema_map(raw)
+    x_b, _, _ = apply_schema_map(shuffled)
     # SALE PRICE may have moved rows in/out of drop sets (e.g. a row
     # was < 10,000 before the shuffle). Compare only rows kept in both.
-    common = X_a.index.intersection(X_b.index)
-    pd.testing.assert_frame_equal(X_a.loc[common], X_b.loc[common])
+    common = x_a.index.intersection(x_b.index)
+    pd.testing.assert_frame_equal(x_a.loc[common], x_b.loc[common])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -144,9 +143,9 @@ def test_mapping_uses_column_names_not_positions(nyc_rolling_sales_fixture):
     """Reversing column order in the input must not change X."""
     raw = nyc_rolling_sales_fixture
     permuted = raw[list(reversed(raw.columns))]
-    X_a, _, _ = apply_schema_map(raw)
-    X_b, _, _ = apply_schema_map(permuted)
-    pd.testing.assert_frame_equal(X_a, X_b)
+    x_a, _, _ = apply_schema_map(raw)
+    x_b, _, _ = apply_schema_map(permuted)
+    pd.testing.assert_frame_equal(x_a, x_b)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -178,9 +177,11 @@ def test_filter_independent_of_target_distribution(nyc_rolling_sales_fixture):
     rescaled.loc[in_bounds, "SALE PRICE"] = new_prices[in_bounds.to_numpy()]
     _, _, report_b = apply_schema_map(rescaled)
 
-    non_price = lambda r: {
-        k: v for k, v in r.drop_reasons.items() if "price" not in k.lower()
-    }
+    def non_price(report):
+        return {
+            k: v for k, v in report.drop_reasons.items() if "price" not in k.lower()
+        }
+
     assert non_price(report_a) == non_price(report_b)
 
 
