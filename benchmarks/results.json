@@ -1,0 +1,139 @@
+{
+  "run_date": "2026-04-20T18:00:10.303838+00:00",
+  "run_ended": "2026-04-20T18:01:09.089026+00:00",
+  "commit_sha": "9c7de2b62c9953147ac88870e3b793ad252808f8",
+  "schema_map_version": "v1",
+  "schema_map_sha256": "a4135469ecccc6e0ccf27abadd311509e9a47370c0ffba0dc18d9d3a5da4314d",
+  "data_source": "https://www.nyc.gov/site/finance/property/property-rolling-sales-data.page",
+  "data_manifest": [
+    {
+      "borough": "manhattan",
+      "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_manhattan.xlsx",
+      "bytes_downloaded": 1794149,
+      "sha256": "1d680a17b5fb66a25882352e07a389c8e86199cfb165787f2cb92ac389024438"
+    },
+    {
+      "borough": "bronx",
+      "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_bronx.xlsx",
+      "bytes_downloaded": 647165,
+      "sha256": "d64bf1bab7cb52fdaa524addeab7e718984a36c23f9fb6f05d744473b3dd8efe"
+    },
+    {
+      "borough": "brooklyn",
+      "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_brooklyn.xlsx",
+      "bytes_downloaded": 2278991,
+      "sha256": "9bd378b86b4038843bae42f2eab8e1b65b9ae4a3e953391d2aea54dd0b0b8d65"
+    },
+    {
+      "borough": "queens",
+      "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_queens.xlsx",
+      "bytes_downloaded": 2615326,
+      "sha256": "4004d6e198c666231377831b36fdaaae3ce3d10bf36c203fdd70d1ffb8310142"
+    },
+    {
+      "borough": "statenisland",
+      "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_statenisland.xlsx",
+      "bytes_downloaded": 714393,
+      "sha256": "89bf52091f905870172cdd11c0cf148d0b6d58e5a7ae32d7003e36db429cdf63"
+    }
+  ],
+  "n_raw": 81567,
+  "n_dropped": 81567,
+  "n_scored": 0,
+  "drop_reasons": {
+    "sale_price_non_positive": 27704,
+    "sale_price_out_of_range": 2037,
+    "missing_gross_sqft": 1027,
+    "non_residential_class": 50799
+  },
+  "feature_columns": [
+    "borough_name",
+    "land_sqft",
+    "property_sqft",
+    "property_type",
+    "year_built",
+    "zip_code"
+  ],
+  "leakage": {
+    "name_based": {
+      "triggered": false,
+      "message": null
+    },
+    "semantic": {
+      "triggered": false,
+      "message": null
+    }
+  },
+  "inference": {
+    "status": "failed",
+    "stage": "predict",
+    "error_type": "ValueError",
+    "error": "columns are missing: {'TOTAL_ROOMS', 'BATH', 'BEDS', 'PROPERTYSQFT', 'LOG_SQFT', 'SUBLOCALITY', 'ROOMS_PER_SQFT', 'DIST_MANHATTAN_CENTER', 'TYPE', 'ZIPCODE', 'DIST_CENTRAL_PARK', 'PROPERTY_CATEGORY', 'BED_BATH_RATIO', 'BOROUGH', 'DIST_NEAREST_SUBWAY'}",
+    "expected_features": [
+      "BEDS",
+      "BATH",
+      "PROPERTYSQFT",
+      "TOTAL_ROOMS",
+      "BED_BATH_RATIO",
+      "LOG_SQFT",
+      "ROOMS_PER_SQFT",
+      "DIST_MANHATTAN_CENTER",
+      "DIST_CENTRAL_PARK",
+      "DIST_NEAREST_SUBWAY",
+      "BOROUGH",
+      "TYPE",
+      "PROPERTY_CATEGORY",
+      "ZIPCODE",
+      "SUBLOCALITY"
+    ],
+    "produced_features": [
+      "borough_name",
+      "land_sqft",
+      "property_sqft",
+      "property_type",
+      "year_built",
+      "zip_code"
+    ],
+    "missing_features": [
+      "BEDS",
+      "BATH",
+      "PROPERTYSQFT",
+      "TOTAL_ROOMS",
+      "BED_BATH_RATIO",
+      "LOG_SQFT",
+      "ROOMS_PER_SQFT",
+      "DIST_MANHATTAN_CENTER",
+      "DIST_CENTRAL_PARK",
+      "DIST_NEAREST_SUBWAY",
+      "BOROUGH",
+      "TYPE",
+      "PROPERTY_CATEGORY",
+      "ZIPCODE",
+      "SUBLOCALITY"
+    ],
+    "extra_features": [
+      "borough_name",
+      "land_sqft",
+      "property_sqft",
+      "property_type",
+      "year_built",
+      "zip_code"
+    ]
+  },
+  "health_checks": {
+    "status": "skipped",
+    "reason": "no predictions produced"
+  },
+  "performance": {
+    "status": "unobservable",
+    "reason": "no predictions produced (see inference.status)"
+  },
+  "leakage_tripwire": {
+    "threshold": 0.95,
+    "triggered": false
+  },
+  "reproducibility": {
+    "tolerance": "\u00b11e-6 on metrics across x86_64 Linux CI runners, pinned deps",
+    "no_cross_arch_claim": true
+  }
+}
