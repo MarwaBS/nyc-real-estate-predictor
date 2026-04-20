@@ -15,10 +15,10 @@ torch==2.5.1  # bumped 2.3.1 → 2.5.1 (fixes PYSEC-2024-259, PYSEC-2025-41)
 pytorch-tabnet==4.1.0
 
 # Gradient Boosting (training-only)
-catboost==1.2.7
+catboost==1.2.10
 
 # Hyperparameter Tuning
-optuna==3.6.1
+optuna==3.6.2
 
 # Explainability (training + evaluation)
 shap==0.45.1
@@ -27,4 +27,4 @@ shap==0.45.1
 imbalanced-learn==0.12.4
 
 # Experiment Tracking
-mlflow==2.22.0  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)
+mlflow==2.22.4  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)
