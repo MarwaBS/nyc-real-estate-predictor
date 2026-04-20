@@ -1,0 +1,109 @@
+# External Benchmark — NYC.gov 2024 Rolling Sales
+#
+# Execution contract (per Step 7 rules):
+#   A. CI must not reinterpret results. This workflow runs the pipeline
+#      and publishes results.json. It does not summarise, threshold, or
+#      reclassify.
+#   B. CI must be stateless. No dependency cache keyed on outcome logic;
+#      no cached artefacts influence the scored frame.
+#   C. Required status check is structural. CI fails only on: schema
+#      violation, leakage detection, determinism failure, structural
+#      health-check failure, or pipeline crash. Low R² / low F1 / poor
+#      prediction numbers are reported, never enforced.
+#   D. Benchmark output is an immutable per-run artefact, uploaded once
+#      and never rewritten within the same run.
+#
+# The job name below ("external-benchmark") is the exact string that
+# goes into main's branch-protection "required status check" list
+# AFTER this workflow has landed on main at least once. Do not rename
+# without simultaneously updating the protection rule.
+
+name: External Benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'benchmarks/**'
+      - 'tests/benchmarks/**'
+      - '.github/workflows/benchmark.yml'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'benchmarks/**'
+      - 'tests/benchmarks/**'
+      - '.github/workflows/benchmark.yml'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+  schedule:
+    # Weekly re-run to catch NYC.gov schema drift under the firewall.
+    # Monday 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+# Each run is independent; a later run does not cancel an in-flight one.
+concurrency:
+  group: external-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  external-benchmark:
+    name: external-benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # NO pip cache — Rule B: stateless execution. Every run starts
+          # from a clean slate so results.json reflects the pinned
+          # environment, not prior run residue.
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # openpyxl is used exclusively by the benchmark downloader.
+          pip install openpyxl==3.1.5
+
+      - name: Adversarial firewall suite (structural invariants)
+        # Fails CI on schema-SHA drift, determinism violation, state
+        # dependence, target-awareness, drop-log inconsistency,
+        # forbidden-column presence, or collapse-detector regressions.
+        # No performance assertions.
+        run: pytest tests/benchmarks/ -v
+
+      - name: Run external benchmark (one-shot, no tuning)
+        # Contract:
+        #   * downloads NYC.gov 2024 Rolling Sales (network fetch)
+        #   * applies SCHEMA_MAP v1 via apply_schema_map
+        #   * runs leakage invariants on the mapped X
+        #   * attempts model inference; captures schema mismatch as
+        #     structured output rather than propagating as exception
+        #   * writes benchmarks/results.json exactly once
+        # CI failure at this step means the PIPELINE crashed (network,
+        # schema SHA mismatch, etc.), not that the number was bad.
+        run: python -m benchmarks.run_benchmark
+
+      - name: Upload results.json (immutable per-run artefact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: benchmarks/results.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Print results summary (informational only, not a gate)
+        # Pure logging. Shows the raw result in CI output for quick
+        # human inspection. Does not compute, threshold, or interpret.
+        run: cat benchmarks/results.json
