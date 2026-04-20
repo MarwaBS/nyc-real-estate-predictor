@@ -25,14 +25,6 @@ import pytest
 
 from benchmarks.invariants import (
     FORBIDDEN_COLUMNS,
-    SCHEMA_MAP_VERSION,
-    HealthError,
-    LeakageError,
-    check_no_forbidden_columns,
-    check_predictions_healthy,
-    check_target_independence,
-)
-from benchmarks.mapping import apply_schema_map
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_MAP_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP.md"
