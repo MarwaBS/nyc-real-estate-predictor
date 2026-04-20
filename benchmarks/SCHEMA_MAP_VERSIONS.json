@@ -1,0 +1,6 @@
+{
+  "_note": "Registry of frozen SCHEMA_MAP.md versions. Each entry pins the SHA256 of the file at the moment the version was sealed. Any change to SCHEMA_MAP.md without bumping SCHEMA_MAP_VERSION and adding a new entry here fails CI (test_schema_map_sha_matches_version).",
+  "versions": {
+    "v1": "a4135469ecccc6e0ccf27abadd311509e9a47370c0ffba0dc18d9d3a5da4314d"
+  }
+}
