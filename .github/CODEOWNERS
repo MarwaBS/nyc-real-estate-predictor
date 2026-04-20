@@ -1,0 +1,17 @@
+# CODEOWNERS — authority boundary for the external benchmark firewall
+#
+# Any PR that modifies the files below requires review approval from the
+# listed owner before it can merge. Combined with branch protection on
+# main (required review + required status checks), this enforces
+# separation of authority between author and reviewer for the benchmark
+# schema contract.
+#
+# Rationale: SCHEMA_MAP.md and its version registry define the anti-leakage
+# contract for the NYC external benchmark. Silent edits to either file
+# invalidate all prior benchmark results. The test_schema_map_sha_matches_version
+# check catches unintentional drift; CODEOWNERS catches the intentional case
+# by forcing a reviewer in the loop.
+
+benchmarks/SCHEMA_MAP.md             @MarwaBS
+benchmarks/SCHEMA_MAP_VERSIONS.json  @MarwaBS
+benchmarks/invariants.py             @MarwaBS
