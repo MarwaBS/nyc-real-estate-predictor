@@ -43,7 +43,7 @@ folium==0.16.0
 pillow==12.2.0  # new explicit pin (was 10.4.0 transitive; fixes CVE-2026-25990, CVE-2026-40192)
 
 # Config
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # Data validation (schema + runtime checks)
 pandera==0.20.4
