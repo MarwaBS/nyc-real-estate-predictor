@@ -6,6 +6,8 @@
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
+> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** v0.1.0 on PyPI](https://pypi.org/project/schema-firewall/0.1.0/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.0` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
+
 This repository contains **two separate evaluation surfaces** that should not be conflated:
 
 | Surface | Data | Purpose | Primary result |
