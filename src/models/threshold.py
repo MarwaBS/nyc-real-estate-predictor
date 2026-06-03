@@ -52,7 +52,10 @@ def predict_with_thresholds(
 ) -> np.ndarray:
     """Predict classes using optimized per-class thresholds."""
     threshold_array = np.array([thresholds.get(label, 0.5) for label in labels])
-    adjusted = proba / threshold_array
+    # Guard against a zero / near-zero threshold producing inf or nan on
+    # division — mirrors the clip already applied in the internal
+    # _predict_with_thresholds twin so both paths behave consistently.
+    adjusted = proba / np.clip(threshold_array, 1e-6, None)
     # np.argmax with axis=1 always returns an ndarray; the explicit np.asarray
     # narrows mypy's `Any` return-type inference.
     return np.asarray(np.argmax(adjusted, axis=1))
