@@ -31,6 +31,19 @@ def test_predict_with_thresholds_returns_valid_classes() -> None:
     assert set(preds).issubset({0, 1, 2, 3})
 
 
+def test_predict_with_thresholds_survives_zero_threshold() -> None:
+    # A zero threshold must not blow up to inf/nan on division — the public
+    # path clips like its internal twin. argmax should still return a valid
+    # class for every row.
+    proba = np.array([[0.7, 0.1, 0.1, 0.1], [0.1, 0.1, 0.1, 0.7]])
+    labels = ["Low", "Medium", "High", "Very High"]
+    thresholds = {"Low": 0.0, "Medium": 0.5, "High": 0.5, "Very High": 0.5}
+
+    preds = predict_with_thresholds(proba, thresholds, labels)
+    assert not np.isnan(preds).any()
+    assert set(preds).issubset({0, 1, 2, 3})
+
+
 def test_threshold_tuning_handles_imbalanced_data() -> None:
     # Simulate Very High being rare
     proba = np.array([
