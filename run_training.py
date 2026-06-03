@@ -16,12 +16,6 @@ try:
 except ImportError:
     _HAS_MLFLOW = False
 
-try:
-    import mlflow
-    _HAS_MLFLOW = True
-except ImportError:
-    _HAS_MLFLOW = False
-
 from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
