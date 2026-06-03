@@ -56,11 +56,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pip-audit
       - name: pip-audit (dependency vulnerability scan)
-        run: pip-audit -r requirements.txt
+        # PYSEC-2024-277 (joblib, CVE-2024-34997) is a disputed, no-fix
+        # advisory about deserializing UNTRUSTED joblib/pickle artifacts.
+        # This service only loads its own CI-trained model files, never
+        # user-supplied pickles, so the attack precondition never holds and
+        # no patched joblib release exists. Revisit if a fix ships.
+        run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277
       - name: Generate SBOM (CycloneDX JSON)
         # Software Bill of Materials — standard supply-chain artifact.
         # Mirrors the ResumeForge pattern. Stored as a 90-day CI artifact.
-        run: pip-audit -r requirements.txt --format=cyclonedx-json --output=sbom.cyclonedx.json
+        run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277 --format=cyclonedx-json --output=sbom.cyclonedx.json
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
