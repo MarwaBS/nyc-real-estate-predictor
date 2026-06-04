@@ -199,7 +199,6 @@ cython_debug/
 AUDIT_*.md
 FAANG_*.md
 INTERVIEW_*.md
-CLAUDE.md
 SENIOR_PLAN.md
 Private_test/
 Private/
@@ -207,5 +206,4 @@ private/
 internal/
 INTERNAL/
 audits/
-.claude/
 sbom.cyclonedx.json
