@@ -5,17 +5,18 @@ Pipeline:
 1. Download NYC.gov 2024 Rolling Sales (5 boroughs) via
    :func:`benchmarks.datasets.nyc_rolling_sales_2024.download_nyc_rolling_sales`.
 2. Apply :func:`benchmarks.mapping.apply_schema_map` to produce
-   ``(X, target, report)`` under the SCHEMA_MAP.md v1 contract.
+   ``(X, target, report)`` under the SCHEMA_MAP.md v2 contract.
 3. Run the four firewall invariants:
    - name-based leakage check on X
    - semantic leakage (Pearson + Spearman + normalised MI) on X vs target
    - drop-log consistency (n_raw == n_scored + n_dropped)
    - SCHEMA_MAP.md SHA vs registry
-4. Attempt model inference. The trained regressor was built on the
-   Kaggle 2023 schema (BEDS / BATH / DIST_* / SUBLOCALITY / …);
-   if the SCHEMA_MAP v1 feature space does not cover the model's
-   required columns, inference fails. That failure is captured in
-   ``inference`` rather than propagated — this is an honest finding,
+4. Attempt model inference with the lean benchmark regressor
+   (``models/benchmark_regressor.joblib``, trained by
+   ``benchmarks.train_benchmark_model`` on the three features shared with
+   NYC.gov sales: borough, property_sqft, zip_code). If the model artefact
+   is absent (e.g. CI, where there is no training data) the failure is
+   captured in ``inference`` rather than propagated — an honest finding,
    not a bug in the orchestrator.
 5. Run :func:`benchmarks.invariants.check_predictions_healthy` on the
    prediction array when inference succeeded; skip when it did not.
@@ -47,12 +48,11 @@ from benchmarks.invariants import (
 )
 from benchmarks.mapping import apply_schema_map
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_MAP_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP.md"
 VERSIONS_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP_VERSIONS.json"
 RESULTS_PATH = REPO_ROOT / "benchmarks" / "results.json"
-MODEL_PATH = REPO_ROOT / "models" / "price_regressor_best.joblib"
+MODEL_PATH = REPO_ROOT / "models" / "benchmark_regressor.joblib"
 
 
 def _git_commit_sha() -> str | None:
@@ -164,7 +164,7 @@ def run_benchmark() -> dict[str, Any]:
     Side effect: writes :data:`RESULTS_PATH` with the serialised
     result. The returned dict is identical to what lands on disk.
     """
-    run_started = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    run_started = _dt.datetime.now(_dt.UTC).isoformat()
 
     raw, manifests = download_nyc_rolling_sales()
     download_record = [asdict(m) for m in manifests]
@@ -201,7 +201,7 @@ def run_benchmark() -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "run_date": run_started,
-        "run_ended": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "run_ended": _dt.datetime.now(_dt.UTC).isoformat(),
         "commit_sha": _git_commit_sha(),
         "schema_map_version": SCHEMA_MAP_VERSION,
         "schema_map_sha256": _schema_map_sha(),
