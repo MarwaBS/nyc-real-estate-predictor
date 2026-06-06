@@ -6,6 +6,7 @@ import pytest
 
 from src.utils.geo import (
     add_distance_features,
+    add_h3_index,
     add_neighborhood_clusters,
     haversine,
     haversine_vectorized,
@@ -41,3 +42,18 @@ def test_add_neighborhood_clusters(sample_raw_data: pd.DataFrame) -> None:
     result = add_neighborhood_clusters(sample_raw_data, n_clusters=3)
     assert "NEIGHBORHOOD_CLUSTER" in result.columns
     assert set(result["NEIGHBORHOOD_CLUSTER"].unique()).issubset({0, 1, 2})
+
+
+def test_add_h3_index_produces_valid_cells() -> None:
+    """add_h3_index must map lat/lon to H3 v4 cells (regression: requirements
+    pinned h3 v3 while geo.py uses the v4 latlng_to_cell API)."""
+    df = pd.DataFrame(
+        {"LATITUDE": [40.7580, 40.7128], "LONGITUDE": [-73.9855, -74.0060]}
+    )
+    result = add_h3_index(df, resolution=7)
+    assert "H3_RES7" in result.columns
+    cells = result["H3_RES7"].tolist()
+    assert len(cells) == 2
+    # Distinct points → distinct cells; each a non-empty hex string.
+    assert cells[0] != cells[1]
+    assert all(isinstance(c, str) and len(c) == 15 for c in cells)

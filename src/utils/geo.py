@@ -97,10 +97,10 @@ def add_h3_index(
     try:
         import h3
 
-        result[col_name] = df.apply(
-            lambda row: h3.latlng_to_cell(row[lat_col], row[lon_col], resolution),
-            axis=1,
-        )
+        result[col_name] = [
+            h3.latlng_to_cell(lat, lon, resolution)
+            for lat, lon in zip(df[lat_col], df[lon_col], strict=True)
+        ]
     except ImportError:
         result[col_name] = "h3_unavailable"
     return result
