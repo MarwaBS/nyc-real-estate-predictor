@@ -1,4 +1,4 @@
-"""Train price zone classification models — XGBoost, LightGBM, CatBoost, RF, Stacking."""
+"""Train price zone classification models — XGBoost, LightGBM, CatBoost, RF."""
 from __future__ import annotations
 
 import logging
@@ -172,45 +172,6 @@ def tune_with_optuna(
     return best_pipeline, study.best_params
 
 
-def build_stacking_ensemble(
-    X_train: pd.DataFrame,
-    y_train: np.ndarray,
-) -> Any:
-    """Stacking ensemble: XGB + LGBM + CatBoost -> LogisticRegression meta-learner."""
-    from xgboost import XGBClassifier
-    from lightgbm import LGBMClassifier
-    from catboost import CatBoostClassifier
-
-    preprocessor = build_preprocessor()
-
-    estimators = [
-        ("xgb", build_classification_pipeline(
-            XGBClassifier(max_depth=6, n_estimators=500, learning_rate=0.1,
-                          eval_metric="mlogloss", random_state=RANDOM_SEED, n_jobs=-1),
-            preprocessor,
-        )),
-        ("lgbm", build_classification_pipeline(
-            LGBMClassifier(num_leaves=63, n_estimators=500, learning_rate=0.1,
-                           class_weight="balanced", random_state=RANDOM_SEED, n_jobs=-1, verbose=-1),
-        )),
-        ("catboost", build_classification_pipeline(
-            CatBoostClassifier(depth=6, iterations=500, learning_rate=0.1,
-                               auto_class_weights="Balanced", random_seed=RANDOM_SEED, verbose=0),
-        )),
-    ]
-
-    stacker = StackingClassifier(
-        estimators=estimators,
-        final_estimator=LogisticRegression(C=1.0, max_iter=1000, random_state=RANDOM_SEED),
-        cv=StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_SEED),
-        n_jobs=-1,
-    )
-
-    logger.info("Fitting stacking ensemble (XGB + LGBM + CatBoost -> LR)...")
-    stacker.fit(X_train, y_train)
-    return stacker
-
-
 def train_and_evaluate(
     X_train: pd.DataFrame,
     y_train: np.ndarray,
@@ -262,10 +223,7 @@ def train_and_evaluate(
     results["catboost"]["best_params"] = cb_params
 
     # --- 5. Find best model by macro F1 ---
-    best_name = max(
-        (k for k in results if k != "stacking"),
-        key=lambda k: results[k]["macro_f1"],
-    )
+    best_name = max(results, key=lambda k: results[k]["macro_f1"])
     best_pipeline = results[best_name]["pipeline"]
 
     logger.info("Best classifier: %s (macro_f1=%.4f)", best_name, results[best_name]["macro_f1"])

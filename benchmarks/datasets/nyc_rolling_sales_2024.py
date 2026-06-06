@@ -18,11 +18,9 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from pathlib import Path
 
 import pandas as pd
 import requests
-
 
 NYC_ROLLING_SALES_URLS: dict[str, str] = {
     "manhattan": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_manhattan.xlsx",
@@ -53,6 +51,7 @@ def _locate_header_row(content: bytes) -> int:
     PRICE' to identify the real header; if none match, the caller
     gets a clear error rather than silently misaligned columns.
     """
+    last_error: Exception | None = None
     for header_row in HEADER_ROW_CANDIDATES:
         try:
             probe = pd.read_excel(
@@ -61,14 +60,22 @@ def _locate_header_row(content: bytes) -> int:
                 header=header_row,
                 nrows=0,
             )
-        except Exception:
+        except ImportError:
+            # A missing Excel engine is an environment problem, not a
+            # header-detection failure — never mask it behind the generic
+            # "could not locate header" error below.
+            raise
+        except (ValueError, IndexError) as exc:
+            # This header position didn't parse; remember why and keep probing.
+            last_error = exc
             continue
         columns = {str(c).strip().upper() for c in probe.columns}
         if "SALE PRICE" in columns:
             return header_row
+    detail = f" (last parse error: {last_error})" if last_error is not None else ""
     raise RuntimeError(
         "could not locate 'SALE PRICE' header in NYC.gov xlsx "
-        f"after probing rows {HEADER_ROW_CANDIDATES}"
+        f"after probing rows {HEADER_ROW_CANDIDATES}{detail}"
     )
 
 
