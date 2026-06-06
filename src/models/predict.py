@@ -53,18 +53,16 @@ def predict_price_zone(
     proba = clf.predict_proba(features)
     predicted_class = clf.predict(features)
 
-    results = []
-    for i in range(len(features)):
-        zone_idx = int(predicted_class[i])
-        results.append({
-            "price_zone": PRICE_ZONE_LABELS[zone_idx],
-            "confidence": round(float(proba[i].max()), 3),
+    results = [
+        {
+            "price_zone": PRICE_ZONE_LABELS[int(zone_idx)],
+            "confidence": round(float(row_proba.max()), 3),
             "probabilities": {
-                label: round(float(p), 3)
-                for label, p in zip(PRICE_ZONE_LABELS, proba[i])
+                label: round(float(p), 3) for label, p in zip(PRICE_ZONE_LABELS, row_proba)
             },
-        })
-
+        }
+        for zone_idx, row_proba in zip(predicted_class, proba)
+    ]
     return results[0] if len(results) == 1 else results
 
 
@@ -77,17 +75,16 @@ def predict_price(
     multiple. New callers should prefer the single-row form.
     """
     reg = get_regressor()
-    log_price = reg.predict(features)
+    prices = np.expm1(np.asarray(reg.predict(features), dtype=float))
 
-    results = []
-    for i in range(len(features)):
-        price = math.expm1(float(log_price[i]))
-        results.append({
+    results = [
+        {
             "predicted_price": round(price, -2),  # Round to nearest $100
             "price_range": {
                 "low": round(price * 0.85, -2),
                 "high": round(price * 1.15, -2),
             },
-        })
-
+        }
+        for price in prices.tolist()
+    ]
     return results[0] if len(results) == 1 else results
