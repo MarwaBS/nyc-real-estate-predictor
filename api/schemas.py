@@ -48,11 +48,19 @@ class PricePrediction(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """Combined prediction response."""
+    """Combined prediction response.
+
+    Explainability is intentionally **not** served per request: SHAP is a
+    training-only dependency (kept out of the inference image to keep it
+    lean, ~300 MB vs ~3 GB), and per-request explainers add latency for a
+    signal that is stable globally. Global SHAP feature importance is computed
+    at training time and documented in ``MODEL_CARD.md``. (A previous
+    ``top_factors`` field defaulted to an empty list on every response and is
+    removed rather than left as a hollow promise.)
+    """
 
     zone: ZonePrediction
     price: PricePrediction
-    top_factors: list[dict[str, object]] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
