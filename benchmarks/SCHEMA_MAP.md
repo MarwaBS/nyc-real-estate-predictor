@@ -1,10 +1,23 @@
 # SCHEMA_MAP.md — NYC.gov Rolling Sales 2024 → Model Feature Contract
 
-**Version:** v1
+**Version:** v2
 **Status:** Active
 **Scope:** External benchmark only. This file governs the transformation
 between NYC.gov Rolling Sales 2024 and the feature space used by the
-trained NYC Real Estate Predictor. It does **not** govern training data.
+**lean benchmark regressor** (`benchmarks/train_benchmark_model.py`). It does
+**not** govern training data or the flagship model.
+
+> **v2 rationale.** The flagship model uses listing features (`BEDS`, `BATH`,
+> coordinate-derived distances, `SUBLOCALITY`) that NYC.gov transaction records
+> simply do not contain, so it cannot be validated externally. v2 introduces a
+> lean model trained only on the three features both datasets genuinely share —
+> **borough, property square footage, ZIP** — so the benchmark scores real,
+> unseen NYC.gov 2024 sales. Scope is narrowed to **1–3 family dwellings**: for
+> condos/coops NYC.gov reports the *building's* gross square footage, not the
+> unit's, which is not comparable to the per-unit Kaggle `PROPERTYSQFT`.
+> (v1 filtered on a `BUILDING CLASS CATEGORY` `R`-prefix that matched nothing —
+> NYC categories start with a digit — so every row was dropped and the model's
+> features never matched the data. v2 fixes both.)
 
 ---
 
@@ -45,15 +58,18 @@ Violation of any of the above fails CI.
 
 ## 2. Column Mapping Contract
 
+The model input `X` contains exactly three features (matching
+`benchmarks.train_benchmark_model.BENCHMARK_FEATURES`):
+
 | Raw column (NYC.gov)        | Model feature       | Transformation rule                               |
 |-----------------------------|---------------------|---------------------------------------------------|
 | `SALE PRICE`                | `TARGET` (log_price)| `log1p(SALE PRICE)`; **excluded from X**          |
-| `GROSS SQUARE FEET`         | `property_sqft`     | strip commas → int; `0` → drop row (see §4)       |
-| `LAND SQUARE FEET`          | `land_sqft`         | strip commas → int                                |
-| `BOROUGH`                   | `borough_name`      | integer code (1..5) → canonical name via lookup   |
-| `BUILDING CLASS CATEGORY`   | `property_type`     | first 2 chars; only retain rows where prefix `R*` |
-| `YEAR BUILT`                | `year_built`        | identity; `0` → drop row                          |
-| `ZIP CODE`                  | `zip_code`          | identity (integer)                                |
+| `BOROUGH`                   | `borough`           | integer code (1..5) → canonical name via lookup   |
+| `GROSS SQUARE FEET`         | `property_sqft`     | strip commas → float; `0` → drop row (see §4)     |
+| `ZIP CODE`                  | `zip_code`          | integer → string category                         |
+
+`YEAR BUILT` and `BUILDING CLASS CATEGORY` are read for **row filtering only**
+(§4) and never enter `X`. `LAND SQUARE FEET` is unused in v2.
 
 Borough lookup (fixed):
 ```
@@ -93,7 +109,7 @@ the target distribution.
 | `SALE PRICE` < 10,000 or > 100,000,000               | outlier / commercial artifact  |
 | `GROSS SQUARE FEET` = 0                              | missing structural feature     |
 | `YEAR BUILT` = 0                                     | missing structural feature     |
-| `BUILDING CLASS CATEGORY` does not start with `R`    | out of scope (residential only)|
+| `BUILDING CLASS CATEGORY` is not a 1–3 family dwelling | out of scope (`not_family_dwelling`; condos/coops/commercial — see v2 rationale) |
 
 All dropped rows must be counted per reason and logged in
 `benchmarks/results.json → drop_reasons`.

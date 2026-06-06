@@ -23,7 +23,6 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-
 BOROUGH_NAMES: dict[int, str] = {
     1: "Manhattan",
     2: "Bronx",
@@ -60,8 +59,7 @@ def _normalise_columns(raw: pd.DataFrame) -> pd.DataFrame:
     """Strip whitespace from column names and return a copy.
 
     No content transformation; column renaming is deliberately out of
-    scope in v1 because SCHEMA_MAP.md specifies raw column names
-    verbatim.
+    scope because SCHEMA_MAP.md specifies raw column names verbatim.
     """
     out = raw.copy()
     out.columns = [str(c).strip() for c in out.columns]
@@ -92,7 +90,7 @@ def _run_drop_engine(
     Each dropped row is assigned exactly one reason — the first rule
     in priority order that rejects it. The priority order is itself
     a versioned design choice (it determines the per-reason counts,
-    not the final kept set) and is fixed for v1.
+    not the final kept set) and is fixed for v2.
 
     Returns:
         ``(kept_mask, drop_reasons)`` where ``kept_mask`` is a bool
@@ -102,6 +100,8 @@ def _run_drop_engine(
     sale_price = _coerce_numeric(raw["SALE PRICE"])
     gross_sqft = _coerce_numeric(raw["GROSS SQUARE FEET"])
     year_built = _coerce_numeric(raw["YEAR BUILT"])
+    borough = _coerce_numeric(raw["BOROUGH"])
+    zip_code = _coerce_numeric(raw["ZIP CODE"])
     bcc = raw["BUILDING CLASS CATEGORY"].astype(str).str.strip()
 
     kept = pd.Series(True, index=raw.index)
@@ -119,9 +119,21 @@ def _run_drop_engine(
         (sale_price < 10_000) | (sale_price > 100_000_000),
         "sale_price_out_of_range",
     )
-    _apply(gross_sqft == 0, "missing_gross_sqft")
+    # Catch NaN as well as 0: real NYC.gov rows leave GROSS SQUARE FEET / ZIP
+    # blank, which coerces to NaN. A feature column with NaN would survive a
+    # bare ``== 0`` check and then break the leakage check / model, so the
+    # three feature-source columns must be fully valid to be kept.
+    _apply(gross_sqft.isna() | (gross_sqft <= 0), "missing_gross_sqft")
     _apply(year_built == 0, "missing_year_built")
-    _apply(~bcc.str.startswith("R"), "non_residential_class")
+    _apply(~borough.isin([1, 2, 3, 4, 5]), "invalid_borough")
+    _apply(zip_code.isna() | (zip_code <= 0), "missing_zip")
+    # v2 scope: 1–3 family dwellings only. For condos/coops NYC.gov reports the
+    # *building's* GROSS SQUARE FEET, not the unit's, which is not comparable to
+    # the Kaggle PROPERTYSQFT the model learned from. Family dwellings report the
+    # home's own square footage, so the external comparison is apples-to-apples.
+    # (v1 filtered on a "R"-prefix that never matched — NYC categories start with
+    # a digit — so it dropped every row; see SCHEMA_MAP.md v2.)
+    _apply(~bcc.str.contains("FAMILY", case=False, na=False), "not_family_dwelling")
 
     return kept, reasons
 
@@ -129,33 +141,23 @@ def _run_drop_engine(
 # ─── 4.3 Feature mapping ────────────────────────────────────────────
 
 def _build_features(kept_raw: pd.DataFrame) -> pd.DataFrame:
-    """Assemble the model feature frame from kept rows.
+    """Assemble the benchmark feature frame from kept rows.
 
-    Every column is derived from a single raw column via a row-wise
-    transform. No aggregation, no dataset-wide statistic, no target
-    reference.
-
-    Column order is fixed by the dict literal below; the output frame
-    is therefore independent of the input column ordering.
+    Emits exactly the three features shared with the Kaggle training data —
+    ``borough`` (Census name), ``property_sqft`` (float), and ``zip_code``
+    (string category) — matching ``benchmarks.train_benchmark_model``'s
+    ``BENCHMARK_FEATURES`` so the lean benchmark regressor scores this frame
+    directly. Every column is a row-wise transform of a single raw column:
+    no aggregation, no dataset-wide statistic, no target reference. Column
+    order is fixed by the dict literal, so the output is independent of input
+    column ordering.
     """
-    property_sqft = _coerce_numeric(kept_raw["GROSS SQUARE FEET"]).astype("int64")
-    land_sqft = _coerce_numeric(kept_raw["LAND SQUARE FEET"]).astype("int64")
     borough_id = _coerce_numeric(kept_raw["BOROUGH"]).astype("int64")
-    borough_name = borough_id.map(BOROUGH_NAMES).astype("object")
-    property_type = (
-        kept_raw["BUILDING CLASS CATEGORY"].astype(str).str.strip().str[:2]
-    ).astype("object")
-    year_built = _coerce_numeric(kept_raw["YEAR BUILT"]).astype("int64")
-    zip_code = _coerce_numeric(kept_raw["ZIP CODE"]).astype("int64")
-
     return pd.DataFrame(
         {
-            "borough_name": borough_name,
-            "land_sqft": land_sqft,
-            "property_sqft": property_sqft,
-            "property_type": property_type,
-            "year_built": year_built,
-            "zip_code": zip_code,
+            "borough": borough_id.map(BOROUGH_NAMES).astype("object"),
+            "property_sqft": _coerce_numeric(kept_raw["GROSS SQUARE FEET"]).astype(float),
+            "zip_code": _coerce_numeric(kept_raw["ZIP CODE"]).astype("int64").astype(str),
         },
         index=kept_raw.index,
     )
