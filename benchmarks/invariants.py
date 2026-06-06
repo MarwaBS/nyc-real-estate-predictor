@@ -32,8 +32,7 @@ from schema_firewall import (
     check_schema,
 )
 
-
-SCHEMA_MAP_VERSION = "v1"
+SCHEMA_MAP_VERSION = "v2"
 
 
 FORBIDDEN_COLUMNS: frozenset[str] = frozenset(
