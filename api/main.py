@@ -49,7 +49,10 @@ app.add_middleware(
 # Rate limiting — slowapi is now a hard dependency; no conditional import.
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# starlette types the handler's exc param as the base Exception; slowapi's
+# handler narrows it to RateLimitExceeded, which is correct at runtime but
+# trips mypy's invariant arg-type check. Scoped ignore, not blanket.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
