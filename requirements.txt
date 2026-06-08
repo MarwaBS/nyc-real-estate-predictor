@@ -53,4 +53,4 @@ joblib==1.4.2
 
 # Schema firewall — we dogfood our own published library for the external benchmark.
 # If this version breaks, the flagship benchmark breaks. That is deliberate.
-schema-firewall==0.1.0
+schema-firewall==0.1.2
