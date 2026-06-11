@@ -84,7 +84,9 @@ def _fetch(url: str, *, timeout: int = 60) -> bytes:
     headers = {"User-Agent": "nyc-real-estate-benchmark/0.1 (MarwaBS)"}
     response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
-    return response.content
+    # bytes(...) keeps the declared return type honest even when mypy runs
+    # without the requests package installed (CI lint job) and sees Any.
+    return bytes(response.content)
 
 
 def download_nyc_rolling_sales() -> tuple[pd.DataFrame, list[DownloadManifest]]:
