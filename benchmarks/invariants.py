@@ -7,7 +7,7 @@ external library share one implementation. The flagship now *depends on*
 its own published library. If the library breaks, this file breaks.
 That is deliberate.
 
-Three things remain local:
+Four things remain local:
 
 1. ``SCHEMA_MAP_VERSION`` — pinned to this repository's SCHEMA_MAP.md.
 2. ``FORBIDDEN_COLUMNS`` — the flagship's concrete set, passed to the
@@ -15,12 +15,22 @@ Three things remain local:
 3. ``check_predictions_healthy`` + ``HealthError`` — prediction-array
    collapse detection is flagship-specific (the public library
    intentionally declines to include it, per its 3-entry-point cap).
+4. ``schema_map_sha256`` + ``verify_schema_map_lock`` — the version
+   registry enforcement. The hash is computed over LF-normalised bytes
+   so the lock is identical across Windows/Linux checkouts, and the
+   orchestrator (not just the test suite) refuses to run against an
+   unsealed contract.
 
 All other names (``LeakageError``, ``check_no_forbidden_columns``,
 ``check_target_independence``) are preserved as thin wrappers so that
 the existing adversarial test suite keeps passing without edits.
 """
+
 from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -32,7 +42,59 @@ from schema_firewall import (
     check_schema,
 )
 
-SCHEMA_MAP_VERSION = "v2"
+SCHEMA_MAP_VERSION = "v3"
+
+_BENCHMARKS_DIR = Path(__file__).resolve().parent
+SCHEMA_MAP_PATH = _BENCHMARKS_DIR / "SCHEMA_MAP.md"
+VERSIONS_PATH = _BENCHMARKS_DIR / "SCHEMA_MAP_VERSIONS.json"
+
+
+class SchemaLockError(Exception):
+    """SCHEMA_MAP.md does not match the SHA sealed for SCHEMA_MAP_VERSION.
+
+    Raised by :func:`verify_schema_map_lock` — the run-time enforcement of
+    the registry. A benchmark run against an unsealed contract is invalid
+    by definition (SCHEMA_MAP.md §9), so the orchestrator hard-fails
+    instead of recording the mismatching hash as an FYI.
+    """
+
+
+def schema_map_sha256(path: Path = SCHEMA_MAP_PATH) -> str:
+    """SHA-256 of SCHEMA_MAP.md over LF-normalised bytes.
+
+    Normalising CRLF→LF before hashing makes the lock platform-deterministic:
+    a Windows checkout with ``core.autocrlf=true`` would otherwise hash
+    different bytes than the Linux CI runner for an identical contract.
+    (.gitattributes also pins LF checkouts; this is the belt to that braces.)
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def verify_schema_map_lock() -> str:
+    """Enforce the schema lock: current SCHEMA_MAP.md SHA must equal the
+    registry entry sealed for :data:`SCHEMA_MAP_VERSION`.
+
+    Returns the verified SHA so callers can record it. Raises
+    :class:`SchemaLockError` on any mismatch or missing registry entry.
+    """
+    registry = json.loads(VERSIONS_PATH.read_text(encoding="utf-8"))
+    sealed = registry.get("versions", {}).get(SCHEMA_MAP_VERSION)
+    if sealed is None:
+        raise SchemaLockError(
+            f"no registry entry for SCHEMA_MAP_VERSION={SCHEMA_MAP_VERSION!r} "
+            f"in {VERSIONS_PATH.name}"
+        )
+    # Module-global lookup at call time (not a bound default) so tests can
+    # point the lock at a tampered copy.
+    actual = schema_map_sha256(SCHEMA_MAP_PATH)
+    if actual != sealed:
+        raise SchemaLockError(
+            f"SCHEMA_MAP.md hash does not match the sealed {SCHEMA_MAP_VERSION} "
+            f"registry entry: actual={actual} sealed={sealed}. Either the file "
+            f"changed without a version bump, or the run is outside the chain "
+            f"of custody."
+        )
+    return actual
 
 
 FORBIDDEN_COLUMNS: frozenset[str] = frozenset(
@@ -83,13 +145,11 @@ def check_target_independence(
     Thin wrapper over ``schema_firewall.check_leakage``. Preserves the
     flagship's keyword-argument defaults.
     """
-    check_leakage(
-        X, target, max_abs_corr=max_abs_corr, mi_threshold=mi_threshold
-    )
+    check_leakage(X, target, max_abs_corr=max_abs_corr, mi_threshold=mi_threshold)
 
 
 def check_predictions_healthy(
-    predictions,
+    predictions: np.ndarray | list[float],
     *,
     n_min: int = 500,
     max_identical_fraction: float = 0.95,
@@ -128,7 +188,10 @@ __all__ = [
     "FORBIDDEN_COLUMNS",
     "LeakageError",
     "HealthError",
+    "SchemaLockError",
     "check_no_forbidden_columns",
     "check_target_independence",
     "check_predictions_healthy",
+    "schema_map_sha256",
+    "verify_schema_map_lock",
 ]

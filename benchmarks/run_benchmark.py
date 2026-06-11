@@ -1,33 +1,40 @@
 """External benchmark orchestrator — one-shot run.
 
-Pipeline:
+Pipeline (every "invariant" below is ENFORCED here at run time — a
+violation raises and fails the run; nothing is merely recorded):
 
-1. Download NYC.gov 2024 Rolling Sales (5 boroughs) via
+1. Verify the schema lock: SCHEMA_MAP.md's LF-normalised SHA-256 must
+   equal the registry entry sealed for the current SCHEMA_MAP_VERSION
+   (:func:`benchmarks.invariants.verify_schema_map_lock`). A run against
+   an unsealed contract is invalid by definition, so it never starts.
+2. Download NYC.gov 2024 Rolling Sales (5 boroughs) via
    :func:`benchmarks.datasets.nyc_rolling_sales_2024.download_nyc_rolling_sales`.
-2. Apply :func:`benchmarks.mapping.apply_schema_map` to produce
-   ``(X, target, report)`` under the SCHEMA_MAP.md v2 contract.
-3. Run the four firewall invariants:
-   - name-based leakage check on X
-   - semantic leakage (Pearson + Spearman + normalised MI) on X vs target
-   - drop-log consistency (n_raw == n_scored + n_dropped)
-   - SCHEMA_MAP.md SHA vs registry
-4. Attempt model inference with the lean benchmark regressor
-   (``models/benchmark_regressor.joblib``, trained by
+3. Apply :func:`benchmarks.mapping.apply_schema_map` to produce
+   ``(X, target, report)`` under the SCHEMA_MAP.md contract, then enforce:
+   - drop-log consistency: ``sum(drop_reasons) == n_dropped`` and
+     ``n_raw == n_scored + n_dropped`` (raises on violation);
+   - target sanity: every retained log-price is finite (raises — a NaN
+     target would otherwise silently poison the R²).
+4. Run the leakage invariants — name-based forbidden-column check and
+   semantic (Pearson + Spearman + normalised MI) target-independence.
+   Findings are recorded; a triggered detector is visible in
+   ``results.json → leakage`` and trips the tripwire bool.
+5. Run inference with the lean benchmark regressor
+   (``models/benchmark_regressor.joblib`` — COMMITTED, 0.6 MB, trained by
    ``benchmarks.train_benchmark_model`` on the three features shared with
-   NYC.gov sales: borough, property_sqft, zip_code). If the model artefact
-   is absent (e.g. CI, where there is no training data) the failure is
-   captured in ``inference`` rather than propagated — an honest finding,
-   not a bug in the orchestrator.
-5. Run :func:`benchmarks.invariants.check_predictions_healthy` on the
+   NYC.gov sales: borough, property_sqft, zip_code). Because the artefact
+   ships with the repo and the data is a public download, CI and any
+   stranger compute the same R² this file reports.
+6. Run :func:`benchmarks.invariants.check_predictions_healthy` on the
    prediction array when inference succeeded; skip when it did not.
-6. Write ``benchmarks/results.json``. Whatever the first run produces
+7. Write ``benchmarks/results.json``. Whatever the first run produces
    is what ships. No tuning, no schema edits, no retry (per Rule A of
    the Step 5 execution contract).
 """
+
 from __future__ import annotations
 
 import datetime as _dt
-import hashlib
 import json
 import subprocess
 from dataclasses import asdict
@@ -45,14 +52,41 @@ from benchmarks.invariants import (
     check_no_forbidden_columns,
     check_predictions_healthy,
     check_target_independence,
+    verify_schema_map_lock,
 )
-from benchmarks.mapping import apply_schema_map
+from benchmarks.mapping import MappingReport, apply_schema_map
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_MAP_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP.md"
-VERSIONS_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP_VERSIONS.json"
 RESULTS_PATH = REPO_ROOT / "benchmarks" / "results.json"
 MODEL_PATH = REPO_ROOT / "models" / "benchmark_regressor.joblib"
+
+
+class DropLogError(Exception):
+    """The mapping's drop accounting does not reconcile (SCHEMA_MAP §4)."""
+
+
+def _verify_drop_log(report: MappingReport) -> None:
+    """Enforce drop-log consistency instead of trusting the mapping."""
+    reason_total = sum(report.drop_reasons.values())
+    if reason_total != report.n_dropped:
+        raise DropLogError(
+            f"drop_reasons sum to {reason_total} but n_dropped={report.n_dropped}"
+        )
+    if report.n_raw != report.n_scored + report.n_dropped:
+        raise DropLogError(
+            f"n_raw={report.n_raw} != n_scored={report.n_scored} "
+            f"+ n_dropped={report.n_dropped}"
+        )
+
+
+def _verify_target_finite(target: pd.Series) -> None:
+    """A non-finite retained target would silently poison the R²."""
+    bad = int((~np.isfinite(target.to_numpy(dtype=float))).sum())
+    if bad:
+        raise DropLogError(
+            f"{bad} retained row(s) have a non-finite log-price target — "
+            f"the drop engine must reject them (missing_sale_price)"
+        )
 
 
 def _git_commit_sha() -> str | None:
@@ -67,10 +101,6 @@ def _git_commit_sha() -> str | None:
         return out.stdout.strip()
     except Exception:
         return None
-
-
-def _schema_map_sha() -> str:
-    return hashlib.sha256(SCHEMA_MAP_PATH.read_bytes()).hexdigest()
 
 
 def _run_leakage_invariants(X: pd.DataFrame, target: pd.Series) -> dict[str, Any]:
@@ -166,10 +196,19 @@ def run_benchmark() -> dict[str, Any]:
     """
     run_started = _dt.datetime.now(_dt.UTC).isoformat()
 
+    # Invariant 1 (hard gate): the contract being executed must be the
+    # contract that was sealed. Raises SchemaLockError before any download.
+    verified_sha = verify_schema_map_lock()
+
     raw, manifests = download_nyc_rolling_sales()
     download_record = [asdict(m) for m in manifests]
 
     X, target, report = apply_schema_map(raw)
+
+    # Invariants 2+3 (hard gates): drop accounting reconciles; no retained
+    # row carries a non-finite target.
+    _verify_drop_log(report)
+    _verify_target_finite(target)
 
     leakage = _run_leakage_invariants(X, target)
     predictions, inference = _attempt_inference(X)
@@ -182,6 +221,9 @@ def run_benchmark() -> dict[str, Any]:
         ss_res = float(np.sum(residuals**2))
         ss_tot = float(np.sum((target_arr - target_arr.mean()) ** 2))
         r2 = None if ss_tot == 0 else 1.0 - ss_res / ss_tot
+        if r2 is not None and not np.isfinite(r2):
+            # A NaN/inf R² is a pipeline defect, never a finding.
+            raise DropLogError(f"non-finite R² computed: {r2!r}")
         performance = {
             "status": "computed",
             "r2_log_space": r2,
@@ -204,7 +246,9 @@ def run_benchmark() -> dict[str, Any]:
         "run_ended": _dt.datetime.now(_dt.UTC).isoformat(),
         "commit_sha": _git_commit_sha(),
         "schema_map_version": SCHEMA_MAP_VERSION,
-        "schema_map_sha256": _schema_map_sha(),
+        # Verified against the registry at step 1 — by the time this is
+        # written, the hash is known to equal the sealed entry.
+        "schema_map_sha256": verified_sha,
         "data_source": "https://www.nyc.gov/site/finance/property/property-rolling-sales-data.page",
         "data_manifest": download_record,
         "n_raw": report.n_raw,
@@ -232,8 +276,10 @@ def run_benchmark() -> dict[str, Any]:
 
 if __name__ == "__main__":
     result = run_benchmark()
-    print(json.dumps(
-        {k: v for k, v in result.items() if k != "data_manifest"},
-        indent=2,
-        default=str,
-    ))
+    print(
+        json.dumps(
+            {k: v for k, v in result.items() if k != "data_manifest"},
+            indent=2,
+            default=str,
+        )
+    )

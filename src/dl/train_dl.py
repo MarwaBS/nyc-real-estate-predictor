@@ -1,4 +1,5 @@
 """Deep learning training loop — multi-task TabNet with early stopping."""
+
 from __future__ import annotations
 
 import logging
@@ -51,7 +52,10 @@ def train_multitask(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
 
     history: dict[str, list[float]] = {
-        "train_loss": [], "val_loss": [], "val_cls_acc": [], "val_reg_r2": [],
+        "train_loss": [],
+        "val_loss": [],
+        "val_cls_acc": [],
+        "val_reg_r2": [],
     }
     best_val_loss = float("inf")
     patience_counter = 0
@@ -78,7 +82,13 @@ def train_multitask(
 
         # --- Validate ---
         model.eval()
-        val_losses, all_preds, all_true_cls, all_pred_reg, all_true_reg = [], [], [], [], []
+        val_losses, all_preds, all_true_cls, all_pred_reg, all_true_reg = (
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
         with torch.no_grad():
             for batch in val_loader:
                 x_num = batch[0].to(DEVICE)
@@ -110,7 +120,12 @@ def train_multitask(
         if epoch % 10 == 0 or epoch == epochs - 1:
             logger.info(
                 "Epoch %d/%d — train=%.4f, val=%.4f, cls_acc=%.3f, reg_r2=%.4f, lr=%.2e",
-                epoch + 1, epochs, avg_train, avg_val, cls_acc, reg_r2,
+                epoch + 1,
+                epochs,
+                avg_train,
+                avg_val,
+                cls_acc,
+                reg_r2,
                 optimizer.param_groups[0]["lr"],
             )
 
@@ -122,10 +137,14 @@ def train_multitask(
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                logger.info("Early stopping at epoch %d (patience=%d)", epoch + 1, patience)
+                logger.info(
+                    "Early stopping at epoch %d (patience=%d)", epoch + 1, patience
+                )
                 break
 
     # Load best weights
-    model.load_state_dict(torch.load(MODELS_DIR / "dl_multitask_best.pt", weights_only=True))
+    model.load_state_dict(
+        torch.load(MODELS_DIR / "dl_multitask_best.pt", weights_only=True)
+    )
     logger.info("Training complete — best val_loss=%.4f", best_val_loss)
     return history

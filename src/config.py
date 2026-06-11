@@ -1,4 +1,5 @@
 """Centralized configuration — all paths, constants, and env vars in one place."""
+
 from __future__ import annotations
 
 import contextlib
@@ -20,7 +21,6 @@ MODELS_DIR = PROJECT_ROOT / "models"
 RAW_DATASET = DATA_RAW_DIR / "NY-House-Dataset.csv"
 CLEANED_DATASET = PROJECT_ROOT / "output" / "cleaned_house_dataset.csv"
 GEOCODE_FILE = DATA_RAW_DIR / "housing_geocode_extraction.csv"
-SUBWAY_STATIONS_FILE = DATA_RAW_DIR / "subway_stations.csv"
 
 # Ensure output dirs exist (best-effort — read-only runtimes like HF Spaces skip silently)
 for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):

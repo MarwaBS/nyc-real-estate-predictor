@@ -1,4 +1,5 @@
 """Tests for model drift detection."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,12 +19,16 @@ from src.models.drift import (
 @pytest.fixture
 def sample_df() -> pd.DataFrame:
     rng = np.random.RandomState(42)
-    return pd.DataFrame({
-        "BEDS": rng.randint(1, 6, 100),
-        "BATH": rng.uniform(1, 4, 100),
-        "PROPERTYSQFT": rng.uniform(400, 4000, 100),
-        "BOROUGH": rng.choice(["manhattan", "brooklyn"], 100),  # Non-numeric, skipped
-    })
+    return pd.DataFrame(
+        {
+            "BEDS": rng.randint(1, 6, 100),
+            "BATH": rng.uniform(1, 4, 100),
+            "PROPERTYSQFT": rng.uniform(400, 4000, 100),
+            "BOROUGH": rng.choice(
+                ["manhattan", "brooklyn"], 100
+            ),  # Non-numeric, skipped
+        }
+    )
 
 
 def test_compute_feature_stats_returns_expected_keys(sample_df: pd.DataFrame) -> None:
@@ -43,6 +48,7 @@ def test_save_and_load_baseline(sample_df: pd.DataFrame, tmp_path: Path) -> None
     assert path.exists()
 
     from src.models.drift import load_baseline
+
     baseline = load_baseline(path)
     assert "BEDS" in baseline
     assert baseline["BEDS"]["count"] == 100

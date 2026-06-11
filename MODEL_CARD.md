@@ -12,8 +12,8 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model types:** two artifacts trained jointly on the same feature set:
   - **Classifier** — `XGBoost` with per-class threshold tuning. 4-class price zone (Low / Medium / High / Very High).
   - **Regressor** — `XGBoost` on `LOG_PRICE` target. Point-estimate. Predictions converted back via `expm1()`.
-- **Additional models compared (not shipped as primary):** LightGBM, Random Forest, Stacking ensemble, Multi-Task PyTorch TabNet. See `src/models/train_classification.py` + `train_regression.py`.
-- **Training / tuning:** Optuna Bayesian search, 50 trials per model. Class-imbalance handled via SMOTE-ENN + class-weight reweighting.
+- **Additional models compared (not shipped as primary):** LightGBM, Random Forest (regression). The extended training path (`src/models/train_classification.py`, `src/dl/`) also implements Optuna search, CatBoost, a stacking ensemble, SMOTE-ENN, and a multi-task PyTorch TabNet — runnable with `requirements-train.txt`, but not the source of the shipped artifacts.
+- **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the held-out split, per-class threshold tuning post-hoc. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
 - **Licence:** MIT.
 - **Citation / contact:** `marwabensalem30@gmail.com`; include `[MODEL_CARD]` in subject.
@@ -54,7 +54,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Quantitative analyses
 
-- **Unitary results:** top SHAP features (mean |SHAP|): `DIST_MANHATTAN_CENTER` (0.212), `PROPERTYSQFT` (0.184), `BATH` (0.166), `SUBLOCALITY` target-encoded (0.148). Full top-10 in README.
+- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `DIST_MANHATTAN_CENTER` (1.163), `PROPERTYSQFT` (0.843), `BATH` (0.797), `DIST_CENTRAL_PARK` (0.416). Full top-10 in README.
 - **Intersectional results:** borough-level macro F1:
   - Staten Island 0.795
   - Bronx 0.680
@@ -73,10 +73,28 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Caveats and recommendations
 
 - **Caveats:**
-  - `DIST_NEAREST_SUBWAY` is currently a proxy (equal to `DIST_MANHATTAN_CENTER`) until NYC Open Data subway-station coordinates are plumbed in. The feature is in the schema but its information value is zero at current state.
+  - `DIST_NEAREST_SUBWAY` is a proxy (equal to `DIST_MANHATTAN_CENTER`) **by design**: station-level data is not bundled with the repo, and training + serving must use identical feature semantics, so both sides compute the same proxy (`run_training.py` and `api/main.py`). Its marginal information value is zero; it remains in the schema for forward compatibility.
   - No uncertainty quantification — the predicted price has a fixed ±15% band, not a calibrated interval.
 - **Recommendations:**
   - Treat predictions as directional, not dollar-accurate.
   - Do not use for decisions that would materially affect a specific person (loan, rent, appraisal).
   - Retrain quarterly if the dataset can be refreshed.
   - Expand fairness analysis to calibration plots + per-group confusion matrices if this model were promoted beyond portfolio use.
+
+## Production incidents (postmortem)
+
+- **2026-04-19 — silent prediction corruption from a scikit-learn version
+  mismatch.** A serving environment running `scikit-learn==1.5.2` loaded
+  pipeline artifacts trained under `1.8.0`. sklearn emitted
+  `InconsistentVersionWarning` — a warning, not an error — and the pipeline
+  continued serving with corrupted internal state (a Manhattan condo
+  predicted at **$2**). Nothing crashed; the failure mode was silence.
+- **Root cause:** unpinned runtime sklearn + warning-level signal for a
+  corruption-level problem.
+- **Remediation (both layers now in place):**
+  1. *Pin:* training and serving run the identical `scikit-learn==1.8.0`
+     (`requirements.txt`).
+  2. *Runtime guard:* `src/models/predict.py::_load_model` promotes
+     `InconsistentVersionWarning` to a hard `ModelVersionError` — a
+     cross-version artifact is **refused**, never served. Regression-tested
+     in `tests/test_predict.py::test_version_mismatch_is_refused`.

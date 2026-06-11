@@ -1,4 +1,5 @@
 """Integration test — full pipeline: load data -> features -> train -> predict."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,21 +26,25 @@ def integration_data() -> pd.DataFrame:
     boroughs = ["manhattan", "brooklyn", "queens", "the bronx", "staten island"]
     types = ["condo", "house", "co-op", "townhouse"]
 
-    return pd.DataFrame({
-        "PRICE": rng.uniform(100_000, 3_000_000, n),
-        "BEDS": rng.randint(1, 6, n),
-        "BATH": rng.choice([1.0, 1.5, 2.0, 2.5, 3.0], n),
-        "PROPERTYSQFT": rng.uniform(400, 4000, n),
-        "LATITUDE": rng.uniform(40.5, 40.9, n),
-        "LONGITUDE": rng.uniform(-74.2, -73.7, n),
-        "BOROUGH": rng.choice(boroughs, n),
-        "TYPE": rng.choice(types, n),
-        "SUBLOCALITY": rng.choice(["midtown", "fort greene", "astoria", "pelham"], n),
-        "ZIPCODE": rng.choice(["10022", "11217", "11101", "10473", "10312"], n),
-        "ADDRESS": [f"{i} Test St" for i in range(n)],
-        "BROKERTITLE": ["test broker"] * n,
-        "PROPERTY_CATEGORY": ["residential"] * n,
-    })
+    return pd.DataFrame(
+        {
+            "PRICE": rng.uniform(100_000, 3_000_000, n),
+            "BEDS": rng.randint(1, 6, n),
+            "BATH": rng.choice([1.0, 1.5, 2.0, 2.5, 3.0], n),
+            "PROPERTYSQFT": rng.uniform(400, 4000, n),
+            "LATITUDE": rng.uniform(40.5, 40.9, n),
+            "LONGITUDE": rng.uniform(-74.2, -73.7, n),
+            "BOROUGH": rng.choice(boroughs, n),
+            "TYPE": rng.choice(types, n),
+            "SUBLOCALITY": rng.choice(
+                ["midtown", "fort greene", "astoria", "pelham"], n
+            ),
+            "ZIPCODE": rng.choice(["10022", "11217", "11101", "10473", "10312"], n),
+            "ADDRESS": [f"{i} Test St" for i in range(n)],
+            "BROKERTITLE": ["test broker"] * n,
+            "PROPERTY_CATEGORY": ["residential"] * n,
+        }
+    )
 
 
 def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> None:
@@ -61,10 +66,21 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
 
     # 3. Prepare features (NO leakage)
     feature_cols = [
-        "BEDS", "BATH", "PROPERTYSQFT", "TOTAL_ROOMS", "BED_BATH_RATIO",
-        "LOG_SQFT", "ROOMS_PER_SQFT", "DIST_MANHATTAN_CENTER",
-        "DIST_CENTRAL_PARK", "DIST_NEAREST_SUBWAY",
-        "BOROUGH", "TYPE", "PROPERTY_CATEGORY", "ZIPCODE", "SUBLOCALITY",
+        "BEDS",
+        "BATH",
+        "PROPERTYSQFT",
+        "TOTAL_ROOMS",
+        "BED_BATH_RATIO",
+        "LOG_SQFT",
+        "ROOMS_PER_SQFT",
+        "DIST_MANHATTAN_CENTER",
+        "DIST_CENTRAL_PARK",
+        "DIST_NEAREST_SUBWAY",
+        "BOROUGH",
+        "TYPE",
+        "PROPERTY_CATEGORY",
+        "ZIPCODE",
+        "SUBLOCALITY",
     ]
     available = [c for c in feature_cols if c in df.columns]
     assert_no_leakage(available)
@@ -78,7 +94,11 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
 
     features = df[available]
     x_train, x_test, yz_train, yz_test, yp_train, yp_test = train_test_split(
-        features, y_zone, y_price, test_size=0.2, random_state=42,
+        features,
+        y_zone,
+        y_price,
+        test_size=0.2,
+        random_state=42,
     )
 
     # 4. Train classification

@@ -14,6 +14,7 @@ Contract obligations:
   schema lands in the caller's hands verbatim (modulo pandas' Excel
   parsing conventions: header row detection, dtype inference).
 """
+
 from __future__ import annotations
 
 import io

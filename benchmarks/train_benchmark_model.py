@@ -21,6 +21,7 @@ Feature contract (must match :func:`benchmarks.mapping.apply_schema_map`):
 
 Target: ``log1p(PRICE)`` (the benchmark compares in log space).
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,7 +62,9 @@ def build_benchmark_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
             "zip_code": work["ZIPCODE"].astype(int).astype(str),
         }
     )
-    y = pd.Series(np.log1p(work["PRICE"].to_numpy(dtype=float)), index=x.index, name="log_price")
+    y = pd.Series(
+        np.log1p(work["PRICE"].to_numpy(dtype=float)), index=x.index, name="log_price"
+    )
     return x, y
 
 
@@ -74,11 +77,17 @@ def build_benchmark_pipeline() -> Pipeline:
     """
     preprocessor = ColumnTransformer(
         transformers=[
-            ("borough", OneHotEncoder(handle_unknown="ignore", sparse_output=False), ["borough"]),
+            (
+                "borough",
+                OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+                ["borough"],
+            ),
             (
                 "zip",
                 OneHotEncoder(
-                    handle_unknown="infrequent_if_exist", min_frequency=25, sparse_output=False
+                    handle_unknown="infrequent_if_exist",
+                    min_frequency=25,
+                    sparse_output=False,
                 ),
                 ["zip_code"],
             ),
@@ -96,7 +105,9 @@ def train_benchmark_model(cleaned_path: Path = CLEANED_DATASET) -> Pipeline:
     logger.info("Loading cleaned dataset from %s", cleaned_path)
     df = pd.read_csv(cleaned_path)
     x, y = build_benchmark_frame(df)
-    logger.info("Benchmark training frame: %d rows, features=%s", len(x), BENCHMARK_FEATURES)
+    logger.info(
+        "Benchmark training frame: %d rows, features=%s", len(x), BENCHMARK_FEATURES
+    )
 
     pipeline = build_benchmark_pipeline()
     pipeline.fit(x, y)
@@ -108,5 +119,7 @@ def train_benchmark_model(cleaned_path: Path = CLEANED_DATASET) -> Pipeline:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(message)s"
+    )
     train_benchmark_model()
