@@ -8,6 +8,7 @@ Architecture:
     Regression        -> Dense(1, Linear) -> MSE Loss
     Combined loss     = alpha * CE + (1 - alpha) * MSE
 """
+
 from __future__ import annotations
 
 import torch
@@ -56,10 +57,12 @@ class MultiTaskTabNet(nn.Module):
 
         if self._has_categoricals:
             self.numeric_fc = nn.Linear(n_numeric, hidden_dims[0] // 2)
-            self.embeddings = nn.ModuleList([
-                nn.Embedding(cardinality, embed_dim)
-                for cardinality, embed_dim in categorical_dims
-            ])
+            self.embeddings = nn.ModuleList(
+                [
+                    nn.Embedding(cardinality, embed_dim)
+                    for cardinality, embed_dim in categorical_dims
+                ]
+            )
             total_embed_dim = sum(dim for _, dim in categorical_dims)
             self.embed_fc = nn.Linear(total_embed_dim, hidden_dims[0] // 2)
         else:
@@ -71,12 +74,14 @@ class MultiTaskTabNet(nn.Module):
         trunk_layers: list[nn.Module] = []
         in_dim = hidden_dims[0]
         for h_dim in hidden_dims[1:]:
-            trunk_layers.extend([
-                nn.Linear(in_dim, h_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(h_dim),
-                nn.Dropout(dropout),
-            ])
+            trunk_layers.extend(
+                [
+                    nn.Linear(in_dim, h_dim),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(h_dim),
+                    nn.Dropout(dropout),
+                ]
+            )
             in_dim = h_dim
         self.trunk = nn.Sequential(*trunk_layers)
 
@@ -101,7 +106,10 @@ class MultiTaskTabNet(nn.Module):
         x_num = func.relu(self.numeric_fc(x_num))
 
         if self._has_categoricals and x_categorical:
-            embeds = [emb(x_cat) for emb, x_cat in zip(self.embeddings, x_categorical, strict=False)]
+            embeds = [
+                emb(x_cat)
+                for emb, x_cat in zip(self.embeddings, x_categorical, strict=False)
+            ]
             x_embed = torch.cat(embeds, dim=1)
             x_embed = func.relu(self.embed_fc(x_embed))
             x = torch.cat([x_num, x_embed], dim=1)

@@ -1,12 +1,22 @@
 # SCHEMA_MAP.md — NYC.gov Rolling Sales 2024 → Model Feature Contract
 
-**Version:** v2
+**Version:** v3
 **Status:** Active
 **Scope:** External benchmark only. This file governs the transformation
 between NYC.gov Rolling Sales 2024 and the feature space used by the
 **lean benchmark regressor** (`benchmarks/train_benchmark_model.py`). It does
 **not** govern training data or the flagship model.
 
+> **v3 rationale.** Three changes over v2, all defensive: (1) a blank
+> `SALE PRICE` (NaN) is now dropped explicitly and FIRST — NaN compares
+> False against every numeric threshold, so v2 let blank-price rows
+> survive the price filters and produce a `log1p(NaN)` target; (2)
+> `YEAR BUILT` missing (NaN) is dropped alongside `= 0`, with its role
+> made explicit (record-quality filter, not a feature); (3) the §4 table
+> now lists EVERY rule the drop engine enforces, in priority order — v2's
+> table omitted the `invalid_borough` and `missing_zip` rules that the
+> reference implementation applied. Feature mapping is unchanged.
+>
 > **v2 rationale.** The flagship model uses listing features (`BEDS`, `BATH`,
 > coordinate-derived distances, `SUBLOCALITY`) that NYC.gov transaction records
 > simply do not contain, so it cannot be validated externally. v2 introduces a
@@ -101,18 +111,26 @@ Enforcement: `benchmarks/invariants.py::check_no_forbidden_columns` plus
 ## 4. Row Filtering Rules
 
 Rows are dropped **only** for structural validity. No filter may depend on
-the target distribution.
+the target distribution. The table below is EXHAUSTIVE and in priority
+order — each dropped row is assigned the first matching reason, and the
+reference implementation (`benchmarks/mapping.py::_run_drop_engine`)
+enforces exactly these rules in exactly this order:
 
-| Condition                                            | Reason                         |
-|------------------------------------------------------|--------------------------------|
-| `SALE PRICE` ≤ 0                                     | invalid / non-arms-length      |
-| `SALE PRICE` < 10,000 or > 100,000,000               | outlier / commercial artifact  |
-| `GROSS SQUARE FEET` = 0                              | missing structural feature     |
-| `YEAR BUILT` = 0                                     | missing structural feature     |
-| `BUILDING CLASS CATEGORY` is not a 1–3 family dwelling | out of scope (`not_family_dwelling`; condos/coops/commercial — see v2 rationale) |
+| # | Condition                                              | Drop reason (results.json key) |
+|---|--------------------------------------------------------|--------------------------------|
+| 1 | `SALE PRICE` is blank/NaN                              | `missing_sale_price` — a blank price would otherwise survive every numeric threshold (NaN compares False) and poison the log-target |
+| 2 | `SALE PRICE` ≤ 0                                       | `sale_price_non_positive` — invalid / non-arms-length |
+| 3 | `SALE PRICE` < 10,000 or > 100,000,000                 | `sale_price_out_of_range` — outlier / commercial artifact |
+| 4 | `GROSS SQUARE FEET` is NaN or ≤ 0                      | `missing_gross_sqft` — missing structural feature |
+| 5 | `YEAR BUILT` is NaN or = 0                             | `missing_year_built` — record-quality filter: not a model feature, but a sale row with no build year is a low-confidence record |
+| 6 | `BOROUGH` not in {1..5}                                | `invalid_borough` — unmappable to a borough name |
+| 7 | `ZIP CODE` is NaN or ≤ 0                               | `missing_zip` — missing structural feature |
+| 8 | `BUILDING CLASS CATEGORY` is not a 1–3 family dwelling | `not_family_dwelling` — out of scope (condos/coops/commercial — see v2 rationale) |
 
 All dropped rows must be counted per reason and logged in
-`benchmarks/results.json → drop_reasons`.
+`benchmarks/results.json → drop_reasons`; the orchestrator hard-fails if
+`sum(drop_reasons) != n_dropped` or if any retained row carries a
+non-finite log-price target.
 
 No filtering may depend on feature–target correlation or on a target
 percentile.
@@ -145,18 +163,25 @@ Transformations reference columns by name, never by position. Enforced by
 ## 6. Anti-Leakage Proof Obligations
 
 A mapping is considered valid only if the full firewall suite
-(`tests/benchmarks/test_schema_firewall.py`) is green:
+(`tests/benchmarks/test_schema_firewall.py`) is green (exact test names):
 
-- `test_forbidden_column_rejected` (name-based)
-- `test_target_independence_3method` (Pearson + Spearman + normalised MI)
+- `test_forbidden_column_rejected` (name-based, parametrised over the set)
+- `test_target_independence_catches_renamed_target` +
+  `test_target_independence_catches_nonlinear_target_encoding`
+  (Pearson + Spearman + normalised MI)
 - `test_mapping_is_deterministic`
 - `test_mapping_is_stateless_across_subsets`
 - `test_mapping_ignores_target_identity`
 - `test_mapping_uses_column_names_not_positions`
 - `test_drop_reasons_equal_dropped_rows`
+- `test_nan_sale_price_is_dropped_not_poisoning_target` +
+  `test_nan_year_built_is_dropped` (v3 NaN rules)
 - `test_filter_independent_of_target_distribution`
-- `test_schema_map_sha_matches_version`
-- `test_predictions_healthy` (collapse / NaN / constant)
+- `test_schema_map_sha_matches_registered_version` +
+  `test_schema_map_sha_is_crlf_invariant` +
+  `test_verify_schema_map_lock_passes_for_sealed_contract` +
+  `test_verify_schema_map_lock_rejects_unsealed_edit`
+- `test_collapse_detector_*` (collapse / NaN / constant predictions)
 
 Known limitation (documented, not addressed in this version):
 **segment-conditioned leakage.** The suite catches global and row-level
@@ -168,20 +193,26 @@ in the public README alongside benchmark results.
 
 ## 7. Logging Contract
 
-Every benchmark run must write to `benchmarks/results.json`:
+Every benchmark run must write to `benchmarks/results.json` (field names
+match `benchmarks/run_benchmark.py` exactly):
 
-- `run_date` (ISO 8601 UTC)
+- `run_date`, `run_ended` (ISO 8601 UTC)
 - `commit_sha`
 - `schema_map_version`
-- `schema_map_sha256`
-- `data_source` (URL)
-- `data_sha256`
+- `schema_map_sha256` (LF-normalised; verified against the registry BEFORE
+  the run starts — a mismatch aborts the run, it is never recorded as data)
+- `data_source` (URL) + `data_manifest` (per-file source URL + SHA-256)
 - `n_raw`, `n_dropped`, `n_scored`
-- `drop_reasons` (dict; keys = reasons above; values = counts)
+- `drop_reasons` (dict; keys = §4 reasons; values = counts; must sum to
+  `n_dropped`)
 - `feature_columns` (list of columns in X)
-- `metrics` (R², macro F1, per-borough F1)
+- `leakage` (per-detector triggered/message)
+- `inference` (status + feature reconciliation)
 - `health_checks` (pass/fail per check)
+- `performance` (`r2_log_space`, `n_scored` — the regression-only v2+
+  contract; there is no classifier in the lean benchmark, hence no F1)
 - `leakage_tripwire` (threshold + triggered bool)
+- `reproducibility` (tolerance statement)
 
 ---
 
@@ -211,9 +242,13 @@ Any change to this file requires:
 3. re-run the full benchmark
 4. treat all prior `results.json` artefacts as invalid for the new version
 
-Enforced by `test_schema_map_sha_matches_version`. Authority separation
-between author and reviewer is enforced by `.github/CODEOWNERS` +
-branch protection on `main` (required review, required status checks).
+Enforced twice: by `test_schema_map_sha_matches_registered_version` in CI, and at
+RUN TIME by `benchmarks.invariants.verify_schema_map_lock`, which the
+orchestrator calls before downloading anything — a benchmark cannot
+execute, locally or in CI, against a contract whose hash is not sealed
+in the registry. Authority separation between author and reviewer is
+enforced by `.github/CODEOWNERS` + branch protection on `main`
+(required review, required status checks).
 
 No exceptions.
 

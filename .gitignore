@@ -4,6 +4,11 @@ models/*.joblib
 models/*.pkl
 models/*.pt
 models/*.bak
+# The lean benchmark regressor IS committed (0.6 MB): it is what makes the
+# external benchmark reproducible by CI and by strangers — NYC.gov data is
+# downloaded publicly at run time, so the model artefact is the only
+# missing piece. Flagship models stay local-only (DVC, no remote).
+!models/benchmark_regressor.joblib
 mlruns/
 data/raw/
 data/processed/
@@ -207,3 +212,4 @@ internal/
 INTERNAL/
 audits/
 sbom.cyclonedx.json
+models/drift_baseline.json

@@ -21,16 +21,20 @@ jobs:
       - name: Install lint tools
         run: pip install ruff mypy bandit pydantic fastapi pydantic-settings
       - name: ruff check
-        run: ruff check src/ api/ tests/
+        # benchmarks/ is the repo's most-marketed code — it gets every gate
+        # the rest of the tree gets, not fewer.
+        run: ruff check src/ api/ tests/ benchmarks/ run_training.py
+      - name: ruff format --check
+        run: ruff format --check src/ api/ tests/ benchmarks/ run_training.py
       - name: mypy type check
-        # Run against src/ + api/ so api/settings.py + api/main.py get type-
-        # checked; `--ignore-missing-imports` prevents failures from third-
-        # party libs (slowapi, xgboost, etc.) that don't ship stubs.
-        run: mypy src/ api/ --ignore-missing-imports
+        # Run against src/ + api/ + benchmarks/ so the benchmark pipeline is
+        # type-checked too; `--ignore-missing-imports` prevents failures from
+        # third-party libs (slowapi, xgboost, etc.) that don't ship stubs.
+        run: mypy src/ api/ benchmarks/ --ignore-missing-imports
       - name: bandit security scan
         # Skip the tests tree (B101 asserts are normal in pytest) and the
         # .venv. Fail on MEDIUM+ findings.
-        run: bandit -r src/ api/ -n 3 -ll
+        run: bandit -r src/ api/ benchmarks/ -n 3 -ll
 
   test:
     runs-on: ubuntu-latest
@@ -43,7 +47,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        run: pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        # Coverage includes benchmarks/ (mapping + invariants are fully
+        # exercised by the adversarial suite); the network-bound modules
+        # (run_benchmark orchestration, dataset downloader) are omitted in
+        # pyproject — they are exercised end-to-end by the External
+        # Benchmark workflow instead.
+        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
   security:
     runs-on: ubuntu-latest

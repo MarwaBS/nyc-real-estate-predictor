@@ -34,8 +34,11 @@ You can expect an initial acknowledgement within 72 hours.
 **Out of scope:**
 - Issues requiring physical access to a user's machine
 - Social engineering / phishing reports
-- Denial-of-service against the Streamlit demo (public, intentionally rate-
-  limited via `slowapi`)
+- Denial-of-service against the public demo surfaces. The FastAPI
+  `/predict` endpoint is rate-limited per client IP via `slowapi`
+  (`api/main.py::PREDICT_RATE_LIMIT`, HTTP 429 beyond the limit); the
+  Streamlit demo runs behind its hosting platform's own ingress controls
+  (`slowapi` does not apply to Streamlit).
 
 ## Handling of known managed risks
 
