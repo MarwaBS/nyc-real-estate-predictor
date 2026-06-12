@@ -36,10 +36,10 @@ Live demo of an end-to-end ML service for NYC real estate. Pick a property profi
 | ✅ Demonstrates | ❌ Does NOT |
 |---|---|
 | End-to-end ML pipeline (clean → feature-engineer → model → serve → UI) | Predict 2026 NYC prices accurately (data is a snapshot) |
-| 4-model comparison (XGBoost / LightGBM / Random Forest / Multi-Task DL) | Beat Zillow Zestimate at scale |
+| Multi-model comparison (XGBoost / LightGBM / Random Forest) | Beat Zillow Zestimate at scale |
 | Data-leakage detection + ADR-001 documentation | Provide loan-grade pricing |
-| Fairness-by-borough analysis (Manhattan F1=0.619 → Staten Island 0.795) | Mitigate the documented disparity |
-| Per-class threshold tuning (+0.020 macro F1) | Online learning |
+| Fairness-by-borough analysis (Queens F1=0.613 → Staten Island 0.778) | Mitigate the documented disparity |
+| Per-class threshold tuning (+0.014 macro F1) | Online learning |
 
 ## Links
 
