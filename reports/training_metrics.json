@@ -1,0 +1,203 @@
+{
+  "run_date": "2026-06-11T22:10:10.900473+00:00",
+  "commit_sha": "507abb106327cbe16b7b8f59cf16eb1cdc595a35",
+  "provenance": {
+    "python": "3.13.13",
+    "scikit_learn": "1.8.0",
+    "random_seed": 42,
+    "test_size": 0.2,
+    "n_train": 3603,
+    "n_test": 901,
+    "features": [
+      "BEDS",
+      "BATH",
+      "PROPERTYSQFT",
+      "TOTAL_ROOMS",
+      "BED_BATH_RATIO",
+      "LOG_SQFT",
+      "ROOMS_PER_SQFT",
+      "DIST_MANHATTAN_CENTER",
+      "DIST_CENTRAL_PARK",
+      "DIST_NEAREST_SUBWAY",
+      "BOROUGH",
+      "TYPE",
+      "PROPERTY_CATEGORY",
+      "ZIPCODE",
+      "SUBLOCALITY"
+    ]
+  },
+  "classification": {
+    "selected_model": "xgboost",
+    "metrics": {
+      "accuracy": 0.709211986681465,
+      "macro_f1": 0.7036352078050992,
+      "weighted_f1": 0.7080523899966407,
+      "cohen_kappa": 0.6007522828096274,
+      "confusion_matrix": [
+        [
+          97,
+          2,
+          52,
+          35
+        ],
+        [
+          4,
+          178,
+          47,
+          2
+        ],
+        [
+          41,
+          40,
+          239,
+          3
+        ],
+        [
+          29,
+          1,
+          6,
+          125
+        ]
+      ],
+      "classification_report": {
+        "Low": {
+          "precision": 0.5672514619883041,
+          "recall": 0.521505376344086,
+          "f1-score": 0.5434173669467787,
+          "support": 186.0
+        },
+        "Medium": {
+          "precision": 0.8054298642533937,
+          "recall": 0.7705627705627706,
+          "f1-score": 0.7876106194690266,
+          "support": 231.0
+        },
+        "High": {
+          "precision": 0.6947674418604651,
+          "recall": 0.739938080495356,
+          "f1-score": 0.7166416791604198,
+          "support": 323.0
+        },
+        "Very High": {
+          "precision": 0.7575757575757576,
+          "recall": 0.7763975155279503,
+          "f1-score": 0.7668711656441718,
+          "support": 161.0
+        },
+        "accuracy": 0.709211986681465,
+        "macro avg": {
+          "precision": 0.7062561314194802,
+          "recall": 0.7021009357325407,
+          "f1-score": 0.7036352078050992,
+          "support": 901.0
+        },
+        "weighted avg": {
+          "precision": 0.7080384586714602,
+          "recall": 0.709211986681465,
+          "f1-score": 0.7080523899966407,
+          "support": 901.0
+        }
+      }
+    },
+    "candidates": {
+      "xgboost": {
+        "accuracy": 0.709211986681465,
+        "macro_f1": 0.7036352078050992,
+        "cohen_kappa": 0.6007522828096274
+      },
+      "lightgbm": {
+        "accuracy": 0.6936736958934517,
+        "macro_f1": 0.6919770342936877,
+        "cohen_kappa": 0.5795983229645658
+      }
+    },
+    "fairness_by_borough": {
+      "brooklyn": 0.6635313929056976,
+      "queens": 0.624784251453772,
+      "manhattan": 0.6192284157165633,
+      "bronx": 0.68005698005698,
+      "staten island": 0.7947000337040782,
+      "nan": 0.6722209858684767
+    },
+    "shap_top10": [
+      {
+        "feature": "num__DIST_MANHATTAN_CENTER",
+        "mean_abs_shap": 1.1625779867172241
+      },
+      {
+        "feature": "num__PROPERTYSQFT",
+        "mean_abs_shap": 0.8431503772735596
+      },
+      {
+        "feature": "num__BATH",
+        "mean_abs_shap": 0.7969546318054199
+      },
+      {
+        "feature": "num__DIST_CENTRAL_PARK",
+        "mean_abs_shap": 0.41643935441970825
+      },
+      {
+        "feature": "cat_target__SUBLOCALITY",
+        "mean_abs_shap": 0.38418048620224
+      },
+      {
+        "feature": "num__TOTAL_ROOMS",
+        "mean_abs_shap": 0.3545612394809723
+      },
+      {
+        "feature": "num__ROOMS_PER_SQFT",
+        "mean_abs_shap": 0.2992255389690399
+      },
+      {
+        "feature": "cat_target__ZIPCODE",
+        "mean_abs_shap": 0.2142057865858078
+      },
+      {
+        "feature": "cat_onehot__TYPE_condo",
+        "mean_abs_shap": 0.1961527019739151
+      },
+      {
+        "feature": "num__BED_BATH_RATIO",
+        "mean_abs_shap": 0.13993346691131592
+      }
+    ],
+    "threshold_tuning": {
+      "thresholds": {
+        "Low": 0.165,
+        "Medium": 0.704,
+        "High": 0.5,
+        "Very High": 0.5
+      },
+      "tuned_macro_f1": 0.7240199394161391
+    }
+  },
+  "regression": {
+    "selected_model": "xgboost",
+    "metrics": {
+      "r2": 0.8153634721250209,
+      "rmse": 0.43309493183900316,
+      "mae": 0.30098236975685483,
+      "rmse_usd": 4993925.954032855,
+      "mae_usd": 830507.7151407292,
+      "mape": 0.3388386604408518
+    },
+    "candidates": {
+      "random_forest": {
+        "r2": 0.8040347859243666,
+        "rmse": 0.4461837840837083,
+        "mae_usd": 643425.5354860331
+      },
+      "xgboost": {
+        "r2": 0.8153634721250209,
+        "rmse": 0.43309493183900316,
+        "mae_usd": 830507.7151407292
+      },
+      "lightgbm": {
+        "r2": 0.7957791758276054,
+        "rmse": 0.455485233000224,
+        "mae_usd": 696069.1586836977
+      }
+    }
+  },
+  "note": "Training data and model artefacts are local-only (DVC, no public remote), so these numbers are not independently reproducible by a stranger; the independently reproducible evidence for this repo is benchmarks/results.json (committed model + public NYC.gov data)."
+}

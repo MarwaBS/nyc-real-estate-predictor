@@ -20,12 +20,7 @@ from src.config import (
     SQFT_BINS,
     SQFT_LABELS,
 )
-from src.utils.geo import (
-    add_distance_features,
-    add_h3_index,
-    add_neighborhood_clusters,
-    nearest_station_distance,
-)
+from src.utils.geo import add_distance_features
 from src.utils.validation import assert_no_leakage
 
 logger = logging.getLogger(__name__)
@@ -52,33 +47,27 @@ def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def add_geospatial_features(
-    df: pd.DataFrame,
-    subway_stations: pd.DataFrame | None = None,
-) -> pd.DataFrame:
-    """Add all geospatial features: distances, H3, clusters."""
+def add_geospatial_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add the geospatial features the models actually consume.
+
+    Three distance features: haversine distances to two landmarks plus
+    ``DIST_NEAREST_SUBWAY``, which is BY DESIGN the Manhattan-center
+    distance — station-level data is not bundled with the repo, training
+    and serving must use identical semantics, and the API computes the
+    same proxy (see MODEL_CARD.md). H3 indexing and KMeans neighborhood
+    clustering were explored during EDA but never fed any model
+    (ColumnTransformer dropped them), so they are not computed here —
+    dead compute in the production path is a lie waiting to be quoted.
+    """
     result = df.copy()
 
     # Haversine distances to key landmarks
     result = add_distance_features(result, REFERENCE_POINTS)
     logger.info("Added distance features: DIST_MANHATTAN_CENTER, DIST_CENTRAL_PARK")
 
-    # Nearest subway station
-    if subway_stations is not None and len(subway_stations) > 0:
-        result["DIST_NEAREST_SUBWAY"] = nearest_station_distance(result, subway_stations)
-        logger.info("Added DIST_NEAREST_SUBWAY from %d stations", len(subway_stations))
-    else:
-        # Fallback: use distance to Manhattan center as proxy
-        result["DIST_NEAREST_SUBWAY"] = result["DIST_MANHATTAN_CENTER"]
-        logger.warning("No subway data — using DIST_MANHATTAN_CENTER as proxy")
-
-    # H3 hexagonal grid
-    result = add_h3_index(result, resolution=7)
-    logger.info("Added H3_RES7 hexagonal index")
-
-    # KMeans neighborhood clusters
-    result = add_neighborhood_clusters(result, n_clusters=15)
-    logger.info("Added NEIGHBORHOOD_CLUSTER (15 clusters)")
+    # Documented proxy — identical at train and serve time.
+    result["DIST_NEAREST_SUBWAY"] = result["DIST_MANHATTAN_CENTER"]
+    logger.info("DIST_NEAREST_SUBWAY = DIST_MANHATTAN_CENTER (documented proxy)")
 
     return result
 
@@ -128,15 +117,12 @@ def cap_categorical_cardinality(
     return result
 
 
-def feature_pipeline(
-    df: pd.DataFrame,
-    subway_stations: pd.DataFrame | None = None,
-) -> pd.DataFrame:
+def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full feature engineering pipeline."""
     logger.info("Starting feature pipeline on %d rows", len(df))
 
     df = add_numeric_features(df)
-    df = add_geospatial_features(df, subway_stations=subway_stations)
+    df = add_geospatial_features(df)
     df = add_target_variables(df)
     df = cap_categorical_cardinality(df, columns=["SUBLOCALITY", "TYPE", "ZIPCODE"])
 

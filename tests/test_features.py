@@ -1,4 +1,5 @@
 """Tests for feature engineering."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,7 +13,9 @@ from src.data.features import (
 )
 
 
-def test_add_numeric_features_creates_expected_columns(sample_raw_data: pd.DataFrame) -> None:
+def test_add_numeric_features_creates_expected_columns(
+    sample_raw_data: pd.DataFrame,
+) -> None:
     result = add_numeric_features(sample_raw_data)
     assert "TOTAL_ROOMS" in result.columns
     assert "BED_BATH_RATIO" in result.columns
@@ -36,7 +39,9 @@ def test_add_target_variables_creates_price_zone(sample_raw_data: pd.DataFrame) 
     assert "PRICE_ZONE" in result.columns
     assert "LOG_PRICE" in result.columns
     assert "SQFT_CATEGORY" in result.columns
-    assert set(result["PRICE_ZONE"].dropna().unique()).issubset({"Low", "Medium", "High", "Very High"})
+    assert set(result["PRICE_ZONE"].dropna().unique()).issubset(
+        {"Low", "Medium", "High", "Very High"}
+    )
 
 
 def test_log_price_is_log1p(sample_raw_data: pd.DataFrame) -> None:

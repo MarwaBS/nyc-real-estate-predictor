@@ -16,6 +16,7 @@ Invariants enforced by construction here (not only by tests):
 * The target column is extracted into a separate Series and never
   read while ``X`` is being built.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -55,6 +56,7 @@ class MappingReport:
 
 # ─── 4.1 Input normalisation ────────────────────────────────────────
 
+
 def _normalise_columns(raw: pd.DataFrame) -> pd.DataFrame:
     """Strip whitespace from column names and return a copy.
 
@@ -82,6 +84,7 @@ def _coerce_numeric(series: pd.Series) -> pd.Series:
 
 # ─── 4.2 Drop engine ────────────────────────────────────────────────
 
+
 def _run_drop_engine(
     raw: pd.DataFrame,
 ) -> tuple[pd.Series, dict[str, int]]:
@@ -90,7 +93,7 @@ def _run_drop_engine(
     Each dropped row is assigned exactly one reason — the first rule
     in priority order that rejects it. The priority order is itself
     a versioned design choice (it determines the per-reason counts,
-    not the final kept set) and is fixed for v2.
+    not the final kept set) and is fixed for the sealed version.
 
     Returns:
         ``(kept_mask, drop_reasons)`` where ``kept_mask`` is a bool
@@ -114,6 +117,12 @@ def _run_drop_engine(
             reasons[reason] = count
         kept.loc[mask] = False
 
+    # v3: NaN price must be dropped FIRST and explicitly. NaN compares False
+    # against every threshold below, so without this rule a blank SALE PRICE
+    # would survive the price filters, produce a log1p(NaN) target, and
+    # silently poison the R² (the orchestrator now also hard-fails on any
+    # non-finite retained target as a second line of defence).
+    _apply(sale_price.isna(), "missing_sale_price")
     _apply(sale_price <= 0, "sale_price_non_positive")
     _apply(
         (sale_price < 10_000) | (sale_price > 100_000_000),
@@ -124,7 +133,10 @@ def _run_drop_engine(
     # bare ``== 0`` check and then break the leakage check / model, so the
     # three feature-source columns must be fully valid to be kept.
     _apply(gross_sqft.isna() | (gross_sqft <= 0), "missing_gross_sqft")
-    _apply(year_built == 0, "missing_year_built")
+    # YEAR BUILT is not a v3 feature; it is kept as a record-quality filter
+    # (SCHEMA_MAP §4): a sale row without a build year is a low-confidence
+    # record whose other structural fields are disproportionately unreliable.
+    _apply(year_built.isna() | (year_built == 0), "missing_year_built")
     _apply(~borough.isin([1, 2, 3, 4, 5]), "invalid_borough")
     _apply(zip_code.isna() | (zip_code <= 0), "missing_zip")
     # v2 scope: 1–3 family dwellings only. For condos/coops NYC.gov reports the
@@ -139,6 +151,7 @@ def _run_drop_engine(
 
 
 # ─── 4.3 Feature mapping ────────────────────────────────────────────
+
 
 def _build_features(kept_raw: pd.DataFrame) -> pd.DataFrame:
     """Assemble the benchmark feature frame from kept rows.
@@ -156,14 +169,19 @@ def _build_features(kept_raw: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "borough": borough_id.map(BOROUGH_NAMES).astype("object"),
-            "property_sqft": _coerce_numeric(kept_raw["GROSS SQUARE FEET"]).astype(float),
-            "zip_code": _coerce_numeric(kept_raw["ZIP CODE"]).astype("int64").astype(str),
+            "property_sqft": _coerce_numeric(kept_raw["GROSS SQUARE FEET"]).astype(
+                float
+            ),
+            "zip_code": _coerce_numeric(kept_raw["ZIP CODE"])
+            .astype("int64")
+            .astype(str),
         },
         index=kept_raw.index,
     )
 
 
 # ─── 4.4 Final output contract ──────────────────────────────────────
+
 
 def apply_schema_map(
     raw: pd.DataFrame,

@@ -5,6 +5,7 @@ PRICE_PER_SQFT (derived from the target variable PRICE) is never
 used as a training feature. The R2=0.997 in previous experiments
 was fake because of this leakage.
 """
+
 from __future__ import annotations
 
 import pytest

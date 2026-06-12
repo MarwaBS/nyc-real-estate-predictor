@@ -15,6 +15,11 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["F401"]
 "notebooks/**" = ["E402", "F401"]
+# `X` / `X_train` / `X_test` are the universal sklearn naming convention for
+# feature matrices; renaming them to satisfy pep8-naming would make the ML
+# code LESS readable to its audience.
+"benchmarks/**" = ["N803", "N806"]
+"run_training.py" = ["N803", "N806"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
@@ -35,7 +40,7 @@ module = ["tests.*", "notebooks.*"]
 disallow_untyped_defs = false
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "benchmarks"]
 omit = [
     "tests/*",
     "notebooks/*",
@@ -45,6 +50,13 @@ omit = [
     "src/dl/train_dl.py",
     "src/dl/tabular_net.py",
     "src/models/explain.py",
+    # Network-bound benchmark modules: exercised end-to-end by the
+    # External Benchmark workflow (real NYC.gov download + real model),
+    # not by the hermetic unit suite. mapping.py and invariants.py — the
+    # contract-bearing code — stay fully in scope.
+    "benchmarks/run_benchmark.py",
+    "benchmarks/datasets/*",
+    "benchmarks/train_benchmark_model.py",
 ]
 
 [tool.coverage.report]

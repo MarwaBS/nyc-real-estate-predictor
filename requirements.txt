@@ -17,9 +17,11 @@ scipy==1.13.1
 xgboost==2.1.4
 lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
-# Geospatial (feature engineering runs at request time)
-geopy==2.4.1
-h3==4.1.0  # v4 API: geo.py uses h3.latlng_to_cell (renamed from v3 geo_to_h3)
+# NOTE: geopy, h3, pandera, and folium were removed in the 2026-06 audit —
+# nothing in the tracked codebase imported any of them (haversine is
+# hand-rolled in src/utils/geo.py; the dead H3/KMeans feature code that
+# justified h3 never fed a model). Unused runtime deps are image weight
+# plus CVE surface plus a false claim, all at once.
 
 # Encoding (target encoder applied at inference)
 category-encoders==2.8.1  # bumped 2.6.3 → 2.8.1 (2.6.x incompatible with sklearn 1.8.0)
@@ -37,16 +39,12 @@ httpx==0.28.1
 # UI
 streamlit==1.54.0  # bumped 1.38.0 → 1.54.0 (fixes CVE-2026-33682)
 plotly==5.24.1
-folium==0.16.0
 
 # Image processing (transitive via streamlit / plotly; pin explicitly for CVE fixes)
 pillow==12.2.0  # new explicit pin (was 10.4.0 transitive; fixes CVE-2026-25990, CVE-2026-40192)
 
 # Config
 python-dotenv==1.2.2  # bumped 1.0.1 → 1.2.2 (fixes CVE-2026-28684)
-
-# Data validation (schema + runtime checks)
-pandera==0.20.4
 
 # Model loading
 joblib==1.4.2

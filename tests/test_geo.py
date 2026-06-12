@@ -1,4 +1,5 @@
 """Tests for geospatial utilities."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -6,8 +7,6 @@ import pytest
 
 from src.utils.geo import (
     add_distance_features,
-    add_h3_index,
-    add_neighborhood_clusters,
     haversine,
     haversine_vectorized,
 )
@@ -38,22 +37,20 @@ def test_add_distance_features_creates_columns(sample_raw_data: pd.DataFrame) ->
     assert (result["DIST_MANHATTAN_CENTER"] >= 0).all()
 
 
-def test_add_neighborhood_clusters(sample_raw_data: pd.DataFrame) -> None:
-    result = add_neighborhood_clusters(sample_raw_data, n_clusters=3)
-    assert "NEIGHBORHOOD_CLUSTER" in result.columns
-    assert set(result["NEIGHBORHOOD_CLUSTER"].unique()).issubset({0, 1, 2})
+def test_geo_module_carries_no_dead_features() -> None:
+    """Regression guard: H3 indexing, KMeans clustering, and the KDTree
+    subway lookup were removed because no model ever consumed their
+    output (the ColumnTransformer dropped the columns and station data
+    was never bundled). If someone reintroduces them, they must wire
+    them into a model feature list — not just into this module."""
+    import src.utils.geo as geo
 
-
-def test_add_h3_index_produces_valid_cells() -> None:
-    """add_h3_index must map lat/lon to H3 v4 cells (regression: requirements
-    pinned h3 v3 while geo.py uses the v4 latlng_to_cell API)."""
-    df = pd.DataFrame(
-        {"LATITUDE": [40.7580, 40.7128], "LONGITUDE": [-73.9855, -74.0060]}
-    )
-    result = add_h3_index(df, resolution=7)
-    assert "H3_RES7" in result.columns
-    cells = result["H3_RES7"].tolist()
-    assert len(cells) == 2
-    # Distinct points → distinct cells; each a non-empty hex string.
-    assert cells[0] != cells[1]
-    assert all(isinstance(c, str) and len(c) == 15 for c in cells)
+    for dead in (
+        "add_h3_index",
+        "add_neighborhood_clusters",
+        "nearest_station_distance",
+    ):
+        assert not hasattr(geo, dead), (
+            f"{dead} reappeared in src.utils.geo — either wire it into the "
+            f"model feature contract or keep it out of the production path"
+        )

@@ -1,17 +1,32 @@
-"""End-to-end training orchestrator — load data, engineer features, train models, save artifacts."""
+"""End-to-end training orchestrator — load data, engineer features, train models, save artifacts.
+
+Besides the model artefacts (local-only; DVC without a remote), every run
+writes ``reports/training_metrics.json`` — the committed evidence artefact
+behind the README's headline numbers. It records the metrics of the
+selected models together with provenance (commit SHA, library versions,
+seed, split sizes) so the README quotes a file, not a memory.
+"""
+
 from __future__ import annotations
 
+import datetime as _dt
+import json
 import logging
+import subprocess
 import sys
+from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 try:
     import mlflow
+
     _HAS_MLFLOW = True
 except ImportError:
     _HAS_MLFLOW = False
@@ -25,11 +40,22 @@ from src.config import (
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
 )
-from src.data.features import add_numeric_features, add_target_variables, cap_categorical_cardinality
+from src.data.features import (
+    add_numeric_features,
+    add_target_variables,
+    cap_categorical_cardinality,
+)
 from src.data.loader import load_cleaned
-from src.models.evaluate import evaluate_classifier, evaluate_fairness_by_group, evaluate_regressor
-from src.models.pipelines import build_classification_pipeline, build_regression_pipeline
-from src.utils.geo import add_distance_features, add_neighborhood_clusters
+from src.models.evaluate import (
+    evaluate_classifier,
+    evaluate_fairness_by_group,
+    evaluate_regressor,
+)
+from src.models.pipelines import (
+    build_classification_pipeline,
+    build_regression_pipeline,
+)
+from src.utils.geo import add_distance_features
 from src.utils.logging_config import setup_logging
 from src.utils.validation import assert_no_leakage
 
@@ -75,11 +101,10 @@ def prepare_data() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     # Geospatial features
     df = add_distance_features(df, REFERENCE_POINTS)
 
-    # Subway proxy (use manhattan distance until we have subway data)
+    # Subway distance is BY DESIGN the Manhattan-center proxy — identical
+    # semantics at train and serve time (api/main.py computes the same
+    # value; see MODEL_CARD.md). Station-level data is not bundled.
     df["DIST_NEAREST_SUBWAY"] = df["DIST_MANHATTAN_CENTER"]
-
-    # Neighborhood clusters
-    df = add_neighborhood_clusters(df, n_clusters=15)
 
     # Target variables
     df = add_target_variables(df)
@@ -124,29 +149,44 @@ def train_classification(
     X_test: pd.DataFrame,
     y_test: np.ndarray,
     borough_test: pd.Series,
-) -> None:
-    """Train and evaluate all classification models."""
+) -> dict[str, Any]:
+    """Train and evaluate all classification models.
+
+    Returns the selected model's record (name, metrics, fairness) for the
+    committed training-metrics artefact.
+    """
     logger.info("=" * 60)
     logger.info("STEP 3: Training classification models")
     logger.info("=" * 60)
 
-    from xgboost import XGBClassifier
     from lightgbm import LGBMClassifier
+    from xgboost import XGBClassifier
 
     models = {
         "xgboost": XGBClassifier(
-            max_depth=6, n_estimators=500, learning_rate=0.1,
-            eval_metric="mlogloss", random_state=RANDOM_SEED, n_jobs=-1,
+            max_depth=6,
+            n_estimators=500,
+            learning_rate=0.1,
+            eval_metric="mlogloss",
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         ),
         "lightgbm": LGBMClassifier(
-            num_leaves=63, n_estimators=500, learning_rate=0.1,
-            class_weight="balanced", random_state=RANDOM_SEED, n_jobs=-1, verbose=-1,
+            num_leaves=63,
+            n_estimators=500,
+            learning_rate=0.1,
+            class_weight="balanced",
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+            verbose=-1,
         ),
     }
 
     best_f1 = -1.0
     best_name = ""
     best_pipeline = None
+    best_metrics: dict[str, Any] = {}
+    candidates: dict[str, Any] = {}
 
     for name, model in models.items():
         logger.info("--- Training %s ---", name)
@@ -154,29 +194,49 @@ def train_classification(
         pipeline.fit(X_train, y_train)
         y_pred = pipeline.predict(X_test)
         metrics = evaluate_classifier(y_test, y_pred, PRICE_ZONE_LABELS)
+        candidates[name] = {
+            "accuracy": metrics["accuracy"],
+            "macro_f1": metrics["macro_f1"],
+            "cohen_kappa": metrics["cohen_kappa"],
+        }
 
         logger.info(
             "%s: accuracy=%.4f, macro_f1=%.4f, kappa=%.4f",
-            name, metrics["accuracy"], metrics["macro_f1"], metrics["cohen_kappa"],
+            name,
+            metrics["accuracy"],
+            metrics["macro_f1"],
+            metrics["cohen_kappa"],
         )
 
         # MLflow experiment tracking
         if _HAS_MLFLOW:
             mlflow.set_experiment("price_zone_classification")
             with mlflow.start_run(run_name=f"clf_{name}"):
-                mlflow.log_params({"model": name, "n_features": len(X_train.columns),
-                                   "train_size": len(X_train), "test_size": len(X_test)})
-                mlflow.log_metrics({"accuracy": metrics["accuracy"],
-                                    "macro_f1": metrics["macro_f1"],
-                                    "cohen_kappa": metrics["cohen_kappa"]})
+                mlflow.log_params(
+                    {
+                        "model": name,
+                        "n_features": len(X_train.columns),
+                        "train_size": len(X_train),
+                        "test_size": len(X_test),
+                    }
+                )
+                mlflow.log_metrics(
+                    {
+                        "accuracy": metrics["accuracy"],
+                        "macro_f1": metrics["macro_f1"],
+                        "cohen_kappa": metrics["cohen_kappa"],
+                    }
+                )
                 mlflow.sklearn.log_model(pipeline, f"model_{name}")
 
         if metrics["macro_f1"] > best_f1:
             best_f1 = metrics["macro_f1"]
             best_name = name
             best_pipeline = pipeline
+            best_metrics = metrics
 
     # Fairness analysis
+    fairness: dict[str, Any] = {}
     if best_pipeline is not None:
         y_best_pred = best_pipeline.predict(X_test)
         fairness = evaluate_fairness_by_group(y_test, y_best_pred, borough_test)
@@ -185,7 +245,16 @@ def train_classification(
         # Save best model
         path = MODELS_DIR / "price_zone_best.joblib"
         joblib.dump(best_pipeline, path)
-        logger.info("Saved best classifier (%s, macro_f1=%.4f) to %s", best_name, best_f1, path)
+        logger.info(
+            "Saved best classifier (%s, macro_f1=%.4f) to %s", best_name, best_f1, path
+        )
+
+    return {
+        "selected_model": best_name,
+        "metrics": best_metrics,
+        "candidates": candidates,
+        "fairness_by_borough": fairness,
+    }
 
 
 def train_regression(
@@ -193,33 +262,48 @@ def train_regression(
     y_train: np.ndarray,
     X_test: pd.DataFrame,
     y_test: np.ndarray,
-) -> None:
-    """Train and evaluate all regression models."""
+) -> dict[str, Any]:
+    """Train and evaluate all regression models.
+
+    Returns the selected model's record (name, metrics) for the committed
+    training-metrics artefact.
+    """
     logger.info("=" * 60)
     logger.info("STEP 4: Training regression models")
     logger.info("=" * 60)
 
+    from lightgbm import LGBMRegressor
     from sklearn.ensemble import RandomForestRegressor
     from xgboost import XGBRegressor
-    from lightgbm import LGBMRegressor
 
     models = {
         "random_forest": RandomForestRegressor(
-            n_estimators=500, random_state=RANDOM_SEED, n_jobs=-1,
+            n_estimators=500,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         ),
         "xgboost": XGBRegressor(
-            max_depth=6, n_estimators=500, learning_rate=0.1,
-            random_state=RANDOM_SEED, n_jobs=-1,
+            max_depth=6,
+            n_estimators=500,
+            learning_rate=0.1,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         ),
         "lightgbm": LGBMRegressor(
-            num_leaves=63, n_estimators=500, learning_rate=0.1,
-            random_state=RANDOM_SEED, n_jobs=-1, verbose=-1,
+            num_leaves=63,
+            n_estimators=500,
+            learning_rate=0.1,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+            verbose=-1,
         ),
     }
 
     best_r2 = -999.0
     best_name = ""
     best_pipeline = None
+    best_metrics: dict[str, Any] = {}
+    candidates: dict[str, Any] = {}
 
     for name, model in models.items():
         logger.info("--- Training %s regressor ---", name)
@@ -227,32 +311,116 @@ def train_regression(
         pipeline.fit(X_train, y_train)
         y_pred = pipeline.predict(X_test)
         metrics = evaluate_regressor(y_test, y_pred, log_target=True)
+        candidates[name] = {
+            "r2": metrics["r2"],
+            "rmse": metrics["rmse"],
+            "mae_usd": metrics.get("mae_usd"),
+        }
 
         logger.info(
             "%s: R2=%.4f, RMSE=%.4f, MAE_USD=$%.0f",
-            name, metrics["r2"], metrics["rmse"], metrics.get("mae_usd", 0),
+            name,
+            metrics["r2"],
+            metrics["rmse"],
+            metrics.get("mae_usd", 0),
         )
 
         # MLflow experiment tracking
         if _HAS_MLFLOW:
             mlflow.set_experiment("price_regression")
             with mlflow.start_run(run_name=f"reg_{name}"):
-                mlflow.log_params({"model": name, "target": "LOG_PRICE",
-                                   "train_size": len(X_train), "test_size": len(X_test)})
-                mlflow.log_metrics({"r2": metrics["r2"], "rmse": metrics["rmse"],
-                                    "mae": metrics["mae"],
-                                    "mae_usd": metrics.get("mae_usd", 0)})
+                mlflow.log_params(
+                    {
+                        "model": name,
+                        "target": "LOG_PRICE",
+                        "train_size": len(X_train),
+                        "test_size": len(X_test),
+                    }
+                )
+                mlflow.log_metrics(
+                    {
+                        "r2": metrics["r2"],
+                        "rmse": metrics["rmse"],
+                        "mae": metrics["mae"],
+                        "mae_usd": metrics.get("mae_usd", 0),
+                    }
+                )
                 mlflow.sklearn.log_model(pipeline, f"model_{name}")
 
         if metrics["r2"] > best_r2:
             best_r2 = metrics["r2"]
             best_name = name
             best_pipeline = pipeline
+            best_metrics = metrics
 
     if best_pipeline is not None:
         path = MODELS_DIR / "price_regressor_best.joblib"
         joblib.dump(best_pipeline, path)
-        logger.info("Saved best regressor (%s, R2=%.4f) to %s", best_name, best_r2, path)
+        logger.info(
+            "Saved best regressor (%s, R2=%.4f) to %s", best_name, best_r2, path
+        )
+
+    return {
+        "selected_model": best_name,
+        "metrics": best_metrics,
+        "candidates": candidates,
+    }
+
+
+def _git_commit_sha() -> str | None:
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return out.stdout.strip()
+    except Exception:
+        return None
+
+
+def _write_training_metrics(
+    clf_record: dict[str, Any],
+    reg_record: dict[str, Any],
+    *,
+    n_train: int,
+    n_test: int,
+    features: list[str],
+) -> None:
+    """Write ``reports/training_metrics.json`` — the committed artefact the
+    README's headline numbers must quote. Models and data stay local (DVC
+    without a remote), so this file plus its provenance block is the
+    auditable record of what a training run actually produced."""
+    artefact = {
+        "run_date": _dt.datetime.now(_dt.UTC).isoformat(),
+        "commit_sha": _git_commit_sha(),
+        "provenance": {
+            "python": sys.version.split()[0],
+            "scikit_learn": sklearn.__version__,
+            "random_seed": RANDOM_SEED,
+            "test_size": TEST_SIZE,
+            "n_train": n_train,
+            "n_test": n_test,
+            "features": features,
+        },
+        "classification": clf_record,
+        "regression": reg_record,
+        "note": (
+            "Training data and model artefacts are local-only (DVC, no "
+            "public remote), so these numbers are not independently "
+            "reproducible by a stranger; the independently reproducible "
+            "evidence for this repo is benchmarks/results.json (committed "
+            "model + public NYC.gov data)."
+        ),
+    }
+    reports_dir = Path("reports")
+    reports_dir.mkdir(exist_ok=True)
+    out_path = reports_dir / "training_metrics.json"
+    out_path.write_text(
+        json.dumps(artefact, indent=2, default=str) + "\n", encoding="utf-8"
+    )
+    logger.info("Wrote training metrics artefact to %s", out_path)
 
 
 def main() -> None:
@@ -274,23 +442,35 @@ def main() -> None:
     logger.info("Zone classes: %s", list(le.classes_))
 
     # 3. Train/test split (stratified for classification)
-    X_train, X_test, y_zone_train, y_zone_test, y_price_train, y_price_test, borough_train, borough_test = (
-        train_test_split(
-            X, y_zone_encoded, y_log_price, borough,
-            test_size=TEST_SIZE,
-            random_state=RANDOM_SEED,
-            stratify=y_zone_encoded,
-        )
+    (
+        X_train,
+        X_test,
+        y_zone_train,
+        y_zone_test,
+        y_price_train,
+        y_price_test,
+        borough_train,
+        borough_test,
+    ) = train_test_split(
+        X,
+        y_zone_encoded,
+        y_log_price,
+        borough,
+        test_size=TEST_SIZE,
+        random_state=RANDOM_SEED,
+        stratify=y_zone_encoded,
     )
 
     logger.info("Train: %d samples, Test: %d samples", len(X_train), len(X_test))
     logger.info("Features: %s", list(X_train.columns))
 
     # 4. Train classification
-    train_classification(X_train, y_zone_train, X_test, y_zone_test, borough_test)
+    clf_record = train_classification(
+        X_train, y_zone_train, X_test, y_zone_test, borough_test
+    )
 
     # 5. Train regression
-    train_regression(X_train, y_price_train, X_test, y_price_test)
+    reg_record = train_regression(X_train, y_price_train, X_test, y_price_test)
 
     # 6. Generate SHAP explanations
     logger.info("=" * 60)
@@ -304,10 +484,16 @@ def main() -> None:
         feature_names = list(preprocessor.get_feature_names_out())
 
         from src.models.explain import compute_shap_values, global_feature_importance
+
         classifier_step = best_clf.named_steps["classifier"]
-        shap_values, explainer = compute_shap_values(classifier_step, pd.DataFrame(X_test_transformed, columns=feature_names), max_samples=200)
+        shap_values, explainer = compute_shap_values(
+            classifier_step,
+            pd.DataFrame(X_test_transformed, columns=feature_names),
+            max_samples=200,
+        )
         importance_df = global_feature_importance(shap_values, feature_names)
         logger.info("Top 10 features by SHAP:\n%s", importance_df.head(10).to_string())
+        clf_record["shap_top10"] = importance_df.head(10).to_dict("records")
     except Exception as exc:
         logger.warning("SHAP analysis failed (non-critical): %s", exc)
 
@@ -319,20 +505,37 @@ def main() -> None:
         best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
         proba = best_clf.predict_proba(X_test)
         from src.models.threshold import optimize_thresholds
-        thresholds, tuned_f1 = optimize_thresholds(proba, y_zone_test, PRICE_ZONE_LABELS)
+
+        thresholds, tuned_f1 = optimize_thresholds(
+            proba, y_zone_test, PRICE_ZONE_LABELS
+        )
         logger.info("Optimized thresholds: %s", thresholds)
         logger.info("Tuned macro F1: %.4f", tuned_f1)
         joblib.dump(thresholds, MODELS_DIR / "optimal_thresholds.joblib")
+        clf_record["threshold_tuning"] = {
+            "thresholds": thresholds,
+            "tuned_macro_f1": tuned_f1,
+        }
     except Exception as exc:
         logger.warning("Threshold tuning failed (non-critical): %s", exc)
+
+    # 7b. Persist the committed evidence artefact behind the README numbers
+    # (after threshold tuning so the tuned macro-F1 is part of the record).
+    _write_training_metrics(
+        clf_record,
+        reg_record,
+        n_train=len(X_train),
+        n_test=len(X_test),
+        features=list(X_train.columns),
+    )
 
     # 8. Deep learning training
     logger.info("=" * 60)
     logger.info("STEP 7: Deep learning (multi-task)")
     logger.info("=" * 60)
     try:
+        from src.dl.tabular_net import MultiTaskLoss, MultiTaskTabNet
         from src.dl.train_dl import prepare_dl_data, train_multitask
-        from src.dl.tabular_net import MultiTaskTabNet, MultiTaskLoss
 
         best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
         preprocessor = best_clf.named_steps["preprocessor"]
@@ -343,6 +546,7 @@ def main() -> None:
         n_features = X_train_t.shape[1]
 
         import torch
+
         # Build model — all numeric (no separate categorical embeddings in transformed space)
         model = MultiTaskTabNet(
             n_numeric=n_features,
@@ -354,22 +558,41 @@ def main() -> None:
 
         # Prepare data loaders
         train_loader = prepare_dl_data(
-            X_train_t, [], y_zone_train, y_price_train.values, batch_size=256,
+            X_train_t,
+            [],
+            y_zone_train,
+            y_price_train.values,
+            batch_size=256,
         )
         val_loader = prepare_dl_data(
-            X_test_t, [], y_zone_test, y_price_test.values, batch_size=256, shuffle=False,
+            X_test_t,
+            [],
+            y_zone_test,
+            y_price_test.values,
+            batch_size=256,
+            shuffle=False,
         )
 
         # Focal loss with class weights
         from collections import Counter
+
         counts = Counter(y_zone_train)
         total = sum(counts.values())
-        class_weights = [total / (len(counts) * counts.get(i, 1)) for i in range(len(PRICE_ZONE_LABELS))]
+        class_weights = [
+            total / (len(counts) * counts.get(i, 1))
+            for i in range(len(PRICE_ZONE_LABELS))
+        ]
         loss_fn = MultiTaskLoss(alpha=0.6, focal_gamma=2.0, class_weights=class_weights)
 
-        history = train_multitask(
-            model, loss_fn, train_loader, val_loader,
-            n_categorical=0, epochs=80, lr=1e-3, patience=15,
+        train_multitask(
+            model,
+            loss_fn,
+            train_loader,
+            val_loader,
+            n_categorical=0,
+            epochs=80,
+            lr=1e-3,
+            patience=15,
         )
 
         # Evaluate DL model
@@ -381,25 +604,34 @@ def main() -> None:
             dl_reg_pred = reg_pred.numpy()
 
         from src.models.evaluate import evaluate_classifier, evaluate_regressor
-        dl_cls_metrics = evaluate_classifier(y_zone_test, dl_cls_pred, PRICE_ZONE_LABELS)
-        dl_reg_metrics = evaluate_regressor(y_price_test.values, dl_reg_pred, log_target=True)
+
+        dl_cls_metrics = evaluate_classifier(
+            y_zone_test, dl_cls_pred, PRICE_ZONE_LABELS
+        )
+        dl_reg_metrics = evaluate_regressor(
+            y_price_test.values, dl_reg_pred, log_target=True
+        )
         logger.info(
             "DL Classification: accuracy=%.4f, macro_f1=%.4f",
-            dl_cls_metrics["accuracy"], dl_cls_metrics["macro_f1"],
+            dl_cls_metrics["accuracy"],
+            dl_cls_metrics["macro_f1"],
         )
         logger.info(
             "DL Regression: R2=%.4f, RMSE=%.4f",
-            dl_reg_metrics["r2"], dl_reg_metrics["rmse"],
+            dl_reg_metrics["r2"],
+            dl_reg_metrics["rmse"],
         )
 
         if _HAS_MLFLOW:
             mlflow.set_experiment("price_zone_classification")
             with mlflow.start_run(run_name="dl_multitask"):
-                mlflow.log_metrics({
-                    "accuracy": dl_cls_metrics["accuracy"],
-                    "macro_f1": dl_cls_metrics["macro_f1"],
-                    "reg_r2": dl_reg_metrics["r2"],
-                })
+                mlflow.log_metrics(
+                    {
+                        "accuracy": dl_cls_metrics["accuracy"],
+                        "macro_f1": dl_cls_metrics["macro_f1"],
+                        "reg_r2": dl_reg_metrics["r2"],
+                    }
+                )
     except Exception as exc:
         logger.warning("DL training failed (non-critical): %s", exc)
 
@@ -409,6 +641,7 @@ def main() -> None:
     logger.info("=" * 60)
     try:
         from src.models.drift import save_baseline
+
         save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
         logger.info("Drift baseline saved")
     except Exception as exc:

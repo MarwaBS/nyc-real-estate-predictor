@@ -1,4 +1,5 @@
 """FastAPI prediction service — /predict, /health, /docs."""
+
 from __future__ import annotations
 
 import hmac
@@ -8,7 +9,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -46,7 +47,11 @@ app.add_middleware(
     allow_headers=["*", "X-API-Key"],
 )
 
-# Rate limiting — slowapi is now a hard dependency; no conditional import.
+# Rate limiting — slowapi is a hard dependency, and the limit is actually
+# WIRED to the prediction route below (a Limiter with no decorated routes
+# enforces nothing). /health stays unlimited: k8s/uptime probes must never
+# be throttled into flapping.
+PREDICT_RATE_LIMIT = "60/minute"
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 # starlette types the handler's exc param as the base Exception; slowapi's
@@ -97,6 +102,7 @@ def _get_classifier() -> Any:
     global _classifier
     if _classifier is None:
         from src.models.predict import get_classifier
+
         _classifier = get_classifier()
     return _classifier
 
@@ -105,6 +111,7 @@ def _get_regressor() -> Any:
     global _regressor
     if _regressor is None:
         from src.models.predict import get_regressor
+
         _regressor = get_regressor()
     return _regressor
 
@@ -146,8 +153,14 @@ def _build_features(prop: PropertyInput) -> pd.DataFrame:
     response_model=PredictionResponse,
     dependencies=[Depends(verify_api_key)],
 )
-def predict(prop: PropertyInput) -> PredictionResponse:
-    """Predict price zone and estimated price for a property."""
+@limiter.limit(PREDICT_RATE_LIMIT)
+def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
+    """Predict price zone and estimated price for a property.
+
+    Rate-limited per client IP (``PREDICT_RATE_LIMIT``); the 61st request
+    in a minute receives HTTP 429 from slowapi's handler. The ``request``
+    parameter is required by slowapi's decorator contract.
+    """
     try:
         features = _build_features(prop)
 
@@ -170,7 +183,10 @@ def predict(prop: PropertyInput) -> PredictionResponse:
             ),
             price=PricePrediction(
                 predicted_price=round(price, -2),
-                price_range={"low": round(price * 0.85, -2), "high": round(price * 1.15, -2)},
+                price_range={
+                    "low": round(price * 0.85, -2),
+                    "high": round(price * 1.15, -2),
+                },
             ),
         )
     except FileNotFoundError as exc:

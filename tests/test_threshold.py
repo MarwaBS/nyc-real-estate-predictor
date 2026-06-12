@@ -1,4 +1,5 @@
 """Tests for per-class threshold optimization."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -46,12 +47,14 @@ def test_predict_with_thresholds_survives_zero_threshold() -> None:
 
 def test_threshold_tuning_handles_imbalanced_data() -> None:
     # Simulate Very High being rare
-    proba = np.array([
-        [0.8, 0.1, 0.05, 0.05],
-        [0.1, 0.7, 0.1, 0.1],
-        [0.1, 0.1, 0.7, 0.1],
-        [0.2, 0.2, 0.2, 0.4],  # Edge case: Very High
-    ])
+    proba = np.array(
+        [
+            [0.8, 0.1, 0.05, 0.05],
+            [0.1, 0.7, 0.1, 0.1],
+            [0.1, 0.1, 0.7, 0.1],
+            [0.2, 0.2, 0.2, 0.4],  # Edge case: Very High
+        ]
+    )
     y_true = np.array([0, 1, 2, 3])
     labels = ["Low", "Medium", "High", "Very High"]
 

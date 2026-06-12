@@ -1,4 +1,15 @@
-"""Geospatial utilities — haversine, H3, nearest-neighbor lookups."""
+"""Geospatial utilities — haversine distances to fixed reference points.
+
+Scope is deliberately exactly what the models consume. Earlier revisions
+also carried H3 hex indexing, KMeans neighborhood clustering, and a
+KDTree nearest-subway-station lookup; none of those ever reached a model
+feature list (the ColumnTransformer dropped their outputs, station data
+was never bundled, and the KMeans transform was dataset-stateful — unusable
+for single-row inference). They were removed rather than left as
+README-decorating dead compute; the EDA notebooks remain the record of
+that exploration.
+"""
+
 from __future__ import annotations
 
 import math
@@ -8,7 +19,10 @@ import pandas as pd
 
 
 def haversine(
-    lat1: float, lon1: float, lat2: float, lon2: float,
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
 ) -> float:
     """Return distance in km between two lat/lon points (Haversine formula)."""
     earth_radius = 6_371.0  # km
@@ -55,69 +69,9 @@ def add_distance_features(
     for name, (ref_lat, ref_lon) in reference_points.items():
         col_name = f"DIST_{name.upper().replace(' ', '_')}"
         result[col_name] = haversine_vectorized(
-            result[lat_col], result[lon_col], ref_lat, ref_lon,
+            result[lat_col],
+            result[lon_col],
+            ref_lat,
+            ref_lon,
         )
-    return result
-
-
-def nearest_station_distance(
-    df: pd.DataFrame,
-    stations: pd.DataFrame,
-    lat_col: str = "LATITUDE",
-    lon_col: str = "LONGITUDE",
-    station_lat: str = "latitude",
-    station_lon: str = "longitude",
-) -> pd.Series:
-    """Compute distance to nearest subway station using scipy KDTree."""
-    try:
-        from scipy.spatial import cKDTree
-    except ImportError:
-        # Fallback: return NaN if scipy not installed
-        return pd.Series(np.nan, index=df.index)
-
-    station_coords = np.radians(stations[[station_lat, station_lon]].values)
-    tree = cKDTree(station_coords)
-
-    property_coords = np.radians(df[[lat_col, lon_col]].values)
-    distances, _ = tree.query(property_coords, k=1)
-
-    # Convert radians to km (approximate using Earth's radius)
-    return pd.Series(distances * 6_371.0, index=df.index, name="DIST_NEAREST_SUBWAY")
-
-
-def add_h3_index(
-    df: pd.DataFrame,
-    resolution: int = 7,
-    lat_col: str = "LATITUDE",
-    lon_col: str = "LONGITUDE",
-) -> pd.DataFrame:
-    """Add H3 hexagonal grid index column."""
-    result = df.copy()
-    col_name = f"H3_RES{resolution}"
-    try:
-        import h3
-
-        result[col_name] = [
-            h3.latlng_to_cell(lat, lon, resolution)
-            for lat, lon in zip(df[lat_col], df[lon_col], strict=True)
-        ]
-    except ImportError:
-        result[col_name] = "h3_unavailable"
-    return result
-
-
-def add_neighborhood_clusters(
-    df: pd.DataFrame,
-    n_clusters: int = 15,
-    lat_col: str = "LATITUDE",
-    lon_col: str = "LONGITUDE",
-    random_state: int = 42,
-) -> pd.DataFrame:
-    """Add KMeans cluster labels based on geographic coordinates."""
-    from sklearn.cluster import KMeans
-
-    result = df.copy()
-    coords = result[[lat_col, lon_col]].values
-    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
-    result["NEIGHBORHOOD_CLUSTER"] = kmeans.fit_predict(coords)
     return result
