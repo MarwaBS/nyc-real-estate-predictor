@@ -11,8 +11,13 @@ real, unseen NYC.gov 2024 sales and report an honest out-of-distribution R².
 
 It is deliberately lower-accuracy than the flagship: the point is *honest
 external validation on real data*, not peak in-distribution accuracy. The
-artefact is written to ``models/benchmark_regressor.joblib`` (gitignored;
-the benchmark job loads it at run time).
+artefact is written to ``models/benchmark_regressor.joblib`` and is
+COMMITTED (0.6 MB) — it is what makes the benchmark reproducible by CI and
+by strangers. It MUST be trained under the pinned environment
+(requirements.txt: Python 3.12, numpy 1.26.4, scikit-learn 1.8.0): an
+artefact pickled under unpinned numpy fails to load in CI, and the
+orchestrator treats that as a structural failure (InferenceError), not a
+finding.
 
 Feature contract (must match :func:`benchmarks.mapping.apply_schema_map`):
     borough        : str   US Census borough name (Manhattan, Bronx, ...)

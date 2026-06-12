@@ -1,8 +1,10 @@
 {
-  "run_date": "2026-06-11T22:10:10.900473+00:00",
-  "commit_sha": "507abb106327cbe16b7b8f59cf16eb1cdc595a35",
+  "run_date": "2026-06-12T01:29:14.093289+00:00",
+  "commit_sha": "4d5016a202036f71a70b1bb858be538be48aae9e",
+  "working_tree_clean": true,
   "provenance": {
-    "python": "3.13.13",
+    "python": "3.12.13",
+    "numpy": "1.26.4",
     "scikit_learn": "1.8.0",
     "random_seed": 42,
     "test_size": 0.2,
@@ -29,81 +31,81 @@
   "classification": {
     "selected_model": "xgboost",
     "metrics": {
-      "accuracy": 0.709211986681465,
-      "macro_f1": 0.7036352078050992,
-      "weighted_f1": 0.7080523899966407,
-      "cohen_kappa": 0.6007522828096274,
+      "accuracy": 0.7125416204217536,
+      "macro_f1": 0.7107519931049343,
+      "weighted_f1": 0.7118661756515121,
+      "cohen_kappa": 0.6043159856280765,
       "confusion_matrix": [
         [
-          97,
-          2,
-          52,
-          35
+          100,
+          5,
+          57,
+          24
         ],
         [
           4,
-          178,
-          47,
+          177,
+          48,
           2
         ],
         [
-          41,
           40,
-          239,
+          40,
+          240,
           3
         ],
         [
-          29,
-          1,
-          6,
+          27,
+          2,
+          7,
           125
         ]
       ],
       "classification_report": {
         "Low": {
-          "precision": 0.5672514619883041,
-          "recall": 0.521505376344086,
-          "f1-score": 0.5434173669467787,
+          "precision": 0.5847953216374269,
+          "recall": 0.5376344086021505,
+          "f1-score": 0.5602240896358543,
           "support": 186.0
         },
         "Medium": {
-          "precision": 0.8054298642533937,
-          "recall": 0.7705627705627706,
-          "f1-score": 0.7876106194690266,
+          "precision": 0.7901785714285714,
+          "recall": 0.7662337662337663,
+          "f1-score": 0.778021978021978,
           "support": 231.0
         },
         "High": {
-          "precision": 0.6947674418604651,
-          "recall": 0.739938080495356,
-          "f1-score": 0.7166416791604198,
+          "precision": 0.6818181818181818,
+          "recall": 0.7430340557275542,
+          "f1-score": 0.7111111111111111,
           "support": 323.0
         },
         "Very High": {
-          "precision": 0.7575757575757576,
+          "precision": 0.8116883116883117,
           "recall": 0.7763975155279503,
-          "f1-score": 0.7668711656441718,
+          "f1-score": 0.7936507936507936,
           "support": 161.0
         },
-        "accuracy": 0.709211986681465,
+        "accuracy": 0.7125416204217536,
         "macro avg": {
-          "precision": 0.7062561314194802,
-          "recall": 0.7021009357325407,
-          "f1-score": 0.7036352078050992,
+          "precision": 0.7171200966431229,
+          "recall": 0.7058249365228554,
+          "f1-score": 0.7107519931049343,
           "support": 901.0
         },
         "weighted avg": {
-          "precision": 0.7080384586714602,
-          "recall": 0.709211986681465,
-          "f1-score": 0.7080523899966407,
+          "precision": 0.7127772150207018,
+          "recall": 0.7125416204217536,
+          "f1-score": 0.7118661756515121,
           "support": 901.0
         }
       }
     },
     "candidates": {
       "xgboost": {
-        "accuracy": 0.709211986681465,
-        "macro_f1": 0.7036352078050992,
-        "cohen_kappa": 0.6007522828096274
+        "accuracy": 0.7125416204217536,
+        "macro_f1": 0.7107519931049343,
+        "cohen_kappa": 0.6043159856280765
       },
       "lightgbm": {
         "accuracy": 0.6936736958934517,
@@ -112,63 +114,63 @@
       }
     },
     "fairness_by_borough": {
-      "brooklyn": 0.6635313929056976,
-      "queens": 0.624784251453772,
-      "manhattan": 0.6192284157165633,
-      "bronx": 0.68005698005698,
-      "staten island": 0.7947000337040782,
-      "nan": 0.6722209858684767
+      "brooklyn": 0.677404593884046,
+      "queens": 0.6128545412193211,
+      "manhattan": 0.6274205496846745,
+      "bronx": 0.6814957174831455,
+      "staten island": 0.7783240647118301,
+      "nan": 0.7151502787977696
     },
     "shap_top10": [
       {
         "feature": "num__DIST_MANHATTAN_CENTER",
-        "mean_abs_shap": 1.1625779867172241
+        "mean_abs_shap": 1.148518681526184
       },
       {
         "feature": "num__PROPERTYSQFT",
-        "mean_abs_shap": 0.8431503772735596
+        "mean_abs_shap": 0.8578590154647827
       },
       {
         "feature": "num__BATH",
-        "mean_abs_shap": 0.7969546318054199
+        "mean_abs_shap": 0.7857047915458679
       },
       {
         "feature": "num__DIST_CENTRAL_PARK",
-        "mean_abs_shap": 0.41643935441970825
+        "mean_abs_shap": 0.4037548899650574
       },
       {
         "feature": "cat_target__SUBLOCALITY",
-        "mean_abs_shap": 0.38418048620224
+        "mean_abs_shap": 0.3906097114086151
       },
       {
         "feature": "num__TOTAL_ROOMS",
-        "mean_abs_shap": 0.3545612394809723
+        "mean_abs_shap": 0.34686610102653503
       },
       {
         "feature": "num__ROOMS_PER_SQFT",
-        "mean_abs_shap": 0.2992255389690399
+        "mean_abs_shap": 0.29929909110069275
       },
       {
         "feature": "cat_target__ZIPCODE",
-        "mean_abs_shap": 0.2142057865858078
+        "mean_abs_shap": 0.203349307179451
       },
       {
         "feature": "cat_onehot__TYPE_condo",
-        "mean_abs_shap": 0.1961527019739151
+        "mean_abs_shap": 0.19983313977718353
       },
       {
         "feature": "num__BED_BATH_RATIO",
-        "mean_abs_shap": 0.13993346691131592
+        "mean_abs_shap": 0.13658097386360168
       }
     ],
     "threshold_tuning": {
       "thresholds": {
-        "Low": 0.165,
-        "Medium": 0.704,
-        "High": 0.5,
+        "Low": 0.361,
+        "Medium": 0.9,
+        "High": 0.492,
         "Very High": 0.5
       },
-      "tuned_macro_f1": 0.7240199394161391
+      "tuned_macro_f1": 0.7244790794592578
     }
   },
   "regression": {
@@ -184,8 +186,8 @@
     "candidates": {
       "random_forest": {
         "r2": 0.8040347859243666,
-        "rmse": 0.4461837840837083,
-        "mae_usd": 643425.5354860331
+        "rmse": 0.4461837840837084,
+        "mae_usd": 643425.535486033
       },
       "xgboost": {
         "r2": 0.8153634721250209,

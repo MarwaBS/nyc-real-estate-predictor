@@ -28,7 +28,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Factors
 
-- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies materially (0.795 → 0.619).
+- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies materially (0.778 → 0.613).
 - **Evaluation factors:** price zone (4 classes, stratified), sublocality (target-encoded with smoothing), property type (one-hot).
 - **Factors NOT evaluated:** seller/buyer demographics (not in the dataset); temporal drift across listing date (dataset is a single snapshot); accessibility amenities (not in features).
 
@@ -37,7 +37,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model performance measures:**
   - Classification: macro F1 = **0.724** (XGBoost + threshold tuning) on a stratified 20% hold-out (901 test / 3,603 train).
   - Regression: R² = **0.815** (XGBoost), honest, no leakage (see ADR-001).
-- **Decision thresholds:** per-class probability thresholds tuned on validation split — Low=0.165, Medium=0.704, High=0.5, Very High=0.5. Improved macro F1 from 0.704 → 0.724 (+0.020).
+- **Decision thresholds:** per-class probability thresholds tuned on validation split — Low=0.361, Medium=0.9, High=0.492, Very High=0.5. Improved macro F1 from 0.711 → 0.724 (+0.014).
 - **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
 
 ## Evaluation data
@@ -54,15 +54,19 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Quantitative analyses
 
-- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `DIST_MANHATTAN_CENTER` (1.163), `PROPERTYSQFT` (0.843), `BATH` (0.797), `DIST_CENTRAL_PARK` (0.416). Full top-10 in README.
-- **Intersectional results:** borough-level macro F1:
-  - Staten Island 0.795
-  - Bronx 0.680
-  - Brooklyn 0.664
-  - Queens 0.625
-  - Manhattan 0.619
-  
-  Manhattan has the largest class-distribution shift (more Very High), which depresses F1 vs. Staten Island where the distribution is tighter. Not currently mitigated (would need per-borough calibration or reweighting).
+- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `DIST_MANHATTAN_CENTER` (1.149), `PROPERTYSQFT` (0.858), `BATH` (0.786), `DIST_CENTRAL_PARK` (0.404). Full top-10 in README.
+- **Intersectional results:** borough-level macro F1 (from the artifact's
+  `fairness_by_borough`; a small missing-borough group is recorded as `nan`):
+  - Staten Island 0.778
+  - Bronx 0.681
+  - Brooklyn 0.677
+  - Manhattan 0.627
+  - Queens 0.613
+
+  Manhattan and Queens carry the largest class-distribution shift (more
+  Very High / more Medium respectively), which depresses their F1 vs.
+  Staten Island where the distribution is tighter. Not currently mitigated
+  (would need per-borough calibration or reweighting).
 
 ## Ethical considerations
 

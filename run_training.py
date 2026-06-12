@@ -380,6 +380,24 @@ def _git_commit_sha() -> str | None:
         return None
 
 
+def _git_working_tree_clean() -> bool | None:
+    """True when `git status --porcelain` is empty — part of provenance.
+
+    A metrics artefact generated from a dirty tree cannot be tied to its
+    commit_sha's source, so the flag is recorded rather than assumed.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return out.stdout.strip() == ""
+    except Exception:
+        return None
+
+
 def _write_training_metrics(
     clf_record: dict[str, Any],
     reg_record: dict[str, Any],
@@ -395,8 +413,10 @@ def _write_training_metrics(
     artefact = {
         "run_date": _dt.datetime.now(_dt.UTC).isoformat(),
         "commit_sha": _git_commit_sha(),
+        "working_tree_clean": _git_working_tree_clean(),
         "provenance": {
             "python": sys.version.split()[0],
+            "numpy": np.__version__,
             "scikit_learn": sklearn.__version__,
             "random_seed": RANDOM_SEED,
             "test_size": TEST_SIZE,
