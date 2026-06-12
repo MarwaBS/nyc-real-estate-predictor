@@ -31,15 +31,15 @@ file, it does not belong here.
 | Task | Model | Metric | Score |
 |---|---|---|---|
 | Price Zone (4-class) | **XGBoost + threshold tuning** | Macro F1 | **0.724** |
-| Price Zone (4-class) | XGBoost (argmax) | Macro F1 | 0.704 |
+| Price Zone (4-class) | XGBoost (argmax) | Macro F1 | 0.711 |
 | Price Zone (4-class) | LightGBM | Macro F1 | 0.692 |
 | Price Regression | **XGBoost** | R2 (honest, no leakage) | **0.815** |
 | Price Regression | Random Forest | R2 (honest, no leakage) | 0.804 |
 | Price Regression | LightGBM | R2 (honest, no leakage) | 0.796 |
 
-All scores on held-out 20% stratified test set (3,603 train / 901 test). No data leakage.
+All scores on held-out 20% stratified test set (3,603 train / 901 test). No data leakage. Artifacts produced under the pinned environment (Python 3.12, numpy 1.26.4, scikit-learn 1.8.0 — recorded in the artifact's provenance block together with `working_tree_clean` and the producing commit).
 
-Threshold tuning optimized per-class probability thresholds (Low=0.165, Medium=0.704, High=0.5, Very High=0.5), improving macro F1 from 0.704 to 0.724 (+0.020).
+Threshold tuning optimized per-class probability thresholds (Low=0.361, Medium=0.9, High=0.492, Very High=0.5), improving macro F1 from 0.711 to 0.724 (+0.014).
 
 > The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
 > optional training stage when `requirements-train.txt` extras (torch) are
@@ -54,28 +54,29 @@ ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | DIST_MANHATTAN_CENTER | 1.163 |
-| 2 | PROPERTYSQFT | 0.843 |
-| 3 | BATH | 0.797 |
-| 4 | DIST_CENTRAL_PARK | 0.416 |
-| 5 | SUBLOCALITY (target-encoded) | 0.384 |
-| 6 | TOTAL_ROOMS | 0.355 |
+| 1 | DIST_MANHATTAN_CENTER | 1.149 |
+| 2 | PROPERTYSQFT | 0.858 |
+| 3 | BATH | 0.786 |
+| 4 | DIST_CENTRAL_PARK | 0.404 |
+| 5 | SUBLOCALITY (target-encoded) | 0.391 |
+| 6 | TOTAL_ROOMS | 0.347 |
 | 7 | ROOMS_PER_SQFT | 0.299 |
-| 8 | ZIPCODE (target-encoded) | 0.214 |
-| 9 | TYPE_condo (one-hot) | 0.196 |
-| 10 | BED_BATH_RATIO | 0.140 |
+| 8 | ZIPCODE (target-encoded) | 0.203 |
+| 9 | TYPE_condo (one-hot) | 0.200 |
+| 10 | BED_BATH_RATIO | 0.137 |
 
 ### Fairness by borough
 
-From the artefact's `classification.fairness_by_borough`:
+From the artefact's `classification.fairness_by_borough` (a small group of
+rows with missing borough is also recorded in the artifact as `"nan"`):
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.795 |
-| Bronx | 0.680 |
-| Brooklyn | 0.664 |
-| Queens | 0.625 |
-| Manhattan | 0.619 |
+| Staten Island | 0.778 |
+| Bronx | 0.681 |
+| Brooklyn | 0.677 |
+| Manhattan | 0.627 |
+| Queens | 0.613 |
 
 ---
 

@@ -65,6 +65,18 @@ class DropLogError(Exception):
     """The mapping's drop accounting does not reconcile (SCHEMA_MAP §4)."""
 
 
+class InferenceError(Exception):
+    """The committed benchmark model failed to load or score.
+
+    Since the model artefact ships WITH the repo (it is what makes the
+    benchmark stranger-reproducible), any inference failure — missing
+    file, unpicklable artefact (e.g. produced under unpinned numpy),
+    feature mismatch — is a structural pipeline defect, never a finding.
+    Raising turns the CI benchmark job red instead of recording the
+    failure as data behind a green badge.
+    """
+
+
 def _verify_drop_log(report: MappingReport) -> None:
     """Enforce drop-log consistency instead of trusting the mapping."""
     reason_total = sum(report.drop_reasons.values())
@@ -118,9 +130,7 @@ def _run_leakage_invariants(X: pd.DataFrame, target: pd.Series) -> dict[str, Any
     return leakage
 
 
-def _run_prediction_health(predictions: np.ndarray | None) -> dict[str, Any]:
-    if predictions is None:
-        return {"status": "skipped", "reason": "no predictions produced"}
+def _run_prediction_health(predictions: np.ndarray) -> dict[str, Any]:
     try:
         check_predictions_healthy(predictions)
         return {"status": "passed", "message": None}
@@ -128,33 +138,55 @@ def _run_prediction_health(predictions: np.ndarray | None) -> dict[str, Any]:
         return {"status": "failed", "message": str(exc)}
 
 
-def _attempt_inference(
-    X: pd.DataFrame,
-) -> tuple[np.ndarray | None, dict[str, Any]]:
-    """Try to load the trained model and score ``X``.
+def _git_working_tree_clean() -> bool | None:
+    """True when `git status --porcelain` is empty — part of provenance.
 
-    Captures any failure mode structurally — missing model file,
-    schema mismatch, unexpected runtime error — and returns it as
-    part of the inference record. Never raises.
+    An artefact generated from a dirty tree cannot be tied to its
+    commit_sha's source, so the flag is recorded rather than assumed.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return out.stdout.strip() == ""
+    except Exception:
+        return None
+
+
+def _run_inference(X: pd.DataFrame) -> tuple[np.ndarray, dict[str, Any]]:
+    """Load the COMMITTED benchmark model and score ``X``.
+
+    Inference is load-bearing (the artefact ships with the repo), so every
+    failure mode raises :class:`InferenceError` and fails the run — a
+    missing or unpicklable model behind a green CI badge is exactly the
+    silent-failure class this pipeline exists to prevent. (v1's honest
+    "inference failed, recorded as data" behaviour predated the committed
+    model; it is no longer a valid outcome.)
     """
     if not MODEL_PATH.exists():
-        return None, {
-            "status": "skipped",
-            "reason": "model file not present",
-            "model_path": str(MODEL_PATH.relative_to(REPO_ROOT)),
-        }
+        raise InferenceError(
+            f"committed benchmark model missing: "
+            f"{MODEL_PATH.relative_to(REPO_ROOT)} — broken checkout or "
+            f"ignored artefact; run benchmarks.train_benchmark_model under "
+            f"the PINNED environment (requirements.txt) and commit it"
+        )
 
     try:
         import joblib
 
         model = joblib.load(MODEL_PATH)
     except Exception as exc:
-        return None, {
-            "status": "failed",
-            "stage": "load",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
+        raise InferenceError(
+            f"committed benchmark model failed to LOAD "
+            f"({type(exc).__name__}: {exc}). Most likely cause: the artefact "
+            f"was pickled under an environment that violates the pins in "
+            f"requirements.txt (e.g. a different numpy/sklearn). Retrain it "
+            f"under the pinned environment and recommit."
+        ) from exc
 
     expected: list[str] = []
     if hasattr(model, "feature_names_in_"):
@@ -167,16 +199,12 @@ def _attempt_inference(
     try:
         preds = np.asarray(model.predict(X), dtype=float)
     except Exception as exc:
-        return None, {
-            "status": "failed",
-            "stage": "predict",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-            "expected_features": expected,
-            "produced_features": produced,
-            "missing_features": missing,
-            "extra_features": extra,
-        }
+        raise InferenceError(
+            f"committed benchmark model failed to PREDICT "
+            f"({type(exc).__name__}: {exc}); expected features {expected}, "
+            f"mapping produced {produced} (missing={missing}, extra={extra}) "
+            f"— the sealed contract and the committed model must agree"
+        ) from exc
 
     return preds, {
         "status": "succeeded",
@@ -211,40 +239,32 @@ def run_benchmark() -> dict[str, Any]:
     _verify_target_finite(target)
 
     leakage = _run_leakage_invariants(X, target)
-    predictions, inference = _attempt_inference(X)
+    # Inference is a hard gate: _run_inference raises InferenceError on a
+    # missing/unloadable/mismatched committed model — never a green skip.
+    predictions, inference = _run_inference(X)
     health = _run_prediction_health(predictions)
 
-    performance: dict[str, Any]
-    if predictions is not None and len(predictions) > 0:
-        target_arr = target.to_numpy()
-        residuals = target_arr - predictions
-        ss_res = float(np.sum(residuals**2))
-        ss_tot = float(np.sum((target_arr - target_arr.mean()) ** 2))
-        r2 = None if ss_tot == 0 else 1.0 - ss_res / ss_tot
-        if r2 is not None and not np.isfinite(r2):
-            # A NaN/inf R² is a pipeline defect, never a finding.
-            raise DropLogError(f"non-finite R² computed: {r2!r}")
-        performance = {
-            "status": "computed",
-            "r2_log_space": r2,
-            "n_scored": int(len(predictions)),
-        }
-    else:
-        performance = {
-            "status": "unobservable",
-            "reason": "no predictions produced (see inference.status)",
-        }
+    target_arr = target.to_numpy()
+    residuals = target_arr - predictions
+    ss_res = float(np.sum(residuals**2))
+    ss_tot = float(np.sum((target_arr - target_arr.mean()) ** 2))
+    r2 = None if ss_tot == 0 else 1.0 - ss_res / ss_tot
+    if r2 is not None and not np.isfinite(r2):
+        # A NaN/inf R² is a pipeline defect, never a finding.
+        raise DropLogError(f"non-finite R² computed: {r2!r}")
+    performance: dict[str, Any] = {
+        "status": "computed",
+        "r2_log_space": r2,
+        "n_scored": int(len(predictions)),
+    }
 
-    leakage_tripwire = (
-        predictions is not None
-        and performance.get("r2_log_space") is not None
-        and performance["r2_log_space"] > 0.95
-    )
+    leakage_tripwire = r2 is not None and r2 > 0.95
 
     result: dict[str, Any] = {
         "run_date": run_started,
         "run_ended": _dt.datetime.now(_dt.UTC).isoformat(),
         "commit_sha": _git_commit_sha(),
+        "working_tree_clean": _git_working_tree_clean(),
         "schema_map_version": SCHEMA_MAP_VERSION,
         # Verified against the registry at step 1 — by the time this is
         # written, the hash is known to equal the sealed entry.

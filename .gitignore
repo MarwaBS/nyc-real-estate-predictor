@@ -213,3 +213,4 @@ INTERNAL/
 audits/
 sbom.cyclonedx.json
 models/drift_baseline.json
+.venv312/
