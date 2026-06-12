@@ -1,4 +1,5 @@
 """Tests for model evaluation module."""
+
 from __future__ import annotations
 
 import numpy as np

@@ -14,6 +14,7 @@ piece: when `ENV=="prod"`, an empty or wildcard `ALLOWED_ORIGINS` raises
 at startup rather than silently accepting any Origin header. Mirrors the
 ResumeForge M3 fix.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache

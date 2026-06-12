@@ -49,10 +49,14 @@ def get_top_features_for_prediction(
 ) -> list[dict[str, Any]]:
     """Get top N contributing features for a single prediction."""
     if isinstance(shap_values, list):
-        # Multi-class: use the predicted class
+        # Legacy multi-class shape: list of (n_samples, n_features) per class
         values = shap_values[0][idx]
     else:
-        values = shap_values[idx]
+        values = np.asarray(shap_values)[idx]
+        if values.ndim == 2:
+            # Modern shap multi-class: (n_features, n_classes) per sample —
+            # aggregate magnitude across classes for a single ranking.
+            values = values.mean(axis=1)
 
     importance = list(zip(feature_names, values))
     importance.sort(key=lambda x: abs(x[1]), reverse=True)
@@ -69,10 +73,14 @@ def global_feature_importance(
 ) -> pd.DataFrame:
     """Compute mean absolute SHAP values per feature (global importance)."""
     if isinstance(shap_values, list):
-        # Multi-class: average across classes
+        # Legacy multi-class shape: list of (n_samples, n_features) per class
         vals = np.mean([np.abs(sv) for sv in shap_values], axis=0)
     else:
-        vals = np.abs(shap_values)
+        vals = np.abs(np.asarray(shap_values))
+        if vals.ndim == 3:
+            # Modern shap multi-class: (n_samples, n_features, n_classes) —
+            # average magnitude across classes first.
+            vals = vals.mean(axis=2)
 
     mean_importance = vals.mean(axis=0)
     importance_df = pd.DataFrame({

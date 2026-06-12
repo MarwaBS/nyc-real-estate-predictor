@@ -1,7 +1,8 @@
 {
-  "_note": "Registry of frozen SCHEMA_MAP.md versions. Each entry pins the SHA256 of the file at the moment the version was sealed. Any change to SCHEMA_MAP.md without bumping SCHEMA_MAP_VERSION and adding a new entry here fails CI (test_schema_map_sha_matches_version).",
+  "_note": "Registry of frozen SCHEMA_MAP.md versions. Each entry pins the SHA256 of the file (LF-normalised bytes - see benchmarks.invariants.schema_map_sha256) at the moment the version was sealed. Any change to SCHEMA_MAP.md without bumping SCHEMA_MAP_VERSION and adding a new entry here fails CI (test_schema_map_sha_matches_registered_version) AND aborts any benchmark run (verify_schema_map_lock).",
   "versions": {
     "v1": "a4135469ecccc6e0ccf27abadd311509e9a47370c0ffba0dc18d9d3a5da4314d",
-    "v2": "7f087497e918a1b6d546235f28eca42a72991649e30118a51425892860f2dea8"
+    "v2": "7f087497e918a1b6d546235f28eca42a72991649e30118a51425892860f2dea8",
+    "v3": "d2fa4b5c8ff22098477939f77f1445270785bc1a40548e07dbd63234f8e1b864"
   }
 }

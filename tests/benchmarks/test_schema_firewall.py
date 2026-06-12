@@ -1,21 +1,16 @@
-"""Adversarial tests for ``benchmarks/SCHEMA_MAP.md`` v1.
+"""Adversarial tests for the sealed ``benchmarks/SCHEMA_MAP.md`` contract.
 
 Each test injects a specific contract violation and asserts the
 firewall catches it. A green suite means the firewall is enforced,
-not merely documented.
-
-Step 3 status: this suite is written against a deliberately
-non-functional stub of :func:`benchmarks.mapping.apply_schema_map`
-that raises :class:`NotImplementedError`. Expected outcome: every
-mapping-dependent test fails with ``NotImplementedError``; the
-schema-SHA check and the collapse-detector checks pass, because
-those do not depend on the mapping implementation. Step 4 lands the
-real mapping and the whole suite must go green without any test
-modification.
+not merely documented. The suite tracks whatever version is sealed in
+``SCHEMA_MAP_VERSIONS.json`` (currently pinned by
+``benchmarks.invariants.SCHEMA_MAP_VERSION``); the same checks run
+again at benchmark time inside the orchestrator, so a violation fails
+BOTH the test suite and any attempted run.
 """
+
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -28,9 +23,12 @@ from benchmarks.invariants import (
     SCHEMA_MAP_VERSION,
     HealthError,
     LeakageError,
+    SchemaLockError,
     check_no_forbidden_columns,
     check_predictions_healthy,
     check_target_independence,
+    schema_map_sha256,
+    verify_schema_map_lock,
 )
 from benchmarks.mapping import apply_schema_map
 
@@ -42,6 +40,7 @@ VERSIONS_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP_VERSIONS.json"
 # ─────────────────────────────────────────────────────────────────────
 # 1. Name-based leakage — parametrised over every forbidden column
 # ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("forbidden_col", sorted(FORBIDDEN_COLUMNS))
 def test_forbidden_column_rejected(nyc_rolling_sales_fixture, forbidden_col):
@@ -56,6 +55,7 @@ def test_forbidden_column_rejected(nyc_rolling_sales_fixture, forbidden_col):
 # 2. Semantic leakage — renamed target, caught by Pearson / Spearman / MI
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_target_independence_catches_renamed_target(nyc_rolling_sales_fixture):
     """A renamed, nearly-identical copy of the target must be caught."""
     x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
@@ -65,7 +65,9 @@ def test_target_independence_catches_renamed_target(nyc_rolling_sales_fixture):
         check_target_independence(x, target)
 
 
-def test_target_independence_catches_nonlinear_target_encoding(nyc_rolling_sales_fixture):
+def test_target_independence_catches_nonlinear_target_encoding(
+    nyc_rolling_sales_fixture,
+):
     """A non-linear transform of the target (expm1 reverses log1p) must be caught.
 
     Pearson may underestimate the correlation on expm1 since the
@@ -82,6 +84,7 @@ def test_target_independence_catches_nonlinear_target_encoding(nyc_rolling_sales
 # 3. Determinism
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_mapping_is_deterministic(nyc_rolling_sales_fixture):
     """Same input frame must produce bitwise-identical output frames."""
     x_a, _, _ = apply_schema_map(nyc_rolling_sales_fixture)
@@ -92,6 +95,7 @@ def test_mapping_is_deterministic(nyc_rolling_sales_fixture):
 # ─────────────────────────────────────────────────────────────────────
 # 4. Statelessness — subset invariance (single-row vs full-frame)
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_mapping_is_stateless_across_subsets(nyc_rolling_sales_fixture):
     """Mapping a kept row alone must match the same row inside the full frame.
@@ -105,9 +109,7 @@ def test_mapping_is_stateless_across_subsets(nyc_rolling_sales_fixture):
     if not kept_indices:
         pytest.skip("fixture has no kept rows; test needs at least one")
     first_kept = kept_indices[0]
-    single, _, _ = apply_schema_map(
-        nyc_rolling_sales_fixture.loc[[first_kept]].copy()
-    )
+    single, _, _ = apply_schema_map(nyc_rolling_sales_fixture.loc[[first_kept]].copy())
     full_first = full.loc[[first_kept]].reset_index(drop=True)
     pd.testing.assert_frame_equal(full_first, single.reset_index(drop=True))
 
@@ -115,6 +117,7 @@ def test_mapping_is_stateless_across_subsets(nyc_rolling_sales_fixture):
 # ─────────────────────────────────────────────────────────────────────
 # 5. Target identity — label shuffle must not change features
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_mapping_ignores_target_identity(nyc_rolling_sales_fixture):
     """Permuting SALE PRICE must leave X structurally identical.
@@ -139,6 +142,7 @@ def test_mapping_ignores_target_identity(nyc_rolling_sales_fixture):
 # 6. Column-name indexing — not positional
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_mapping_uses_column_names_not_positions(nyc_rolling_sales_fixture):
     """Reversing column order in the input must not change X."""
     raw = nyc_rolling_sales_fixture
@@ -152,6 +156,7 @@ def test_mapping_uses_column_names_not_positions(nyc_rolling_sales_fixture):
 # 7. Drop-log consistency
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_drop_reasons_equal_dropped_rows(nyc_rolling_sales_fixture):
     """Logged drop-reason counts must sum to n_dropped; raw == scored + dropped."""
     _, _, report = apply_schema_map(nyc_rolling_sales_fixture)
@@ -160,9 +165,26 @@ def test_drop_reasons_equal_dropped_rows(nyc_rolling_sales_fixture):
     assert report.n_raw == report.n_scored + report.n_dropped
 
 
+def test_nan_sale_price_is_dropped_not_poisoning_target(nyc_rolling_sales_fixture):
+    """v3 regression guard: a blank SALE PRICE must become an explicit
+    `missing_sale_price` drop — NaN compares False against every numeric
+    threshold, so v2 silently kept these rows and produced log1p(NaN)
+    targets that the hand-rolled R² propagated without complaint."""
+    _, target, report = apply_schema_map(nyc_rolling_sales_fixture)
+    assert report.drop_reasons.get("missing_sale_price", 0) >= 1
+    assert np.isfinite(target.to_numpy(dtype=float)).all()
+
+
+def test_nan_year_built_is_dropped(nyc_rolling_sales_fixture):
+    """v3: YEAR BUILT blank/NaN drops alongside == 0 (record-quality rule)."""
+    _, _, report = apply_schema_map(nyc_rolling_sales_fixture)
+    assert report.drop_reasons.get("missing_year_built", 0) >= 2  # 0 and NaN rows
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 8. Filter is not target-aware
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_filter_independent_of_target_distribution(nyc_rolling_sales_fixture):
     """Shifting SALE PRICE into a uniform in-bounds band must not change
@@ -189,10 +211,17 @@ def test_filter_independent_of_target_distribution(nyc_rolling_sales_fixture):
 # 9. Version registry — SCHEMA_MAP.md SHA matches the pinned entry
 # ─────────────────────────────────────────────────────────────────────
 
+
 def test_schema_map_sha_matches_registered_version():
-    """Silent edits to SCHEMA_MAP.md without a version bump must fail CI."""
-    file_sha = hashlib.sha256(SCHEMA_MAP_PATH.read_bytes()).hexdigest()
-    registry = json.loads(VERSIONS_PATH.read_text())["versions"]
+    """Silent edits to SCHEMA_MAP.md without a version bump must fail CI.
+
+    The hash is LF-normalised (benchmarks.invariants.schema_map_sha256) so
+    this check passes identically on a Windows CRLF checkout and the Linux
+    CI runner — a determinism firewall must not itself be
+    platform-nondeterministic.
+    """
+    file_sha = schema_map_sha256(SCHEMA_MAP_PATH)
+    registry = json.loads(VERSIONS_PATH.read_text(encoding="utf-8"))["versions"]
     assert registry[SCHEMA_MAP_VERSION] == file_sha, (
         f"SCHEMA_MAP.md hash changed without bumping SCHEMA_MAP_VERSION "
         f"(current={SCHEMA_MAP_VERSION}) and updating SCHEMA_MAP_VERSIONS.json. "
@@ -200,9 +229,36 @@ def test_schema_map_sha_matches_registered_version():
     )
 
 
+def test_schema_map_sha_is_crlf_invariant(tmp_path):
+    """CRLF and LF copies of the same contract must hash identically."""
+    lf_copy = tmp_path / "lf.md"
+    crlf_copy = tmp_path / "crlf.md"
+    content_lf = SCHEMA_MAP_PATH.read_bytes().replace(b"\r\n", b"\n")
+    lf_copy.write_bytes(content_lf)
+    crlf_copy.write_bytes(content_lf.replace(b"\n", b"\r\n"))
+    assert schema_map_sha256(lf_copy) == schema_map_sha256(crlf_copy)
+
+
+def test_verify_schema_map_lock_passes_for_sealed_contract():
+    """The run-time gate the orchestrator calls must accept the sealed file."""
+    assert verify_schema_map_lock() == schema_map_sha256()
+
+
+def test_verify_schema_map_lock_rejects_unsealed_edit(tmp_path, monkeypatch):
+    """An edited contract must abort a run, not be recorded as data."""
+    import benchmarks.invariants as inv
+
+    tampered = tmp_path / "SCHEMA_MAP.md"
+    tampered.write_bytes(SCHEMA_MAP_PATH.read_bytes() + b"\n<!-- tampered -->\n")
+    monkeypatch.setattr(inv, "SCHEMA_MAP_PATH", tampered)
+    with pytest.raises(SchemaLockError, match="does not match the sealed"):
+        inv.verify_schema_map_lock()
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 10. Prediction health / collapse detectors — distribution-free
 # ─────────────────────────────────────────────────────────────────────
+
 
 def test_collapse_detector_flags_constant_predictions():
     with pytest.raises(HealthError, match="collapse"):
@@ -211,9 +267,7 @@ def test_collapse_detector_flags_constant_predictions():
 
 def test_collapse_detector_flags_near_constant_predictions():
     rng = np.random.default_rng(0)
-    preds = np.concatenate(
-        [np.full(960, 500_000.0), rng.uniform(1e5, 1e6, 40)]
-    )
+    preds = np.concatenate([np.full(960, 500_000.0), rng.uniform(1e5, 1e6, 40)])
     with pytest.raises(HealthError, match="collapse"):
         check_predictions_healthy(preds, max_identical_fraction=0.95)
 

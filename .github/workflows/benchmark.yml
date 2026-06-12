@@ -86,14 +86,18 @@ jobs:
 
       - name: Run external benchmark (one-shot, no tuning)
         # Contract:
+        #   * verifies the SCHEMA_MAP registry lock BEFORE anything runs
+        #     (a hash mismatch aborts here — it is never recorded as data)
         #   * downloads NYC.gov 2024 Rolling Sales (network fetch)
-        #   * applies SCHEMA_MAP v1 via apply_schema_map
+        #   * applies the sealed SCHEMA_MAP version via apply_schema_map,
+        #     then enforces drop-log reconciliation + finite targets
         #   * runs leakage invariants on the mapped X
-        #   * attempts model inference; captures schema mismatch as
-        #     structured output rather than propagating as exception
+        #   * scores with the COMMITTED lean benchmark model
+        #     (models/benchmark_regressor.joblib) — CI computes the same
+        #     R² a stranger's clone computes; no skipped-inference path
         #   * writes benchmarks/results.json exactly once
         # CI failure at this step means the PIPELINE crashed (network,
-        # schema SHA mismatch, etc.), not that the number was bad.
+        # schema lock, drop-log, NaN target), not that the number was bad.
         run: python -m benchmarks.run_benchmark
 
       - name: Upload results.json (immutable per-run artefact)
