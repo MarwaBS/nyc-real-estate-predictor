@@ -47,7 +47,6 @@ import pandas as pd
 from benchmarks.datasets.nyc_rolling_sales_2024 import download_nyc_rolling_sales
 from benchmarks.invariants import (
     SCHEMA_MAP_VERSION,
-    HealthError,
     LeakageError,
     check_no_forbidden_columns,
     check_predictions_healthy,
@@ -131,11 +130,15 @@ def _run_leakage_invariants(X: pd.DataFrame, target: pd.Series) -> dict[str, Any
 
 
 def _run_prediction_health(predictions: np.ndarray) -> dict[str, Any]:
-    try:
-        check_predictions_healthy(predictions)
-        return {"status": "passed", "message": None}
-    except HealthError as exc:
-        return {"status": "failed", "message": str(exc)}
+    """Hard gate (benchmark.yml Rule C: "structural health-check failure").
+
+    A collapsed / NaN / Inf prediction array is a pipeline defect, never a
+    finding — :class:`HealthError` propagates and fails the run, consistent
+    with the lock / drop-log / inference gates. results.json therefore only
+    ever records ``passed``: failed runs abort instead of shipping data.
+    """
+    check_predictions_healthy(predictions)
+    return {"status": "passed", "message": None}
 
 
 def _git_working_tree_clean() -> bool | None:
