@@ -554,7 +554,7 @@ def main() -> None:
     logger.info("STEP 7: Deep learning (multi-task)")
     logger.info("=" * 60)
     try:
-        from src.dl.tabular_net import MultiTaskLoss, MultiTaskTabNet
+        from src.dl.tabular_net import MultiTaskDenseNet, MultiTaskLoss
         from src.dl.train_dl import prepare_dl_data, train_multitask
 
         best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
@@ -568,7 +568,7 @@ def main() -> None:
         import torch
 
         # Build model — all numeric (no separate categorical embeddings in transformed space)
-        model = MultiTaskTabNet(
+        model = MultiTaskDenseNet(
             n_numeric=n_features,
             categorical_dims=[],
             num_classes=len(PRICE_ZONE_LABELS),

@@ -139,13 +139,42 @@ def check_target_independence(
     *,
     max_abs_corr: float = 0.95,
     mi_threshold: float = 0.8,
+    max_encode_cardinality: int = 20,
 ) -> None:
     """Fail if any column in ``X`` shows suspicious dependency with ``target``.
 
-    Thin wrapper over ``schema_firewall.check_leakage``. Preserves the
-    flagship's keyword-argument defaults.
+    Wrapper over ``schema_firewall.check_leakage``, which inspects **numeric
+    columns only** (it runs ``select_dtypes(include=number)`` internally). Left
+    raw, the benchmark's object features (``borough``, ``zip_code``) would be
+    silently skipped, so a categorical that copied the target would pass.
+
+    To extend the semantic gate to categoricals, **low-cardinality** non-numeric
+    columns (``<= max_encode_cardinality`` distinct, e.g. ``borough``) are
+    label-encoded to integer codes so the chance-corrected MI detector assesses
+    them. Correlations on arbitrary codes are uninformative (hence the generous
+    ``max_abs_corr``), but adjusted MI is order-invariant and is the right test
+    for a categorical that determines the target.
+
+    **High-cardinality** categoricals (``zip_code``) are deliberately NOT run
+    through the MI gate: at finite ``n`` a high-cardinality location encoding is
+    statistically indistinguishable from a strong-but-legitimate predictor (the
+    documented schema-firewall limit), so MI-checking it would false-positive on
+    the very location signal the model is meant to use. Those are governed by the
+    name-based forbidden-column gate (:func:`check_no_forbidden_columns`) and the
+    SCHEMA_MAP feature contract instead.
     """
-    check_leakage(X, target, max_abs_corr=max_abs_corr, mi_threshold=mi_threshold)
+    encoded = X.copy()
+    for col in X.columns:
+        if pd.api.types.is_numeric_dtype(encoded[col]):
+            continue
+        if encoded[col].nunique(dropna=True) <= max_encode_cardinality:
+            encoded[col] = pd.factorize(encoded[col])[0]
+        else:
+            # High-cardinality categorical — out of scope for the MI gate (see
+            # docstring). Drop it so check_leakage doesn't silently ignore it
+            # under the impression it was assessed.
+            encoded = encoded.drop(columns=[col])
+    check_leakage(encoded, target, max_abs_corr=max_abs_corr, mi_threshold=mi_threshold)
 
 
 def check_predictions_healthy(

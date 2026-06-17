@@ -12,7 +12,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model types:** two artifacts trained jointly on the same feature set:
   - **Classifier** — `XGBoost` with per-class threshold tuning. 4-class price zone (Low / Medium / High / Very High).
   - **Regressor** — `XGBoost` on `LOG_PRICE` target. Point-estimate. Predictions converted back via `expm1()`.
-- **Additional models compared (not shipped as primary):** LightGBM, Random Forest (regression). The extended training path (`src/models/train_classification.py`, `src/dl/`) also implements Optuna search, CatBoost, a stacking ensemble, SMOTE-ENN, and a multi-task PyTorch TabNet — runnable with `requirements-train.txt`, but not the source of the shipped artifacts.
+- **Additional models compared (not shipped as primary):** LightGBM, Random Forest (regression). The extended training path (`src/models/train_classification.py`, `src/dl/`) also implements Optuna search, CatBoost, a stacking ensemble, SMOTE-ENN, and a multi-task PyTorch dense net (entity embeddings + shared MLP trunk with classification + regression heads — not the TabNet architecture despite the legacy name) — runnable with `requirements-train.txt`, but not the source of the shipped artifacts.
 - **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the held-out split, per-class threshold tuning post-hoc. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
 - **Licence:** MIT.
@@ -50,7 +50,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Same as evaluation:** stratified 80/20 split from the same cleaned dataset. No separate external corpus.
 - **Split strategy:** stratified on `PRICE_ZONE` to preserve class balance across train/test.
-- **Feature set:** 10 numeric + 3 categorical. Full list in README "Feature engineering" section. Features deliberately **exclude** `PRICE_PER_SQFT` (target-derived; causes R² = 0.997 artefact — see ADR-001).
+- **Feature set:** 10 numeric + 5 categorical (3 one-hot: `BOROUGH`, `TYPE`, `PROPERTY_CATEGORY`; 2 target-encoded: `ZIPCODE`, `SUBLOCALITY`). Full list in README "Feature engineering" section. Features deliberately **exclude** `PRICE_PER_SQFT` (target-derived; causes R² = 0.997 artefact — see ADR-001).
 
 ## Quantitative analyses
 

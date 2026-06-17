@@ -7,7 +7,7 @@ held, which were stressed, and what the run taught about system limits.
 
 ---
 
-## 2026-04-20 — Run 1 (SCHEMA_MAP v1, commit 9c7de2b)
+## 2026-04-20 — Run 1 (SCHEMA_MAP v1, sealed SHA-256 `a4135469…4314d`)
 
 ### Observed metrics (raw)
 

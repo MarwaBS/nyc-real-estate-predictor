@@ -37,8 +37,15 @@ class FocalLoss(nn.Module):
         return focal_loss.mean()
 
 
-class MultiTaskTabNet(nn.Module):
-    """Multi-task network for tabular data with entity embeddings."""
+class MultiTaskDenseNet(nn.Module):
+    """Multi-task dense (MLP) network for tabular data with entity embeddings.
+
+    NOTE: this is a plain embedding + BatchNorm/Dense/ReLU/Dropout trunk with two
+    heads — NOT the TabNet architecture (it has no sequential attention, sparsemax
+    feature selection, or GLU feature transformers, and therefore no per-sample
+    attention masks). The earlier ``MultiTaskTabNet`` name overclaimed; see the
+    architecture sketch in the module docstring.
+    """
 
     def __init__(
         self,
