@@ -49,9 +49,11 @@ app.add_middleware(
 
 # Rate limiting — slowapi is a hard dependency, and the limit is actually
 # WIRED to the prediction route below (a Limiter with no decorated routes
-# enforces nothing). /health stays unlimited: k8s/uptime probes must never
-# be throttled into flapping.
-PREDICT_RATE_LIMIT = "60/minute"
+# enforces nothing). The limit comes from settings (DAILY_RATE_LIMIT env), not a
+# hardcoded literal — previously `settings.daily_rate_limit` was dead config while
+# this constant silently overrode it. /health stays unlimited: k8s/uptime probes
+# must never be throttled into flapping.
+PREDICT_RATE_LIMIT = _settings.daily_rate_limit
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 # starlette types the handler's exc param as the base Exception; slowapi's
@@ -116,6 +118,22 @@ def _get_regressor() -> Any:
     return _regressor
 
 
+_capped_categories: dict[str, set] | None = None
+
+
+def _get_capped_categories() -> dict[str, set]:
+    """Cached map of {column: learned category set} for columns the model
+    frequency-capped at train time, derived from the shipped classifier. Both the
+    classifier and regressor are fit on the same capped frame, so one is the source
+    of truth. Used to mirror the training cap at serve time (train/serve parity)."""
+    global _capped_categories
+    if _capped_categories is None:
+        from src.data.features import learned_capped_categories
+
+        _capped_categories = learned_capped_categories(_get_classifier())
+    return _capped_categories
+
+
 def _build_features(prop: PropertyInput) -> pd.DataFrame:
     """Transform a PropertyInput into the feature DataFrame the model expects."""
     total_rooms = prop.beds + prop.bath
@@ -163,6 +181,12 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
     """
     try:
         features = _build_features(prop)
+        # Mirror the train-time frequency cap: map rare/unseen SUBLOCALITY/ZIPCODE
+        # to "other" so they get the trained "other" encoding rather than the
+        # encoder's unseen default (train/serve parity).
+        from src.data.features import apply_serving_cap
+
+        features = apply_serving_cap(features, _get_capped_categories())
 
         clf = _get_classifier()
         proba = clf.predict_proba(features)[0]

@@ -80,6 +80,34 @@ def test_target_independence_catches_nonlinear_target_encoding(
         check_target_independence(x, target)
 
 
+def test_target_independence_catches_low_cardinality_categorical_copy():
+    """A low-cardinality OBJECT feature that DETERMINES the target must be caught.
+    Regression: ``check_leakage`` only inspects numeric columns, so an object
+    column that drives the target slipped past entirely. The firewall now
+    label-encodes low-cardinality categoricals so the MI gate assesses them."""
+    rng = np.random.default_rng(0)
+    n = 300
+    tier = rng.choice(["low", "mid", "high"], size=n)
+    band = {"low": 11.0, "mid": 12.5, "high": 14.0}
+    # Target is essentially a function of the categorical tier (tiny noise).
+    target = pd.Series([band[t] for t in tier]) + rng.normal(0, 0.01, n)
+    x = pd.DataFrame({"borough": tier, "sqft": rng.normal(size=n)})
+    with pytest.raises(LeakageError):
+        check_target_independence(x, target)
+
+
+def test_high_cardinality_categorical_is_out_of_scope(nyc_rolling_sales_fixture):
+    """A HIGH-cardinality categorical is deliberately NOT MI-checked: at finite n
+    it is statistically indistinguishable from a strong legitimate location
+    predictor. A unique-per-row object token (which trivially 'determines' the
+    target) must NOT trip the gate — this pins the documented scope so it can't
+    silently flip to false-positiving on legitimate ZIP/location signal."""
+    x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    x = x.copy()
+    x["row_token"] = [f"tok_{i}" for i in range(len(x))]  # unique per row
+    check_target_independence(x, target)  # must not raise
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 3. Determinism
 # ─────────────────────────────────────────────────────────────────────

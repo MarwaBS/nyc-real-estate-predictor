@@ -218,7 +218,7 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
 | **ML models** | `src/models/` | sklearn Pipelines, Optuna tuning, stacking ensemble, SMOTE-ENN |
-| **Deep learning** | `src/dl/` | Multi-task TabNet (PyTorch): classification + regression heads, Focal Loss |
+| **Deep learning** | `src/dl/` | Multi-task dense net (PyTorch): entity embeddings + shared MLP trunk, classification + regression heads, Focal Loss |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
 | **UI** | `streamlit_app/` | Interactive NYC map, prediction form, probability charts |
@@ -353,7 +353,11 @@ so this README does not quote numbers from them.
 
 XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance). Predictions converted back via `expm1()`.
 
-### Deep Learning: Multi-Task TabNet
+### Deep Learning: Multi-Task Dense Net
+
+(Entity embeddings + a shared MLP trunk with classification and regression heads —
+a plain dense network, **not** the TabNet architecture. No sequential attention,
+sparsemax feature selection, or per-sample attention masks.)
 
 ```
 Numeric (10 feats) -> BatchNorm -> Dense(128)
@@ -383,7 +387,6 @@ Categorical        -> Entity Embeddings -> Dense(128)
 - **SHAP waterfall**: Per-prediction explanation (which features drove this specific prediction)
 - **SHAP dependence**: DIST_MANHATTAN_CENTER vs PRICE_ZONE (geographic price gradient)
 - **Fairness analysis**: Macro F1 computed per borough to detect geographic bias
-- **TabNet attention masks**: Which features the DL model focuses on per sample
 
 ---
 
@@ -494,7 +497,7 @@ nyc-real-estate-predictor/
 |---|---|
 | Language | Python 3.12 |
 | ML | scikit-learn, XGBoost, LightGBM, CatBoost |
-| DL | PyTorch 2.x (multi-task TabNet, Focal Loss, entity embeddings) |
+| DL | PyTorch 2.x (multi-task dense net, Focal Loss, entity embeddings) |
 | Tuning | Optuna (Bayesian optimization) |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
