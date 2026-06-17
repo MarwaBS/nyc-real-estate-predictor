@@ -61,10 +61,10 @@ Initial production-grade ML pipeline.
 
 ### Added
 - 4-model classification comparison (XGBoost / LightGBM / Random Forest /
-  Multi-Task DL) with threshold tuning (F1 0.704 → 0.724).
+  Multi-Task DL) with threshold tuning (macro-F1 0.711 → 0.724).
 - Price regression (XGBoost R² = 0.815 honest, no leakage).
 - SHAP global + per-prediction explainability.
-- Fairness analysis by borough (Staten Island 0.795 → Manhattan 0.619).
+- Fairness analysis by borough (Staten Island 0.778 → Manhattan 0.627 macro-F1).
 - Data-leakage guard: `PRICE_PER_SQFT` blocked in config + runtime
   validated by `test_no_leakage.py` in CI.
 - FastAPI `/predict` + `/health` endpoints; Streamlit dashboard.
