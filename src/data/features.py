@@ -117,6 +117,56 @@ def cap_categorical_cardinality(
     return result
 
 
+def learned_capped_categories(pipeline: object) -> dict[str, set]:
+    """Categories a *fitted* pipeline learned, per column — but only for columns
+    that learned an explicit ``"other"`` bucket (i.e. were frequency-capped at
+    train time by :func:`cap_categorical_cardinality`).
+
+    Serving uses this to map any value outside the learned set to ``"other"`` so a
+    rare/unseen category gets the trained ``"other"`` encoding instead of the
+    encoder's unseen default (TargetEncoder → global mean, OneHot → all-zeros).
+    Without it, training caps SUBLOCALITY/ZIPCODE rare values to ``"other"`` but
+    serving passes them raw, so the model sees a different encoding than it was
+    trained on — a silent train/serve skew. Derived from the *shipped* artifact so
+    it can never drift from the model. Columns the model did not cap (no
+    ``"other"`` learned, e.g. low-cardinality BOROUGH/TYPE) are omitted.
+    """
+    pre = getattr(pipeline, "named_steps", {}).get("preprocessor")
+    known: dict[str, set] = {}
+    if pre is None:
+        return known
+    for _name, trans, cols in getattr(pre, "transformers_", []):
+        # OneHotEncoder exposes per-column categories directly.
+        cats_attr = getattr(trans, "categories_", None)
+        if cats_attr is not None:
+            for col, cats in zip(cols, cats_attr):
+                if "other" in {str(c) for c in cats}:
+                    known[col] = set(cats)
+            continue
+        # category_encoders' TargetEncoder keeps its categories on an inner
+        # OrdinalEncoder mapping (one frame per column, indexed by category).
+        ordinal = getattr(trans, "ordinal_encoder", None)
+        if ordinal is not None:
+            for col_map in getattr(ordinal, "mapping", []):
+                col = col_map["col"]
+                cats = [c for c in col_map["mapping"].index.tolist() if pd.notna(c)]
+                if "other" in {str(c) for c in cats}:
+                    known[col] = set(cats)
+    return known
+
+
+def apply_serving_cap(df: pd.DataFrame, known: dict[str, set]) -> pd.DataFrame:
+    """Map any value outside its learned category set to ``"other"`` for each
+    capped column — the inference-time mirror of :func:`cap_categorical_cardinality`,
+    keyed off the categories the fitted model actually learned (see
+    :func:`learned_capped_categories`)."""
+    result = df.copy()
+    for col, allowed in known.items():
+        if col in result.columns:
+            result[col] = result[col].where(result[col].isin(allowed), "other")
+    return result
+
+
 def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full feature engineering pipeline."""
     logger.info("Starting feature pipeline on %d rows", len(df))

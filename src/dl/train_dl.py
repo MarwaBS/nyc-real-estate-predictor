@@ -1,4 +1,4 @@
-"""Deep learning training loop — multi-task TabNet with early stopping."""
+"""Deep learning training loop — multi-task dense net with early stopping."""
 
 from __future__ import annotations
 
