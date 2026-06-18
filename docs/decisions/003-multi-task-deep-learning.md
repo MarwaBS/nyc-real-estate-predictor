@@ -24,4 +24,7 @@ Build a multi-task PyTorch network with:
 - Requires PyTorch dependency (~2GB install)
 - Training is GPU-friendly but CPU-viable for this dataset size
 - Performance may not exceed XGBoost on tabular data (expected) — the value is in demonstrating the approach
-- TabNet is offered as an alternative with built-in attention-based interpretability
+- The shipped DL model is a plain embedding + dense (MLP) multi-task net
+  (`MultiTaskDenseNet`), NOT TabNet — it has no attention/sparsemax feature
+  selection. TabNet remains a *future* alternative worth evaluating for its
+  built-in attention-based interpretability, but it is not what this ADR builds.
