@@ -40,7 +40,10 @@ module = ["tests.*", "notebooks.*"]
 disallow_untyped_defs = false
 
 [tool.coverage.run]
-source = ["src", "benchmarks"]
+# api/ is in scope: it holds the serving + security controls (auth, rate
+# limiting, /predict). Excluding it meant the coverage gate could go green while
+# the API layer was untested — the exact "gate avoids the breakage" trap.
+source = ["src", "benchmarks", "api"]
 omit = [
     "tests/*",
     "notebooks/*",

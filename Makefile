@@ -1,7 +1,7 @@
 .PHONY: test lint typecheck ci train predict api streamlit
 
 test:
-	pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=70
+	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-fail-under=88
 
 lint:
 	ruff check src/ api/ tests/
