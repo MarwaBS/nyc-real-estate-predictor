@@ -31,7 +31,9 @@ project uses SemVer for tagged releases.
 ### Changed
 - Python runtime bumped from 3.11 → 3.12 across Dockerfile, `pyproject.toml`
   (ruff + mypy targets), and CI setup-python calls.
-- Coverage gate raised from 70% → 80% in `ci.yml`.
+- Coverage gate raised from 70% → 88% and broadened to measure `api/` (the
+  serving + auth/rate-limit/predict layer, previously unmeasured) alongside
+  `src/` + `benchmarks/`, in `ci.yml` and the `Makefile`. Actual coverage 93%.
 - `requirements.txt` pinned to exact versions (not `>=`) for reproducibility.
   Dependabot manages upgrades.
 - `/predict` 500-error responses no longer include the raw exception message
@@ -54,6 +56,11 @@ project uses SemVer for tagged releases.
   pattern.
 - Trivy container scan now runs on every CI build and fails on HIGH/CRITICAL
   CVEs with a known fix (`ignore-unfixed: true`).
+- `starlette>=1.3.1` pinned in `requirements.txt` to exclude CVE-2026-54283
+  (HIGH; the `request.form()` DoS in starlette 1.3.0). fastapi's transitive
+  constraint is `starlette>=0.46.0` with no upper cap, so this explicit floor
+  governs: a clean `pip install -r requirements.txt` (and therefore the Docker
+  image, which installs the same file) resolves starlette 1.3.1, never 1.3.0.
 
 ## [1.0.0] — 2026-04-xx
 
