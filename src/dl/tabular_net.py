@@ -34,7 +34,12 @@ class FocalLoss(nn.Module):
             at = alpha[targets]
             focal_loss = at * focal_loss
 
-        return focal_loss.mean()
+        # Annotate at the return boundary: torch's tensor-indexing / __pow__
+        # stubs degrade to Any, so mypy can't see that .mean() yields a Tensor.
+        # The value genuinely is one; pin it so `make typecheck` is clean in a
+        # full dev env (with torch installed), matching CI's torch-less run.
+        loss: torch.Tensor = focal_loss.mean()
+        return loss
 
 
 class MultiTaskDenseNet(nn.Module):

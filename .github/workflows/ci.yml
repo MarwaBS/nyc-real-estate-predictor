@@ -47,12 +47,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Coverage includes benchmarks/ (mapping + invariants are fully
-        # exercised by the adversarial suite); the network-bound modules
-        # (run_benchmark orchestration, dataset downloader) are omitted in
-        # pyproject — they are exercised end-to-end by the External
-        # Benchmark workflow instead.
-        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        # Coverage includes api/ (serving + auth/rate-limit/predict — previously
+        # unmeasured, so the gate could go green over an untested API layer) and
+        # benchmarks/ (mapping + invariants are fully exercised by the
+        # adversarial suite); the network-bound modules (run_benchmark
+        # orchestration, dataset downloader) are omitted in pyproject — they are
+        # exercised end-to-end by the External Benchmark workflow instead.
+        # Floor 88 sits a few points under the actual ~93% so a real regression
+        # fails CI instead of leaving wide slack below reality.
+        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-report=xml --cov-fail-under=88
 
   security:
     runs-on: ubuntu-latest
