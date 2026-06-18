@@ -393,8 +393,8 @@ Categorical        -> Entity Embeddings -> Dense(128)
 ## Testing
 
 ```bash
-# Full test suite with coverage (CI gate: 80%, src/ + benchmarks/)
-pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov-report=term-missing --cov-fail-under=80
+# Full test suite with coverage (CI gate: 88%, src/ + benchmarks/ + api/)
+pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-fail-under=88
 
 # Run only leakage prevention tests
 pytest tests/test_no_leakage.py -v
@@ -414,7 +414,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 80% coverage gate over `src/ + benchmarks/`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 88% coverage gate over `src/ + benchmarks/ + api/`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -464,7 +464,7 @@ nyc-real-estate-predictor/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        Unit + adversarial firewall suite, 80% coverage gate
+├── tests/                        Unit + adversarial firewall suite, 88% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
@@ -505,7 +505,7 @@ nyc-real-estate-predictor/
 | Imbalanced learning | imbalanced-learn (SMOTE-ENN) |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (80% coverage gate over src/ + benchmarks/) |
+| Testing | pytest (88% coverage gate over src/ + benchmarks/ + api/) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
