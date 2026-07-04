@@ -19,12 +19,13 @@ import numpy as np
 import pandas as pd
 from sklearn.exceptions import InconsistentVersionWarning
 
-from src.config import MODELS_DIR, PRICE_ZONE_LABELS
+from src.config import MODELS_DIR
 
 logger = logging.getLogger(__name__)
 
 _classifier_cache: Any = None
 _regressor_cache: Any = None
+_label_encoder_cache: Any = None
 
 
 class ModelVersionError(RuntimeError):
@@ -74,6 +75,27 @@ def get_regressor(path: Path | None = None) -> Any:
     return _regressor_cache
 
 
+def get_label_encoder(path: Path | None = None) -> Any:
+    """Load the label encoder fitted at training time (cached after first call).
+
+    This is the single source of truth for decoding class indices into zone
+    names: the classifier was fit on ``LabelEncoder``-transformed targets, so
+    class index ``i`` means ``label_encoder.classes_[i]`` — an ALPHABETICAL
+    ordering ('High', 'Low', 'Medium', 'Very High'), not the semantic
+    ``PRICE_ZONE_LABELS`` config order. Decoding through any other list is
+    exactly the bug that served "Low" for luxury Manhattan condos.
+    """
+    global _label_encoder_cache
+    if _label_encoder_cache is None:
+        _label_encoder_cache = _load_model(path or MODELS_DIR / "label_encoder.joblib")
+    return _label_encoder_cache
+
+
+def get_zone_classes() -> list[str]:
+    """Zone names in the classifier's class-index order (encoder ``classes_``)."""
+    return [str(c) for c in get_label_encoder().classes_]
+
+
 def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
     """Predict price zone + probabilities for one or more properties.
 
@@ -84,14 +106,18 @@ def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
     clf = get_classifier()
     proba = clf.predict_proba(features)
     predicted_class = clf.predict(features)
+    # Decode through the SHIPPED label encoder, never the config list: the
+    # model's class indices follow le.classes_ (alphabetical), and the two
+    # orders disagree for 3 of the 4 zones.
+    classes = get_zone_classes()
 
     return [
         {
-            "price_zone": PRICE_ZONE_LABELS[int(zone_idx)],
+            "price_zone": classes[int(zone_idx)],
             "confidence": round(float(row_proba.max()), 3),
             "probabilities": {
                 label: round(float(p), 3)
-                for label, p in zip(PRICE_ZONE_LABELS, row_proba, strict=False)
+                for label, p in zip(classes, row_proba, strict=True)
             },
         }
         for zone_idx, row_proba in zip(predicted_class, proba, strict=True)

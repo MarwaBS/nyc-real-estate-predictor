@@ -17,7 +17,6 @@ from src.config import (
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
     OPTUNA_TRIALS,
-    PRICE_ZONE_LABELS,
     RANDOM_SEED,
     TARGET_ENCODED_FEATURES,
 )
@@ -178,8 +177,16 @@ def train_and_evaluate(
     X_test: pd.DataFrame,
     y_test: np.ndarray,
     borough_test: pd.Series | None = None,
+    class_labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Train all classification models, evaluate, and save the best one."""
+    """Train all classification models, evaluate, and save the best one.
+
+    ``class_labels`` must name the encoded classes in INDEX order — i.e.
+    ``list(le.classes_)`` from the encoder that produced ``y_train`` — never
+    the semantic config order (they disagree, and mismatched names silently
+    misattribute per-class report rows). When ``None``, reports fall back to
+    numeric class ids, which cannot be misattributed.
+    """
     feature_cols = list(X_train.columns)
     assert_no_leakage(feature_cols)
 
@@ -195,14 +202,14 @@ def train_and_evaluate(
     )
     rf_pipeline.fit(X_train, y_train)
     rf_pred = rf_pipeline.predict(X_test)
-    results["random_forest"] = evaluate_classifier(y_test, rf_pred, PRICE_ZONE_LABELS)
+    results["random_forest"] = evaluate_classifier(y_test, rf_pred, class_labels)
     results["random_forest"]["pipeline"] = rf_pipeline
 
     # --- 2. XGBoost with Optuna ---
     logger.info("=== Tuning XGBoost with Optuna ===")
     xgb_pipeline, xgb_params = tune_with_optuna(X_train, y_train, "xgboost")
     xgb_pred = xgb_pipeline.predict(X_test)
-    results["xgboost"] = evaluate_classifier(y_test, xgb_pred, PRICE_ZONE_LABELS)
+    results["xgboost"] = evaluate_classifier(y_test, xgb_pred, class_labels)
     results["xgboost"]["pipeline"] = xgb_pipeline
     results["xgboost"]["best_params"] = xgb_params
 
@@ -210,7 +217,7 @@ def train_and_evaluate(
     logger.info("=== Tuning LightGBM with Optuna ===")
     lgbm_pipeline, lgbm_params = tune_with_optuna(X_train, y_train, "lightgbm")
     lgbm_pred = lgbm_pipeline.predict(X_test)
-    results["lightgbm"] = evaluate_classifier(y_test, lgbm_pred, PRICE_ZONE_LABELS)
+    results["lightgbm"] = evaluate_classifier(y_test, lgbm_pred, class_labels)
     results["lightgbm"]["pipeline"] = lgbm_pipeline
     results["lightgbm"]["best_params"] = lgbm_params
 
@@ -218,7 +225,7 @@ def train_and_evaluate(
     logger.info("=== Tuning CatBoost with Optuna ===")
     cb_pipeline, cb_params = tune_with_optuna(X_train, y_train, "catboost")
     cb_pred = cb_pipeline.predict(X_test)
-    results["catboost"] = evaluate_classifier(y_test, cb_pred, PRICE_ZONE_LABELS)
+    results["catboost"] = evaluate_classifier(y_test, cb_pred, class_labels)
     results["catboost"]["pipeline"] = cb_pipeline
     results["catboost"]["best_params"] = cb_params
 
