@@ -1,6 +1,6 @@
 {
-  "run_date": "2026-06-12T01:29:14.093289+00:00",
-  "commit_sha": "4d5016a202036f71a70b1bb858be538be48aae9e",
+  "run_date": "2026-07-04T23:08:29.542813+00:00",
+  "commit_sha": "f18d6e4712b12caa9317e3d6deb2c441e7269b67",
   "working_tree_clean": true,
   "provenance": {
     "python": "3.12.13",
@@ -35,6 +35,12 @@
       "macro_f1": 0.7107519931049343,
       "weighted_f1": 0.7118661756515121,
       "cohen_kappa": 0.6043159856280765,
+      "labels": [
+        "High",
+        "Low",
+        "Medium",
+        "Very High"
+      ],
       "confusion_matrix": [
         [
           100,
@@ -62,19 +68,19 @@
         ]
       ],
       "classification_report": {
-        "Low": {
+        "High": {
           "precision": 0.5847953216374269,
           "recall": 0.5376344086021505,
           "f1-score": 0.5602240896358543,
           "support": 186.0
         },
-        "Medium": {
+        "Low": {
           "precision": 0.7901785714285714,
           "recall": 0.7662337662337663,
           "f1-score": 0.778021978021978,
           "support": 231.0
         },
-        "High": {
+        "Medium": {
           "precision": 0.6818181818181818,
           "recall": 0.7430340557275542,
           "f1-score": 0.7111111111111111,
@@ -165,9 +171,9 @@
     ],
     "threshold_tuning": {
       "thresholds": {
-        "Low": 0.361,
-        "Medium": 0.9,
-        "High": 0.492,
+        "High": 0.361,
+        "Low": 0.9,
+        "Medium": 0.492,
         "Very High": 0.5
       },
       "tuned_macro_f1": 0.7244790794592578
@@ -187,7 +193,7 @@
       "random_forest": {
         "r2": 0.8040347859243666,
         "rmse": 0.4461837840837084,
-        "mae_usd": 643425.535486033
+        "mae_usd": 643425.5354860332
       },
       "xgboost": {
         "r2": 0.8153634721250209,
