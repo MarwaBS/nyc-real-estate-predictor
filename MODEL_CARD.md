@@ -37,7 +37,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model performance measures:**
   - Classification: macro F1 = **0.724** (XGBoost + threshold tuning) on a stratified 20% hold-out (901 test / 3,603 train).
   - Regression: R² = **0.815** (XGBoost), honest, no leakage (see ADR-001).
-- **Decision thresholds:** per-class probability thresholds tuned on validation split — Low=0.361, Medium=0.9, High=0.492, Very High=0.5. Improved macro F1 from 0.711 → 0.724 (+0.014).
+- **Decision thresholds:** per-class probability thresholds tuned on validation split — Low=0.9, Medium=0.492, High=0.361, Very High=0.5. Improved macro F1 from 0.711 → 0.724 (+0.014). (Keyed by the label encoder's class order — the classifier's index order, recorded in the artefact's `classification.metrics.labels`. A previous version of this card attributed the values in semantic config order, which named three of the four thresholds after the wrong zone.)
 - **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
 
 ## Evaluation data

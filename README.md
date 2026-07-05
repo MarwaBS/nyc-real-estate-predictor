@@ -39,7 +39,7 @@ file, it does not belong here.
 
 All scores on held-out 20% stratified test set (3,603 train / 901 test). No data leakage. Artifacts produced under the pinned environment (Python 3.12, numpy 1.26.4, scikit-learn 1.8.0 — recorded in the artifact's provenance block together with `working_tree_clean` and the producing commit).
 
-Threshold tuning optimized per-class probability thresholds (Low=0.361, Medium=0.9, High=0.492, Very High=0.5), improving macro F1 from 0.711 to 0.724 (+0.014).
+Threshold tuning optimized per-class probability thresholds (Low=0.9, Medium=0.492, High=0.361, Very High=0.5), improving macro F1 from 0.711 to 0.724 (+0.014). Thresholds are keyed by the label encoder's class order — the classifier's own index order, recorded in the artefact's `classification.metrics.labels`. (An earlier artefact keyed them with the semantic config order, which attached three of the four values to the wrong zone.)
 
 > The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
 > optional training stage when `requirements-train.txt` extras (torch) are

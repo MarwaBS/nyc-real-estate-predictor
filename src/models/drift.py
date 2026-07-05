@@ -1,7 +1,10 @@
 """Model drift detection — compare input feature distributions against baseline.
 
-Tracks per-feature statistics (mean, std, min, max, percentiles) from training data.
-At inference time, flag drift when current distributions shift beyond thresholds.
+Tracks per-feature statistics (mean, std, min, max, percentiles) from training
+data (``run_training.py`` writes ``models/drift_baseline.json`` at the end of
+each run). ``check_drift`` is an OFFLINE utility for comparing a batch of
+candidate data against that baseline — it is not wired into the serving path,
+so nothing here runs at inference time.
 """
 from __future__ import annotations
 

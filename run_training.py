@@ -35,7 +35,6 @@ from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
-    PRICE_ZONE_LABELS,
     RANDOM_SEED,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
@@ -149,8 +148,14 @@ def train_classification(
     X_test: pd.DataFrame,
     y_test: np.ndarray,
     borough_test: pd.Series,
+    class_labels: list[str],
 ) -> dict[str, Any]:
     """Train and evaluate all classification models.
+
+    ``class_labels`` MUST be the label encoder's ``classes_`` (the names in
+    encoded-index order), not the semantic config order — the two disagree,
+    and naming report rows with the config order misattributes 3 of the 4
+    per-class rows.
 
     Returns the selected model's record (name, metrics, fairness) for the
     committed training-metrics artefact.
@@ -193,7 +198,7 @@ def train_classification(
         pipeline = build_classification_pipeline(model)
         pipeline.fit(X_train, y_train)
         y_pred = pipeline.predict(X_test)
-        metrics = evaluate_classifier(y_test, y_pred, PRICE_ZONE_LABELS)
+        metrics = evaluate_classifier(y_test, y_pred, class_labels)
         candidates[name] = {
             "accuracy": metrics["accuracy"],
             "macro_f1": metrics["macro_f1"],
@@ -459,7 +464,11 @@ def main() -> None:
 
     # Save label encoder
     joblib.dump(le, MODELS_DIR / "label_encoder.joblib")
-    logger.info("Zone classes: %s", list(le.classes_))
+    # zone_classes is the ONLY valid name order for encoded class indices
+    # (alphabetical, from LabelEncoder) — every report/threshold keyed by
+    # class index below must use it, never the semantic config order.
+    zone_classes = [str(c) for c in le.classes_]
+    logger.info("Zone classes: %s", zone_classes)
 
     # 3. Train/test split (stratified for classification)
     (
@@ -486,7 +495,7 @@ def main() -> None:
 
     # 4. Train classification
     clf_record = train_classification(
-        X_train, y_zone_train, X_test, y_zone_test, borough_test
+        X_train, y_zone_train, X_test, y_zone_test, borough_test, zone_classes
     )
 
     # 5. Train regression
@@ -526,9 +535,11 @@ def main() -> None:
         proba = best_clf.predict_proba(X_test)
         from src.models.threshold import optimize_thresholds
 
-        thresholds, tuned_f1 = optimize_thresholds(
-            proba, y_zone_test, PRICE_ZONE_LABELS
-        )
+        # Threshold names must follow the encoder's class order: proba column
+        # i belongs to zone_classes[i]. Keying with the config order attached
+        # each threshold to the wrong zone (the README/MODEL_CARD then
+        # advertised misattributed values).
+        thresholds, tuned_f1 = optimize_thresholds(proba, y_zone_test, zone_classes)
         logger.info("Optimized thresholds: %s", thresholds)
         logger.info("Tuned macro F1: %.4f", tuned_f1)
         joblib.dump(thresholds, MODELS_DIR / "optimal_thresholds.joblib")
@@ -571,7 +582,7 @@ def main() -> None:
         model = MultiTaskDenseNet(
             n_numeric=n_features,
             categorical_dims=[],
-            num_classes=len(PRICE_ZONE_LABELS),
+            num_classes=len(zone_classes),
             hidden_dims=[256, 128, 64],
             dropout=0.3,
         )
@@ -599,8 +610,7 @@ def main() -> None:
         counts = Counter(y_zone_train)
         total = sum(counts.values())
         class_weights = [
-            total / (len(counts) * counts.get(i, 1))
-            for i in range(len(PRICE_ZONE_LABELS))
+            total / (len(counts) * counts.get(i, 1)) for i in range(len(zone_classes))
         ]
         loss_fn = MultiTaskLoss(alpha=0.6, focal_gamma=2.0, class_weights=class_weights)
 
@@ -625,9 +635,7 @@ def main() -> None:
 
         from src.models.evaluate import evaluate_classifier, evaluate_regressor
 
-        dl_cls_metrics = evaluate_classifier(
-            y_zone_test, dl_cls_pred, PRICE_ZONE_LABELS
-        )
+        dl_cls_metrics = evaluate_classifier(y_zone_test, dl_cls_pred, zone_classes)
         dl_reg_metrics = evaluate_regressor(
             y_price_test.values, dl_reg_pred, log_target=True
         )

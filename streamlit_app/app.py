@@ -30,18 +30,27 @@ st.markdown("Predict price zones and estimated values for NYC properties using M
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_models():
-    """Load classifier + regressor + thresholds. Returns None on failure."""
+    """Load classifier + regressor + label encoder + thresholds. Returns Nones on failure.
+
+    The label encoder is loaded alongside the classifier because it is the
+    single source of truth for decoding class indices into zone names: the
+    classifier's class order is ``le.classes_`` (alphabetical), NOT the
+    semantic ``PRICE_ZONE_LABELS`` config order.
+    """
     import joblib
     try:
         clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
         reg = joblib.load(MODELS_DIR / "price_regressor_best.joblib")
+        zone_classes = [
+            str(c) for c in joblib.load(MODELS_DIR / "label_encoder.joblib").classes_
+        ]
         thresholds = None
         thresh_path = MODELS_DIR / "optimal_thresholds.joblib"
         if thresh_path.exists():
             thresholds = joblib.load(thresh_path)
-        return clf, reg, thresholds
+        return clf, reg, zone_classes, thresholds
     except FileNotFoundError:
-        return None, None, None
+        return None, None, None, None
 
 
 def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
@@ -107,25 +116,26 @@ with col2:
     st.subheader("Prediction Results")
 
     if predict_btn:
-        clf, reg, thresholds = load_models()
+        clf, reg, zone_classes, thresholds = load_models()
 
-        if clf is None or reg is None:
+        if clf is None or reg is None or zone_classes is None:
             st.error("Models not found. Train them first: `python run_training.py`")
         else:
             features = build_features(beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude)
 
-            # Classification
+            # Classification — class indices decode via the SHIPPED label
+            # encoder's class order (zone_classes), never the config list.
             proba = clf.predict_proba(features)[0]
 
             if thresholds is not None:
                 from src.models.threshold import predict_with_thresholds
                 zone_idx = int(predict_with_thresholds(
-                    proba.reshape(1, -1), thresholds, PRICE_ZONE_LABELS,
+                    proba.reshape(1, -1), thresholds, zone_classes,
                 )[0])
             else:
                 zone_idx = int(np.argmax(proba))
 
-            zone_name = PRICE_ZONE_LABELS[zone_idx]
+            zone_name = zone_classes[zone_idx]
             confidence = float(proba.max())
 
             # Regression
@@ -137,11 +147,17 @@ with col2:
             st.metric("Estimated Price", f"${price:,.0f}")
             st.caption(f"Range: ${price * 0.85:,.0f} - ${price * 1.15:,.0f}")
 
-            # Probability chart — plotly preserves zone ordering (st.bar_chart sorts alphabetically and truncates "Very High")
+            # Probability chart — plotly preserves zone ordering (st.bar_chart sorts alphabetically and truncates "Very High").
+            # Probabilities are keyed by the encoder's class order, then
+            # DISPLAYED in the semantic Low -> Very High order.
             import plotly.express as px
+            prob_by_zone = {
+                z: round(float(p), 3)
+                for z, p in zip(zone_classes, proba, strict=True)
+            }
             chart_df = pd.DataFrame({
                 "Zone": PRICE_ZONE_LABELS,
-                "Probability": [round(float(p), 3) for p in proba],
+                "Probability": [prob_by_zone[z] for z in PRICE_ZONE_LABELS],
             })
             fig = px.bar(
                 chart_df, x="Zone", y="Probability",

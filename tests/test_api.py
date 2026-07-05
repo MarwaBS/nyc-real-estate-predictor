@@ -96,6 +96,48 @@ def test_predict_returns_200_with_valid_input() -> None:
     assert body["price"]["price_range"]["low"] <= body["price"]["price_range"]["high"]
 
 
+def test_predict_decodes_via_label_encoder_not_config_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the served-label bug: /predict must decode class indices
+    through the shipped label encoder's class order, NOT the semantic config
+    order. The stub encoder order here is alphabetical (like the real
+    artefact) and differs from ``PRICE_ZONE_LABELS`` — a config-order decode
+    returns "Low" for a probability vector peaked on class 0 ("High") and
+    mis-keys the probabilities dict. Runs without model artefacts (stubbed),
+    so CI enforces it."""
+    import numpy as np
+
+    import api.main as m
+
+    proba = [0.9, 0.05, 0.03, 0.02]
+
+    class _StubClf:
+        def predict_proba(self, features: object) -> object:
+            return np.asarray([proba])
+
+    class _StubReg:
+        def predict(self, features: object) -> object:
+            return np.asarray([14.0])
+
+    encoder_classes = ["High", "Low", "Medium", "Very High"]  # != config order
+    monkeypatch.setattr(m, "_get_classifier", lambda: _StubClf())
+    monkeypatch.setattr(m, "_get_regressor", lambda: _StubReg())
+    monkeypatch.setattr(m, "_get_capped_categories", dict)
+    # raising=False keeps the patch valid on code revisions that lack the
+    # helper (the buggy shape) — the assertions below then fail on the wrong
+    # label instead of erroring on the patch itself.
+    monkeypatch.setattr(m, "_get_zone_classes", lambda: encoder_classes, raising=False)
+
+    resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
+    assert resp.status_code == 200, resp.text
+    zone = resp.json()["zone"]
+    assert zone["price_zone"] == "High"
+    assert zone["confidence"] == 0.9
+    assert list(zone["probabilities"]) == encoder_classes
+    assert zone["probabilities"] == dict(zip(encoder_classes, proba, strict=True))
+
+
 def test_predict_returns_503_when_models_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
