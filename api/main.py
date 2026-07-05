@@ -23,7 +23,7 @@ from api.schemas import (
     ZonePrediction,
 )
 from api.settings import get_settings
-from src.config import CENTRAL_PARK, MANHATTAN_CENTER, PRICE_ZONE_LABELS
+from src.config import CENTRAL_PARK, MANHATTAN_CENTER
 from src.utils.geo import haversine
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,23 @@ def _get_regressor() -> Any:
     return _regressor
 
 
+_zone_classes: list[str] | None = None
+
+
+def _get_zone_classes() -> list[str]:
+    """Zone names in the classifier's class-index order, from the SHIPPED
+    label encoder (``models/label_encoder.joblib``). The encoder — not the
+    config's semantic ``PRICE_ZONE_LABELS`` order — defines what class index
+    ``i`` means; the two orders disagree for 3 of the 4 zones, so decoding
+    via the config list mislabels most predictions."""
+    global _zone_classes
+    if _zone_classes is None:
+        from src.models.predict import get_zone_classes
+
+        _zone_classes = get_zone_classes()
+    return _zone_classes
+
+
 _capped_categories: dict[str, set] | None = None
 
 
@@ -191,6 +208,7 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
         clf = _get_classifier()
         proba = clf.predict_proba(features)[0]
         zone_idx = int(np.argmax(proba))
+        zone_classes = _get_zone_classes()
 
         reg = _get_regressor()
         log_price = float(reg.predict(features)[0])
@@ -198,11 +216,11 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
 
         return PredictionResponse(
             zone=ZonePrediction(
-                price_zone=PRICE_ZONE_LABELS[zone_idx],
+                price_zone=zone_classes[zone_idx],
                 confidence=round(float(proba.max()), 3),
                 probabilities={
                     label: round(float(p), 3)
-                    for label, p in zip(PRICE_ZONE_LABELS, proba, strict=False)
+                    for label, p in zip(zone_classes, proba, strict=True)
                 },
             ),
             price=PricePrediction(

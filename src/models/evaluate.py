@@ -26,12 +26,21 @@ def evaluate_classifier(
     y_pred: np.ndarray,
     labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Compute all classification metrics and return as dict."""
+    """Compute all classification metrics and return as dict.
+
+    ``labels`` names the encoded classes IN INDEX ORDER — for targets encoded
+    with a ``LabelEncoder`` that is ``list(le.classes_)`` (alphabetical), not
+    any semantic ordering. Passing names in a different order silently
+    misattributes every per-class row of the classification report. The
+    order used is recorded in the returned dict under ``"labels"`` so
+    downstream artefacts (confusion matrix, per-class rows) are auditable.
+    """
     metrics: dict[str, Any] = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "macro_f1": float(f1_score(y_true, y_pred, average="macro")),
         "weighted_f1": float(f1_score(y_true, y_pred, average="weighted")),
         "cohen_kappa": float(cohen_kappa_score(y_true, y_pred)),
+        "labels": list(labels) if labels is not None else None,
         "confusion_matrix": confusion_matrix(y_true, y_pred).tolist(),
         "classification_report": classification_report(
             y_true, y_pred, target_names=labels, output_dict=True,
