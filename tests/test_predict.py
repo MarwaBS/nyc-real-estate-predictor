@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder
 
 from src.config import MODELS_DIR, PRICE_ZONE_LABELS
 from src.models.pipelines import (
@@ -19,7 +20,16 @@ from src.models.pipelines import (
 
 @pytest.fixture
 def mock_models(tmp_path: Path) -> Path:
-    """Create and save minimal mock models for testing prediction."""
+    """Create and save minimal mock models for testing prediction.
+
+    The mock label encoder is fitted on the zone STRINGS, so its class
+    order is ALPHABETICAL ('High', 'Low', 'Medium', 'Very High') — exactly
+    like the shipped artefact and deliberately DIFFERENT from the semantic
+    ``PRICE_ZONE_LABELS`` config order. Any decode path that falls back to
+    the config order mislabels 3 of the 4 classes and fails these tests;
+    a mock whose orders coincide would leave the suite structurally blind
+    to that bug (which is how it shipped the first time).
+    """
     n = 50
     rng = np.random.RandomState(42)
     features = pd.DataFrame(
@@ -41,6 +51,11 @@ def mock_models(tmp_path: Path) -> Path:
             "SUBLOCALITY": rng.choice(["midtown", "fort greene", "chelsea"], n),
         }
     )
+    le = LabelEncoder()
+    le.fit(PRICE_ZONE_LABELS)  # classes_ sorts alphabetically != config order
+    assert list(le.classes_) != PRICE_ZONE_LABELS
+    joblib.dump(le, tmp_path / "label_encoder.joblib")
+
     y_cls = rng.randint(0, 4, n)
     y_reg = rng.uniform(11, 15, n)
 
@@ -49,6 +64,9 @@ def mock_models(tmp_path: Path) -> Path:
     )
     clf.fit(features, y_cls)
     joblib.dump(clf, tmp_path / "price_zone_best.joblib")
+    # The training frame doubles as a multi-class prediction batch in the
+    # decode-order regression test below.
+    joblib.dump(features, tmp_path / "train_features.joblib")
 
     reg = build_regression_pipeline(
         RandomForestRegressor(n_estimators=10, random_state=42)
@@ -88,16 +106,53 @@ def test_predict_price_zone(mock_models: Path, _test_row: pd.DataFrame) -> None:
     import src.models.predict as pred_mod
 
     pred_mod._classifier_cache = None
+    pred_mod._label_encoder_cache = None
     # Load from mock path
-    pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
+    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
+    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
     results = pred_mod.predict_price_zone(_test_row)
     assert isinstance(results, list) and len(results) == 1
     result = results[0]
     assert "price_zone" in result
     assert "confidence" in result
     assert "probabilities" in result
-    assert result["price_zone"] in PRICE_ZONE_LABELS
+    # Correctness, not membership: the decoded label must be the encoder's
+    # name for the predicted class index (a bare membership check in
+    # PRICE_ZONE_LABELS stayed green while 3 of 4 labels decoded wrong).
+    expected = le.inverse_transform(clf.predict(_test_row))[0]
+    assert result["price_zone"] == expected
     assert 0 <= result["confidence"] <= 1
+
+
+def test_predict_decodes_via_encoder_classes_not_config_order(
+    mock_models: Path,
+) -> None:
+    """Regression: serving decode order must equal ``label_encoder.classes_``.
+
+    The mock encoder's alphabetical order differs from the config order, so
+    a decode through ``PRICE_ZONE_LABELS`` mislabels every prediction except
+    'Very High'. Asserts exact label equality across a batch spanning
+    multiple predicted classes, and that the probabilities dict is keyed in
+    encoder-class order.
+    """
+    import src.models.predict as pred_mod
+
+    pred_mod._classifier_cache = None
+    pred_mod._label_encoder_cache = None
+    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
+    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
+
+    # Re-use the training frame as the batch — the overfit mock RF predicts
+    # a spread of classes on it, so the check cannot pass vacuously.
+    batch = joblib.load(mock_models / "train_features.joblib")
+    predicted_idx = clf.predict(batch)
+    assert len(set(predicted_idx.tolist())) >= 2, "batch must span classes"
+
+    results = pred_mod.predict_price_zone(batch)
+    expected_labels = le.inverse_transform(predicted_idx)
+    for result, expected in zip(results, expected_labels, strict=True):
+        assert result["price_zone"] == expected
+        assert list(result["probabilities"]) == list(le.classes_)
 
 
 def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:

@@ -10,6 +10,10 @@ models/*.bak
 # missing piece. Flagship models stay local-only (DVC, no remote).
 !models/benchmark_regressor.joblib
 mlruns/
+# mlflow's sqlite backend file (created at repo root by a training run,
+# like mlruns/) — if untracked it flips the artefact's working_tree_clean
+# provenance flag to false mid-run.
+mlflow.db
 data/raw/
 data/processed/
 
