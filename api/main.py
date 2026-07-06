@@ -118,6 +118,22 @@ def _get_regressor() -> Any:
     return _regressor
 
 
+_label_encoder: Any = None
+
+
+def _get_label_encoder() -> Any:
+    """Load the shipped label encoder (cached). It is the source of truth for
+    decoding class indices into zone names; /health verifies it can load
+    because a missing encoder means predictions would be mislabeled, not
+    merely absent."""
+    global _label_encoder
+    if _label_encoder is None:
+        from src.models.predict import get_label_encoder
+
+        _label_encoder = get_label_encoder()
+    return _label_encoder
+
+
 _zone_classes: list[str] | None = None
 
 
@@ -252,12 +268,30 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Health check — reports model availability. Not auth-gated."""
-    models_ok = False
+    """Health check — reports serving-stack availability. Not auth-gated.
+
+    The label encoder is verified EXPLICITLY, not just the classifier and
+    regressor: it is the source of truth for decoding class indices into zone
+    names, so a loadable clf/reg with a missing or unloadable encoder would
+    still serve mislabeled zones. ``models_loaded`` is therefore true only when
+    all three load; ``label_encoder_loaded`` surfaces the encoder on its own."""
+    clf_reg_ok = False
     try:
         _get_classifier()
         _get_regressor()
-        models_ok = True
+        clf_reg_ok = True
     except Exception:
         pass
-    return HealthResponse(status="ok", models_loaded=models_ok)
+
+    encoder_ok = False
+    try:
+        _get_label_encoder()
+        encoder_ok = True
+    except Exception:
+        pass
+
+    return HealthResponse(
+        status="ok",
+        models_loaded=clf_reg_ok and encoder_ok,
+        label_encoder_loaded=encoder_ok,
+    )
