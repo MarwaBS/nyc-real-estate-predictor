@@ -80,6 +80,50 @@ def test_health_response_has_models_loaded_field() -> None:
     assert "models_loaded" in data
 
 
+def test_health_reports_label_encoder_unloadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: /health must verify the SHIPPED label encoder, not only the
+    classifier/regressor. The encoder is the source of truth for decoding class
+    indices into zone names, so a loadable clf+reg with a MISSING/unloadable
+    encoder would still serve mislabeled zones. /health must surface it: the
+    dedicated ``label_encoder_loaded`` flag is False, and ``models_loaded`` (the
+    full serving stack) is False, even though clf+reg load fine."""
+    import api.main as m
+
+    def _encoder_missing() -> object:
+        raise FileNotFoundError("label_encoder.joblib missing")
+
+    monkeypatch.setattr(m, "_get_classifier", lambda: object())
+    monkeypatch.setattr(m, "_get_regressor", lambda: object())
+    monkeypatch.setattr(m, "_get_label_encoder", _encoder_missing)
+
+    resp = TestClient(m.app).get("/health")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["label_encoder_loaded"] is False
+    assert data["models_loaded"] is False
+
+
+def test_health_reports_healthy_when_full_stack_loads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When classifier, regressor, AND the label encoder all load, /health
+    reports the full serving stack ready."""
+    import api.main as m
+
+    monkeypatch.setattr(m, "_get_classifier", lambda: object())
+    monkeypatch.setattr(m, "_get_regressor", lambda: object())
+    monkeypatch.setattr(m, "_get_label_encoder", lambda: object())
+
+    resp = TestClient(m.app).get("/health")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["models_loaded"] is True
+    assert data["label_encoder_loaded"] is True
+
+
 @pytest.mark.skipif(
     not _models_present(), reason="flagship models are DVC/local-only (absent in CI)"
 )

@@ -75,7 +75,15 @@ class PredictionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
+    """Health check response.
+
+    ``models_loaded`` is true only when the FULL serving stack loads: the
+    classifier, the regressor, AND the label encoder. ``label_encoder_loaded``
+    surfaces the encoder specifically — it is the source of truth for decoding
+    class indices into zone names, so a loadable classifier/regressor with a
+    missing encoder would still serve mislabeled zones.
+    """
 
     status: str
     models_loaded: bool
+    label_encoder_loaded: bool
