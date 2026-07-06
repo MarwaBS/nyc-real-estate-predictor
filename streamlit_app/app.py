@@ -8,7 +8,6 @@ import sys
 # Ensure src/ is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -127,16 +126,12 @@ with col2:
             # encoder's class order (zone_classes), never the config list.
             proba = clf.predict_proba(features)[0]
 
-            if thresholds is not None:
-                from src.models.threshold import predict_with_thresholds
-                zone_idx = int(predict_with_thresholds(
-                    proba.reshape(1, -1), thresholds, zone_classes,
-                )[0])
-            else:
-                zone_idx = int(np.argmax(proba))
-
-            zone_name = zone_classes[zone_idx]
-            confidence = float(proba.max())
+            # served_zone picks the class actually served (threshold logic in
+            # threshold mode, else argmax) and returns confidence as the
+            # probability of THAT class — not proba.max(), which in threshold
+            # mode can name a different class than the one shown.
+            from src.models.threshold import served_zone
+            zone_name, confidence = served_zone(proba, zone_classes, thresholds)
 
             # Regression
             log_price = float(reg.predict(features)[0])
