@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly clock: pip-audit and Trivy verdicts decay as new advisories are
+  # disclosed against unchanged pins — a badge that only reruns on push stays
+  # green over known-vulnerable deps (this exact failure shipped: pillow
+  # PYSEC-2026-2253 sat behind a green push-only badge for a week). The cron
+  # re-runs every gate against the live advisory feeds.
+  schedule:
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
