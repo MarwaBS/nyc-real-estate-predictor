@@ -113,6 +113,15 @@ jobs:
           swap-storage: true
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Compute weekly cache epoch
+        # ISO year-week. Feeds the Dockerfile's CACHE_EPOCH arg so the
+        # OS-patch layer's cache key rolls over weekly: a RUN layer is
+        # otherwise reused verbatim from the GHA cache and `apt-get
+        # upgrade` never re-executes — which is how a fixed curl CVE
+        # (CVE-2026-5773, deb12u15) stayed in the image while the badge
+        # was green. Within a week, builds stay fully cached.
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - name: Build multi-stage Dockerfile
         uses: docker/build-push-action@v6
         with:
@@ -120,7 +129,10 @@ jobs:
           file: ./Dockerfile
           push: false
           load: true
+          pull: true
           tags: nyc-price-prediction:ci
+          build-args: |
+            CACHE_EPOCH=${{ steps.epoch.outputs.week }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Trivy — scan built image for HIGH/CRITICAL CVEs
