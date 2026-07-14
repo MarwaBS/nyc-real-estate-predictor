@@ -125,7 +125,8 @@ def test_health_reports_healthy_when_full_stack_loads(
 
 
 @pytest.mark.skipif(
-    not _models_present(), reason="flagship models are DVC/local-only (absent in CI)"
+    not _models_present(),
+    reason="serving artifacts missing (partial checkout) — they are committed and pinned by models/MANIFEST.sha256",
 )
 def test_predict_returns_200_with_valid_input() -> None:
     """With models present, /predict returns a real 200 and the documented shape —

@@ -281,9 +281,10 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
         ) from exc
     except Exception:
         # Do NOT leak the exception message — it can disclose internal paths,
-        # model-file names, or SQL fragments. Log the full trace server-side
-        # (captured by the structured logger / request-id pipeline), return
-        # a generic client-facing message. `from None` suppresses the
+        # model-file names, or SQL fragments. logger.exception below records
+        # the full trace server-side (there is no request-id pipeline in
+        # this service — an earlier revision of this comment claimed one),
+        # and the client gets a generic message. `from None` suppresses the
         # "During handling of the above exception" chain for clean
         # serialization (the original is captured by logger.exception).
         logger.exception("Prediction failed")
