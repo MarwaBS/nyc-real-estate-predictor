@@ -58,7 +58,25 @@ jobs:
             echo "::error::HF_TOKEN secret is missing — the Space CANNOT be deployed and will drift from main. Create a WRITE token at https://huggingface.co/settings/tokens and add it as a repository secret named HF_TOKEN at https://github.com/${{ github.repository }}/settings/secrets/actions"
             exit 1
           fi
-          echo "HF_TOKEN present"
+          # Fail fast on the two paste/permission mistakes that actually
+          # happened: a token pasted with a newline (breaks the clone URL)
+          # and a READ-scoped token (clone works on a public repo, then the
+          # push dies with 'Invalid username or password').
+          TOKEN="$(printf '%s' "${HF_TOKEN}" | tr -d '[:space:]')"
+          WHOAMI="$(curl -sf -H "Authorization: Bearer ${TOKEN}" https://huggingface.co/api/whoami-v2 || true)"
+          if [ -z "$WHOAMI" ]; then
+            echo "::error::HF_TOKEN is present but Hugging Face rejects it (whoami failed). Regenerate the token at https://huggingface.co/settings/tokens and update the secret."
+            exit 1
+          fi
+          ROLE="$(printf '%s' "$WHOAMI" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("auth",{}).get("accessToken",{}).get("role") or d.get("auth",{}).get("type") or "unknown")')"
+          echo "HF token authenticated; role: ${ROLE}"
+          case "$ROLE" in
+            write|fineGrained) : ;;
+            *)
+              echo "::error::HF_TOKEN authenticates but is not WRITE-scoped (role: ${ROLE}). A read token can clone the public Space but the deploy push fails with 'Invalid username or password'. Create a token with type WRITE at https://huggingface.co/settings/tokens and update the HF_TOKEN secret."
+              exit 1
+              ;;
+          esac
 
       - name: Clone Space and overlay runtime snapshot
         env:
