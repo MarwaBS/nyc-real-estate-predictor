@@ -47,11 +47,27 @@ def test_manifest_covers_exactly_the_serving_set() -> None:
     assert set(_manifest_entries()) == SERVING_ARTIFACTS
 
 
+def _artifact_bytes(path: Path) -> bytes:
+    """Bytes to hash: text artifacts are LF-normalised first.
+
+    Same rationale as ``benchmarks.invariants.schema_map_sha256``: a
+    Windows checkout with ``core.autocrlf`` would otherwise hash different
+    bytes than the LF bytes git stores (this exact mismatch failed the
+    first CI run of this gate — the manifest had been generated from a
+    CRLF working copy). Binary artifacts are hashed raw: normalising a
+    pickle would corrupt the comparison.
+    """
+    data = path.read_bytes()
+    if path.suffix == ".json":
+        data = data.replace(b"\r\n", b"\n")
+    return data
+
+
 def test_every_serving_artifact_matches_its_manifest_hash() -> None:
     for name, expected in _manifest_entries().items():
         path = MODELS_DIR / name
         assert path.exists(), f"{name} is in the manifest but not in models/"
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        actual = hashlib.sha256(_artifact_bytes(path)).hexdigest()
         assert actual == expected, (
             f"{name}: sha256 {actual} != manifest {expected} — the committed "
             f"artifact changed without a manifest update (or vice versa). "
