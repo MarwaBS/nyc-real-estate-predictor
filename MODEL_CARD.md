@@ -7,13 +7,14 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Model details
 
 - **Persons or organisations developing the model:** Marwa Ben Salem (solo).
-- **Model date:** 2026-04-xx (last trained; see `CHANGELOG.md`).
+- **Model date:** 2026-07-04 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
 - **Model version:** v1.0.0.
 - **Model types:** two artifacts trained jointly on the same feature set:
   - **Classifier** — `XGBoost` with per-class threshold tuning. 4-class price zone (Low / Medium / High / Very High).
   - **Regressor** — `XGBoost` on `LOG_PRICE` target. Point-estimate. Predictions converted back via `expm1()`.
 - **Additional models compared (not shipped as primary):** LightGBM, Random Forest (regression). The extended training path (`src/models/train_classification.py`, `src/dl/`) also implements Optuna search, CatBoost, a stacking ensemble, SMOTE-ENN, and a multi-task PyTorch dense net (entity embeddings + shared MLP trunk with classification + regression heads — not the TabNet architecture despite the legacy name) — runnable with `requirements-train.txt`, but not the source of the shipped artifacts.
 - **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the held-out split, per-class threshold tuning post-hoc. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
+  - **Provenance-SHA caveat:** the `commit_sha` recorded in `reports/training_metrics.json` (and in `benchmarks/results.json`) is the PR-branch commit that produced the artifact. This repo squash-merges, which orphans branch commits, so those SHAs are **not ancestors of `main`** — the artifact's chain of custody is instead enforced continuously: the External Benchmark workflow re-derives the sealed metrics weekly from the committed model on live NYC.gov data, so an artifact/code mismatch surfaces as a red scheduled run rather than relying on SHA ancestry.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
 - **Licence:** MIT.
 - **Citation / contact:** `marwabensalem30@gmail.com`; include `[MODEL_CARD]` in subject.

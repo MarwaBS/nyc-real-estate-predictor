@@ -249,6 +249,14 @@ def train_and_evaluate(
 
 
 if __name__ == "__main__":
-    from src.utils.logging_config import setup_logging
-    setup_logging()
-    logger.info("Run train_classification.py via: python -m src.models.train_classification")
+    # This module is a library of training functions orchestrated by
+    # run_training.py (which owns data prep, label encoding, artifact
+    # provenance, and threshold tuning). The previous __main__ here logged
+    # a "run me via python -m ..." pointer at INFO and exited 0 — i.e.
+    # `make train` succeeded while training nothing. Fail loudly instead.
+    import sys
+
+    sys.exit(
+        "src.models.train_classification is not a standalone entrypoint - "
+        "run the full pipeline: python run_training.py (or make train)"
+    )
