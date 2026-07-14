@@ -228,5 +228,7 @@ internal/
 INTERNAL/
 audits/
 sbom.cyclonedx.json
-models/drift_baseline.json
+# models/drift_baseline.json used to be ignored here — it is a SERVING
+# artifact (the drift monitor's reference distribution) and is now
+# committed + pinned by models/MANIFEST.sha256 like the rest.
 .venv312/
