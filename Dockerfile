@@ -7,9 +7,12 @@
 #
 # Stage 2 (runtime): Python stdlib + the installed site-packages + a small
 # set of runtime system deps (curl for healthcheck, ca-certificates for TLS).
-# `apt-get upgrade -y` force-refreshes OS security patches even when the GHA
-# layer cache reuses a stale base-image layer (mirrors the ResumeForge fix
-# that caught libssl3 CVE-2026-28390).
+# The OS-patch layer is cache-busted weekly via CACHE_EPOCH: a RUN layer is
+# keyed on (parent digest, command string), so an unchanged `apt-get
+# upgrade -y` line is REUSED from cache, not re-executed — patches rot
+# inside the cache. (This shipped: curl CVE-2026-5773's deb12u15 fix was
+# published while the cached layer still carried deb12u14, and Trivy went
+# red on an untouched Dockerfile.)
 
 # ---------------------------------------------------------------------------
 # Stage 1: builder
@@ -42,10 +45,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/install/bin:$PATH \
     PYTHONPATH=/install/lib/python3.12/site-packages
 
-# Minimal runtime system deps + OS security patches. `apt-get upgrade` pulls
-# the latest patches for openssl, libssl3, etc.; GHA layer cache can reuse
-# a stale base layer otherwise.
-RUN apt-get update \
+# Minimal runtime system deps + OS security patches. CACHE_EPOCH (set to
+# the ISO year-week by CI) changes the command's cache key weekly, forcing
+# this layer — and only the layers below it — to rebuild so `apt-get
+# upgrade` actually re-runs against current Debian security repos. The
+# default keeps plain local `docker build` fully cached.
+ARG CACHE_EPOCH=static
+RUN echo "apt refresh epoch: ${CACHE_EPOCH}" \
+    && apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && apt-get clean \
