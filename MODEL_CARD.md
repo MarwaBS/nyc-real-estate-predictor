@@ -80,6 +80,8 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Caveats:**
   - `DIST_NEAREST_SUBWAY` is a proxy (equal to `DIST_MANHATTAN_CENTER`) **by design**: station-level data is not bundled with the repo, and training + serving must use identical feature semantics, so both sides compute the same proxy (`run_training.py` and `api/main.py`). Its marginal information value is zero; it remains in the schema for forward compatibility.
   - No uncertainty quantification — the predicted price has a fixed ±15% band, not a calibrated interval.
+  - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only. Kept as-is because retraining requires the raw Kaggle dataset, which is not distributed with this repo; fix on the next retrain.
+  - **No naive-baseline column next to the headline metrics:** R²=0.815 (Kaggle split) and R²(log)=0.375 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
 - **Recommendations:**
   - Treat predictions as directional, not dollar-accurate.
   - Do not use for decisions that would materially affect a specific person (loan, rent, appraisal).
