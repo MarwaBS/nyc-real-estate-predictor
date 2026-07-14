@@ -48,7 +48,7 @@ jobs:
     if: github.event_name == 'push'
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Validate HF_TOKEN secret is configured
         env:
@@ -99,7 +99,7 @@ jobs:
     if: github.event_name == 'schedule'
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Overlay main onto the live Space (read-only) and diff
         run: |
