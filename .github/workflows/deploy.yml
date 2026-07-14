@@ -65,10 +65,15 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
+          # Secrets pasted from the HF token page routinely carry a trailing
+          # newline; embedded in a URL that becomes "fatal: credential url
+          # cannot be parsed" (this exact failure happened on the first real
+          # deploy). Strip ALL whitespace before use.
+          TOKEN="$(printf '%s' "${HF_TOKEN}" | tr -d '[:space:]')"
           # Skip-smudge keeps the Space's LFS-stored model artifacts as
           # pointers — we never touch models/, so they round-trip intact.
           GIT_LFS_SKIP_SMUDGE=1 git clone --quiet \
-            "https://MarwaBS:${HF_TOKEN}@huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor" \
+            "https://MarwaBS:${TOKEN}@huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor" \
             /tmp/hf-space
           bash deploy/huggingface/assemble.sh "$GITHUB_WORKSPACE" /tmp/hf-space
 
