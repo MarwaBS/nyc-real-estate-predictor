@@ -7,7 +7,6 @@ import logging
 import math
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -151,6 +150,26 @@ def _get_zone_classes() -> list[str]:
     return _zone_classes
 
 
+_thresholds: dict[str, float] | None = None
+_thresholds_loaded: bool = False
+
+
+def _get_thresholds() -> dict[str, float] | None:
+    """Tuned per-class serving thresholds (cached), or ``None`` when the
+    artifact is absent. The headline macro-F1 is measured under threshold
+    decoding, so the API must serve the same decision rule — decoding with
+    bare argmax here would mean the metric users read is never the metric
+    they are served (and would diverge from the dashboard, which already
+    decodes through ``served_zone``)."""
+    global _thresholds, _thresholds_loaded
+    if not _thresholds_loaded:
+        from src.models.predict import get_thresholds
+
+        _thresholds = get_thresholds()
+        _thresholds_loaded = True
+    return _thresholds
+
+
 _capped_categories: dict[str, set] | None = None
 
 
@@ -223,8 +242,16 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
 
         clf = _get_classifier()
         proba = clf.predict_proba(features)[0]
-        zone_idx = int(np.argmax(proba))
         zone_classes = _get_zone_classes()
+
+        # served_zone is the single serving decode for BOTH surfaces (API +
+        # dashboard): per-class threshold logic when the tuned artifact is
+        # shipped, argmax otherwise — and confidence is the probability of
+        # the class actually served, not proba.max(), which in threshold
+        # mode can describe a different class than the one returned.
+        from src.models.threshold import served_zone
+
+        zone_name, confidence = served_zone(proba, zone_classes, _get_thresholds())
 
         reg = _get_regressor()
         log_price = float(reg.predict(features)[0])
@@ -232,8 +259,8 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
 
         return PredictionResponse(
             zone=ZonePrediction(
-                price_zone=zone_classes[zone_idx],
-                confidence=round(float(proba.max()), 3),
+                price_zone=zone_name,
+                confidence=round(confidence, 3),
                 probabilities={
                     label: round(float(p), 3)
                     for label, p in zip(zone_classes, proba, strict=True)
