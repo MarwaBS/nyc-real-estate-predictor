@@ -53,4 +53,4 @@ Both the dashboard and the API decode through the same `served_zone` function, s
 - **This Space is deployed automatically from `main`** by the repo's Deploy workflow; a weekly drift guard fails CI if the Space ever stops matching `main`. (It was previously hand-deployed — and served a 3-month-stale revision. Never again.)
 - First load may take ~30s while uvicorn + Streamlit + XGBoost model files come up.
 - HF Spaces free tier — no persistent state, no Redis, no rate-limit backend (slowapi falls back to in-memory).
-- Models are stored in this Space repo (`models/`, LFS) and are **not** rebuilt on deploy; code deploys never silently change the served model.
+- **Served model provenance:** the artifacts in `models/` are the canonical 2026-07-04 training run (`run_date` in the repo's `reports/training_metrics.json`), committed to the GitHub repo and pinned byte-for-byte by `models/MANIFEST.sha256` — the deploy workflow syncs them here and the weekly drift guard fails if this Space's code **or models** ever diverge from `main`. The metrics quoted above describe exactly these artifacts.

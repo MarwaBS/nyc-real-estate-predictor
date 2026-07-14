@@ -24,17 +24,38 @@ def integration_data() -> pd.DataFrame:
     rng = np.random.RandomState(42)
     n = 200
     boroughs = ["manhattan", "brooklyn", "queens", "the bronx", "staten island"]
+    # PRICE carries REAL signal from sqft + borough (log-linear + noise).
+    # It was originally uniform noise independent of every feature, which
+    # made any learning assertion impossible - the accuracy check could
+    # only be the unfalsifiable "> 0.0". With signal, a correctly wired
+    # pipeline beats the majority-class baseline comfortably, and a
+    # wiring bug (target misalignment, scrambled features) fails the
+    # floor below.
+    borough_level = {
+        "manhattan": 14.0,
+        "brooklyn": 13.3,
+        "queens": 13.0,
+        "the bronx": 12.6,
+        "staten island": 12.8,
+    }
     types = ["condo", "house", "co-op", "townhouse"]
+    borough_col = rng.choice(boroughs, n)
+    sqft_col = rng.uniform(400, 4000, n)
+    log_price = (
+        np.array([borough_level[b] for b in borough_col])
+        + 0.6 * np.log(sqft_col / 1500)
+        + rng.normal(0, 0.25, n)
+    )
 
     return pd.DataFrame(
         {
-            "PRICE": rng.uniform(100_000, 3_000_000, n),
+            "PRICE": np.exp(log_price),
             "BEDS": rng.randint(1, 6, n),
             "BATH": rng.choice([1.0, 1.5, 2.0, 2.5, 3.0], n),
-            "PROPERTYSQFT": rng.uniform(400, 4000, n),
+            "PROPERTYSQFT": sqft_col,
             "LATITUDE": rng.uniform(40.5, 40.9, n),
             "LONGITUDE": rng.uniform(-74.2, -73.7, n),
-            "BOROUGH": rng.choice(boroughs, n),
+            "BOROUGH": borough_col,
             "TYPE": rng.choice(types, n),
             "SUBLOCALITY": rng.choice(
                 ["midtown", "fort greene", "astoria", "pelham"], n
@@ -108,7 +129,14 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
     clf_pipeline.fit(x_train, yz_train)
     clf_pred = clf_pipeline.predict(x_test)
     clf_metrics = evaluate_classifier(yz_test, clf_pred)
-    assert clf_metrics["accuracy"] > 0.0, "Classifier accuracy must be positive"
+    # Falsifiable floor: the classifier must beat the majority-class naive
+    # baseline on this split ("accuracy > 0.0" could not fail — any output
+    # satisfies it).
+    majority_rate = float(pd.Series(yz_test).value_counts(normalize=True).iloc[0])
+    assert clf_metrics["accuracy"] > majority_rate, (
+        f"accuracy {clf_metrics['accuracy']:.3f} does not beat the "
+        f"majority-class baseline {majority_rate:.3f}"
+    )
     assert 0 <= clf_metrics["macro_f1"] <= 1.0
 
     # 5. Train regression
