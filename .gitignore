@@ -7,8 +7,20 @@ models/*.bak
 # The lean benchmark regressor IS committed (0.6 MB): it is what makes the
 # external benchmark reproducible by CI and by strangers — NYC.gov data is
 # downloaded publicly at run time, so the model artefact is the only
-# missing piece. Flagship models stay local-only (DVC, no remote).
+# missing piece.
 !models/benchmark_regressor.joblib
+# The SERVING artifacts are committed too (~7 MB total) and pinned by
+# models/MANIFEST.sha256 (enforced by tests/test_artifact_manifest.py).
+# The old stance — "flagship models stay local-only (DVC, no remote)" —
+# is exactly how the live demo served April's misattributed thresholds
+# for three months while the canonical July model existed on one laptop:
+# an artifact that exists nowhere public is an artifact nothing can
+# govern. Git is the registry; the deploy workflow syncs these to the
+# HF Space and the weekly drift guard fails on any divergence.
+!models/price_zone_best.joblib
+!models/price_regressor_best.joblib
+!models/optimal_thresholds.joblib
+!models/label_encoder.joblib
 mlruns/
 # mlflow's sqlite backend file (created at repo root by a training run,
 # like mlruns/) — if untracked it flips the artefact's working_tree_clean

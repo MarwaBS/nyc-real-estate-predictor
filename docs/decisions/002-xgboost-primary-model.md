@@ -19,3 +19,15 @@ Use XGBoost as the primary classifier, tuned with Optuna (Bayesian optimization,
 - Training time increases from ~2 minutes to ~15 minutes (Optuna trials)
 - Model artifacts are larger (stacking = 3 models + meta-learner)
 - All three boosting models are saved for comparison in MLflow
+
+## Status update (2026-07-14)
+
+The SHIPPED artifacts are NOT produced by this Optuna path. The serving
+pipeline (`run_training.py`, per `MODEL_CARD.md`) uses fixed
+hyperparameters with best-of-candidates selection — the Optuna/stacking
+work described above lives in the extended training path
+(`src/models/train_classification.py` + `requirements-train.txt`) and is
+runnable, but its output is not what the API and dashboard serve. This
+record originally read as if Optuna tuning was the shipped decision;
+it is the explored decision, superseded for shipping by the simpler
+fixed-hyperparameter pipeline (reproducibility over the last ~0.01 F1).

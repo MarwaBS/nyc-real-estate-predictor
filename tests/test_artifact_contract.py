@@ -41,7 +41,8 @@ def _models_present() -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    not _models_present(), reason="flagship models are DVC/local-only (absent in CI)"
+    not _models_present(),
+    reason="serving artifacts missing (partial checkout) — they are committed and pinned by models/MANIFEST.sha256",
 )
 
 
