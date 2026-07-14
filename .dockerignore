@@ -1,0 +1,37 @@
+# The root Dockerfile ends with `COPY . ./` — without this file the whole
+# repo lands in the runtime image: .git (full history), tests, docs, CI
+# config, local venvs. None of it is needed to serve, all of it widens the
+# image and its attack/leak surface. Keep this list in sync with what
+# api/ + src/ + streamlit_app/ actually import at runtime.
+.git
+.github
+.gitignore
+.gitattributes
+.dockerignore
+.trivyignore
+.venv
+venv
+__pycache__/
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+tests/
+docs/
+deploy/
+benchmarks/
+reports/
+data/
+output/
+Makefile
+README.md
+MODEL_CARD.md
+CHANGELOG.md
+SECURITY.md
+CONTRIBUTING.md
+DEPLOY.md
+run_training.py
+requirements-dev.txt
+requirements-train.txt
+sbom.cyclonedx.json

@@ -17,7 +17,7 @@ Build a multi-task PyTorch network with:
 ## Rationale
 - Multi-task learning provides regularization — classification head prevents regression overfitting
 - Entity embeddings learn richer representations than OneHot for high-cardinality features
-- Focal Loss addresses class imbalance (Very High class has only ~18 test samples)
+- Focal Loss addresses class imbalance (Very High is the smallest test class: 161 of ~900 test samples, ~18% — an earlier revision of this line mistakenly recorded the percentage as a sample count)
 - Shows architecture design skills beyond "call sklearn.fit()"
 
 ## Consequences

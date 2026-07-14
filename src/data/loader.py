@@ -10,19 +10,16 @@ from src.config import CLEANED_DATASET, RAW_DATASET, GEOCODE_FILE
 
 logger = logging.getLogger(__name__)
 
-# Explicit dtypes to prevent silent type coercion
-_RAW_DTYPES: dict[str, str] = {
-    "PRICE": "float64",
-    "BEDS": "int64",
-    "BATH": "float64",
-    "PROPERTYSQFT": "float64",
-    "LATITUDE": "float64",
-    "LONGITUDE": "float64",
-}
-
-
 def load_raw(path: Path | None = None) -> pd.DataFrame:
-    """Load the raw NY-House-Dataset.csv with enforced dtypes."""
+    """Load the raw NY-House-Dataset.csv (column names upper-cased/stripped).
+
+    Deliberately does NOT force dtypes at read time: the raw Kaggle CSV is
+    dirty by design, and coercion/validation is the cleaning pipeline's job
+    (``src.data.cleaner``), where failures are counted and reported instead
+    of raised mid-read. (A ``_RAW_DTYPES`` map used to sit here, unused,
+    while this docstring claimed "enforced dtypes" — the enforcement never
+    existed.)
+    """
     path = path or RAW_DATASET
     logger.info("Loading raw dataset from %s", path)
     df = pd.read_csv(path)

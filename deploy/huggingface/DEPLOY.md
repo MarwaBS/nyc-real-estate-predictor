@@ -19,7 +19,7 @@ Mirrors the `high-pay-salary-predictor` deploy pattern. ~10 minutes total.
 1. A Hugging Face account. Sign up free at <https://huggingface.co/join> if you don't have one.
 2. Git installed locally.
 3. A local clone of this project (referred to below as `<PROJECT_DIR>`).
-4. Trained model artifacts in `<PROJECT_DIR>/models/` (`price_zone_best.joblib`, `price_regressor_best.joblib`, `optimal_thresholds.joblib`, `label_encoder.joblib`, `drift_baseline.json`). Run `make train` if missing.
+4. Trained model artifacts in `<PROJECT_DIR>/models/` (`price_zone_best.joblib`, `price_regressor_best.joblib`, `optimal_thresholds.joblib`, `label_encoder.joblib`, `drift_baseline.json`). If missing, place the Kaggle CSV at `data/raw/NY-House-Dataset.csv` and run `make train` (= `python run_training.py`).
 
 ## Step 1 — Create a Hugging Face access token
 

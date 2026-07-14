@@ -13,10 +13,12 @@
 #   D. Benchmark output is an immutable per-run artefact, uploaded once
 #      and never rewritten within the same run.
 #
-# The job name below ("external-benchmark") is the exact string that
-# goes into main's branch-protection "required status check" list
-# AFTER this workflow has landed on main at least once. Do not rename
-# without simultaneously updating the protection rule.
+# NOTE on branch protection: this workflow is PATH-FILTERED (it only
+# runs when benchmark-relevant files change), so its job can NOT be a
+# required status check - a required check that doesn't report wedges
+# every non-benchmark PR in "expected" forever. main's required checks
+# are the four always-run CI jobs (lint/test/security/docker-build);
+# this job gates benchmark-touching PRs by failing them when it runs.
 
 name: External Benchmark
 
