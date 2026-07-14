@@ -172,6 +172,11 @@ def test_predict_decodes_via_label_encoder_not_config_order(
     # helper (the buggy shape) — the assertions below then fail on the wrong
     # label instead of erroring on the patch itself.
     monkeypatch.setattr(m, "_get_zone_classes", lambda: encoder_classes, raising=False)
+    # Pin the argmax fallback: without this, a locally-trained
+    # optimal_thresholds.joblib would leak into the decode and the expected
+    # label below would depend on machine state. raising=False for the same
+    # revision-tolerance reason as above.
+    monkeypatch.setattr(m, "_get_thresholds", lambda: None, raising=False)
 
     resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
     assert resp.status_code == 200, resp.text
