@@ -11,7 +11,7 @@
 -r requirements.txt
 
 # Deep Learning
-torch==2.8.0  # bumped 2.3.1 → 2.5.1 (fixes PYSEC-2024-259, PYSEC-2025-41)
+torch==2.8.0  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
 
 # Gradient Boosting (training-only)
 catboost==1.2.10
@@ -26,4 +26,4 @@ shap==0.45.1
 imbalanced-learn==0.12.4
 
 # Experiment Tracking
-mlflow==3.11.1  # bumped 2.16.2 → 2.22.0 (stays on v2, fixes ~half of pending CVEs)
+mlflow==3.11.1  # training-only experiment tracking (v3 line; older comment referenced a v2-era bump)
