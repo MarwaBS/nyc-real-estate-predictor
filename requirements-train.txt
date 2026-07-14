@@ -12,7 +12,6 @@
 
 # Deep Learning
 torch==2.8.0  # bumped 2.3.1 → 2.5.1 (fixes PYSEC-2024-259, PYSEC-2025-41)
-pytorch-tabnet==4.1.0
 
 # Gradient Boosting (training-only)
 catboost==1.2.10
