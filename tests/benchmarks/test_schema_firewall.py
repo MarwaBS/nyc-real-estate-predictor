@@ -108,6 +108,38 @@ def test_high_cardinality_categorical_is_out_of_scope(nyc_rolling_sales_fixture)
     check_target_independence(x, target)  # must not raise
 
 
+def test_target_independence_catches_nonmonotone_transform(
+    nyc_rolling_sales_fixture,
+):
+    """A NON-MONOTONE transform of the target must be caught by MI alone.
+
+    ``(target - mean)**2`` folds the target around its mean: Pearson AND
+    Spearman both land near zero, so the correlation gate is blind — only
+    the MI pillar can catch it. Under the old mi_threshold=0.8 (a guess
+    made against 0.1.0's uncalibrated scale) this leak sailed through at
+    a measured mi_norm of 0.631. Pins the leak side of the 0.45
+    calibration.
+    """
+    x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    x = x.copy()
+    t = target.to_numpy()
+    x["volatility_proxy"] = (t - t.mean()) ** 2
+    with pytest.raises(LeakageError):
+        check_target_independence(x, target)
+
+
+def test_target_independence_passes_honest_features(nyc_rolling_sales_fixture):
+    """The fixture's REAL feature frame must pass the gate as-is.
+
+    Pins the false-positive side of the 0.45 calibration: borough is a
+    genuinely predictive categorical (it sets the price level, measured
+    mi_norm 0.207) and must stay under the threshold — a gate that fires
+    on honest strong features would train the benchmark to bypass it.
+    """
+    x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
+    check_target_independence(x, target)  # must not raise
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 3. Determinism
 # ─────────────────────────────────────────────────────────────────────
