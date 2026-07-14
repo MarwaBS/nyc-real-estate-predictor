@@ -11,7 +11,7 @@
 -r requirements.txt
 
 # Deep Learning
-torch==2.8.0  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
+torch==2.12.1  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
 
 # Gradient Boosting (training-only)
 catboost==1.2.10
