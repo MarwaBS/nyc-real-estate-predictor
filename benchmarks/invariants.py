@@ -138,10 +138,22 @@ def check_target_independence(
     target: pd.Series,
     *,
     max_abs_corr: float = 0.95,
-    mi_threshold: float = 0.8,
+    mi_threshold: float = 0.45,
     max_encode_cardinality: int = 20,
 ) -> None:
     """Fail if any column in ``X`` shows suspicious dependency with ``target``.
+
+    ``mi_threshold`` is calibrated to schema-firewall 0.1.3's chance-corrected
+    MI scale, MEASURED on the fixture (n=165 kept rows, seed 20260713):
+    exact/renamed target copies and ``expm1(target)`` score 1.0; the
+    strongest honest feature (borough, which genuinely sets the price
+    level) scores 0.207; independent noise and sqft score 0.0; a
+    non-monotone transform of the target (``(target - mean)**2`` —
+    invisible to Pearson AND Spearman) scores 0.631. The previous 0.8
+    threshold — a guess made against 0.1.0's uncalibrated scale — silently
+    passed that non-monotone leak; 0.45 sits between the strongest honest
+    feature and the weakest measured leak with ~0.2 margin on both sides.
+    Both sides are pinned by tests; re-measure before changing.
 
     Wrapper over ``schema_firewall.check_leakage``, which inspects **numeric
     columns only** (it runs ``select_dtypes(include=number)`` internally). Left
