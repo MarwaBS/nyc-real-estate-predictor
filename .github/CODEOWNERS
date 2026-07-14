@@ -1,10 +1,12 @@
 # CODEOWNERS — authority boundary for the external benchmark firewall
 #
-# Any PR that modifies the files below requires review approval from the
-# listed owner before it can merge. Combined with branch protection on
-# main (required review + required status checks), this enforces
-# separation of authority between author and reviewer for the benchmark
-# schema contract.
+# Flags the listed owner as reviewer-of-record for the files below.
+# Branch protection on main requires the four CI status checks (lint,
+# test, security, docker-build) but NOT review approval: this is a
+# single-maintainer repo and GitHub does not allow approving your own
+# PR, so a required-review rule would deadlock every change. CODEOWNERS
+# therefore documents ownership and drives review-request routing; it
+# is not a merge gate here.
 #
 # Rationale: SCHEMA_MAP.md and its version registry define the anti-leakage
 # contract for the NYC external benchmark. Silent edits to either file
