@@ -1,0 +1,117 @@
+# Deploy the runtime snapshot to the Hugging Face Space + drift guard.
+#
+# WHY THIS EXISTS: the Space was originally assembled by hand (see
+# deploy/huggingface/DEPLOY.md) and then never re-pushed — it served a
+# 3-month-old revision carrying the config-order label-decode bug for
+# months AFTER the repo fixed it (three times over). A demo that only a
+# human remembers to redeploy will always rot; deploys must ride main.
+#
+# Two jobs, one assembly script (deploy/huggingface/assemble.sh — shared
+# so the deploy and the guard can never diverge):
+#
+#   deploy-space  — on every push to main: overlay the runtime snapshot
+#                   (code + Space Dockerfile/README/start.sh +
+#                   requirements.txt) onto a clone of the Space repo,
+#                   preserving the Space's models/ (the trained .joblib
+#                   artifacts live ONLY there — they are not in this git
+#                   tree), and push if anything changed. Requires the
+#                   HF_TOKEN repository secret (write-scoped HF token);
+#                   fails loudly with instructions if it is missing.
+#
+#   space-drift   — on the weekly schedule: same overlay against the live
+#                   Space, but READ-ONLY (anonymous clone, no token). If
+#                   the overlay produces any diff, the Space is not
+#                   serving main's code and this job FAILS. A red run
+#                   here is the honest signal the demo has rotted — the
+#                   exact condition that previously went unnoticed.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, offset from CI's Monday cron so a shared-runner hiccup
+    # doesn't take out both signals at once.
+    - cron: "30 6 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  SPACE_URL_PUBLIC: https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor
+
+jobs:
+  deploy-space:
+    name: Push runtime snapshot to HF Space
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate HF_TOKEN secret is configured
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "::error::HF_TOKEN secret is missing — the Space CANNOT be deployed and will drift from main. Create a WRITE token at https://huggingface.co/settings/tokens and add it as a repository secret named HF_TOKEN at https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          echo "HF_TOKEN present"
+
+      - name: Clone Space and overlay runtime snapshot
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Skip-smudge keeps the Space's LFS-stored model artifacts as
+          # pointers — we never touch models/, so they round-trip intact.
+          GIT_LFS_SKIP_SMUDGE=1 git clone --quiet \
+            "https://MarwaBS:${HF_TOKEN}@huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor" \
+            /tmp/hf-space
+          bash deploy/huggingface/assemble.sh "$GITHUB_WORKSPACE" /tmp/hf-space
+
+      - name: Commit and push if the snapshot changed
+        run: |
+          set -euo pipefail
+          cd /tmp/hf-space
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Space already matches main — nothing to deploy."
+            exit 0
+          fi
+          git config user.name "MarwaBS"
+          git config user.email "marwabensalem30@gmail.com"
+          git commit --quiet -m "Deploy ${GITHUB_SHA} — runtime snapshot from main"
+          git push --quiet origin main
+          echo "Deployed ${GITHUB_SHA} to ${SPACE_URL_PUBLIC}"
+
+      - name: Summary
+        run: |
+          echo "### HF Space deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Space: ${SPACE_URL_PUBLIC}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  space-drift:
+    name: Space serves main? (drift guard)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Overlay main onto the live Space (read-only) and diff
+        run: |
+          set -euo pipefail
+          GIT_LFS_SKIP_SMUDGE=1 git clone --quiet \
+            "${SPACE_URL_PUBLIC}" /tmp/hf-space
+          bash deploy/huggingface/assemble.sh "$GITHUB_WORKSPACE" /tmp/hf-space
+          cd /tmp/hf-space
+          git add -A
+          if ! git diff --cached --quiet; then
+            echo "::error::The live Space does NOT match main — the public demo is serving stale code. Files that differ:"
+            git diff --cached --stat
+            exit 1
+          fi
+          echo "Space matches main."

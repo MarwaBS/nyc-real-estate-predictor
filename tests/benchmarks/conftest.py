@@ -12,8 +12,16 @@ do contain) — is exercised by at least one row.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
+
+# Deterministic bulk rows appended to the curated fixture. schema-firewall
+# >= 0.1.1 refuses leakage checks below 100 finite paired samples (small-n
+# MI estimates are noise), so the fixture must yield >= 100 KEPT rows —
+# the curated set alone keeps only 15. The curated rows still carry all
+# the drop-reason / borough coverage; these add statistical mass only.
+_BULK_VALID_ROWS = 150
 
 
 @pytest.fixture
@@ -273,4 +281,37 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
             "SALE PRICE": 3_400_000,
         },
     ]
+
+    # Bulk valid rows: seeded, so the fixture stays byte-deterministic
+    # across runs (the mapping-determinism tests depend on that). Price is
+    # a noisy function of sqft + a per-borough level — realistic enough
+    # that the honest features correlate with the target WITHOUT
+    # determining it, which is exactly the regime the leakage gate must
+    # accept (its false-positive behaviour is as load-bearing as its
+    # detections).
+    rng = np.random.default_rng(20260713)
+    dwelling_classes = [
+        "01 ONE FAMILY DWELLINGS",
+        "02 TWO FAMILY DWELLINGS",
+        "03 THREE FAMILY DWELLINGS",
+    ]
+    borough_level = {1: 14.2, 2: 12.6, 3: 13.3, 4: 13.0, 5: 12.8}
+    borough_zip = {1: 10001, 2: 10462, 3: 11215, 4: 11375, 5: 10301}
+    for i in range(_BULK_VALID_ROWS):
+        borough = int(rng.integers(1, 6))
+        sqft = int(rng.uniform(700, 4200))
+        log_price = (
+            borough_level[borough] + 0.55 * np.log(sqft / 1500) + rng.normal(0, 0.35)
+        )
+        rows.append(
+            {
+                "BOROUGH": borough,
+                "BUILDING CLASS CATEGORY": dwelling_classes[i % 3],
+                "GROSS SQUARE FEET": sqft,
+                "LAND SQUARE FEET": int(sqft * rng.uniform(1.1, 2.0)),
+                "YEAR BUILT": int(rng.integers(1900, 2020)),
+                "ZIP CODE": borough_zip[borough] + int(rng.integers(0, 40)),
+                "SALE PRICE": int(np.exp(log_price)),
+            }
+        )
     return pd.DataFrame(rows)

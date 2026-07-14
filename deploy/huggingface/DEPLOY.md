@@ -1,5 +1,17 @@
 # Hugging Face Spaces deployment guide
 
+> **Deploys are automated.** Every push to `main` runs `.github/workflows/deploy.yml`,
+> which overlays the runtime snapshot (code + `deploy/huggingface/` files +
+> `requirements.txt`) onto the Space via `deploy/huggingface/assemble.sh` and pushes
+> it — preserving the Space's `models/` artifacts. A weekly `space-drift` job fails
+> CI if the live Space ever stops matching `main`. The one-time setup it needs:
+> a **write-scoped** HF token saved as the `HF_TOKEN` repository secret
+> (Settings → Secrets and variables → Actions). The manual steps below are the
+> original bootstrap procedure — still valid for creating the Space from scratch
+> or for emergency pushes, but routine deploys must ride `main`, because the
+> hand-deployed Space previously drifted 3 months stale while `main` carried the
+> fixes.
+
 Mirrors the `high-pay-salary-predictor` deploy pattern. ~10 minutes total.
 
 ## Prerequisites
