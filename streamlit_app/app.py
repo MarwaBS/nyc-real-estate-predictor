@@ -122,6 +122,14 @@ with col2:
         else:
             features = build_features(beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude)
 
+            # Mirror the train-time frequency cap (train/serve parity, same
+            # as the API): rare/unseen SUBLOCALITY/ZIPCODE values map to
+            # "other" so they get the trained "other" encoding instead of
+            # the encoder's unseen default.
+            from src.data.features import apply_serving_cap, learned_capped_categories
+
+            features = apply_serving_cap(features, learned_capped_categories(clf))
+
             # Classification — class indices decode via the SHIPPED label
             # encoder's class order (zone_classes), never the config list.
             proba = clf.predict_proba(features)[0]
