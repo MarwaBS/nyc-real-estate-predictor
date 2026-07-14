@@ -97,7 +97,7 @@ Initial production-grade ML pipeline.
   Multi-Task DL) with threshold tuning (macro-F1 0.711 → 0.724).
 - Price regression (XGBoost R² = 0.815 honest, no leakage).
 - SHAP global + per-prediction explainability.
-- Fairness analysis by borough (Staten Island 0.778 → Manhattan 0.627 macro-F1).
+- Fairness analysis by borough (best Staten Island 0.778 → worst Queens 0.613 macro-F1; `fairness_by_borough` in `reports/training_metrics.json` is authoritative).
 - Data-leakage guard: `PRICE_PER_SQFT` blocked in config + runtime
   validated by `test_no_leakage.py` in CI.
 - FastAPI `/predict` + `/health` endpoints; Streamlit dashboard.
