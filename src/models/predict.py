@@ -9,6 +9,7 @@ corruption, so the guard must be a hard stop, not a log line.
 """
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 from pathlib import Path
@@ -96,6 +97,42 @@ def get_zone_classes() -> list[str]:
     return [str(c) for c in get_label_encoder().classes_]
 
 
+_price_interval: dict[str, Any] | None = None
+
+
+def get_price_interval() -> dict[str, Any]:
+    """The calibrated price-interval multipliers (cached after first call).
+
+    Load-bearing, so a missing artefact raises rather than falling back to a
+    guess: the previous behaviour was a hardcoded +/-15% that contained the
+    true price 32% of the time, and silently substituting any default here
+    would reintroduce an interval nothing measured.
+    """
+    global _price_interval
+    if _price_interval is None:
+        path = MODELS_DIR / "price_interval.json"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{path} is missing — the served price interval is calibrated "
+                f"during training. Run: python run_training.py"
+            )
+        _price_interval = json.loads(path.read_text(encoding="utf-8"))
+    return _price_interval
+
+
+def price_range(price: float) -> dict[str, float]:
+    """The interval served alongside ``price``, from the calibrated artefact.
+
+    One implementation for every surface (API, predict module, dashboard) so
+    the three cannot drift — they previously each hardcoded the same literal.
+    """
+    interval = get_price_interval()
+    return {
+        "low": round(price * float(interval["low_multiplier"]), -2),
+        "high": round(price * float(interval["high_multiplier"]), -2),
+    }
+
+
 def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
     """Predict price zone + probabilities for one or more properties.
 
@@ -136,10 +173,7 @@ def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
     return [
         {
             "predicted_price": round(price, -2),  # Round to nearest $100
-            "price_range": {
-                "low": round(price * 0.85, -2),
-                "high": round(price * 1.15, -2),
-            },
+            "price_range": price_range(price),
         }
         for price in prices.tolist()
     ]

@@ -288,7 +288,12 @@ def run_benchmark() -> dict[str, Any]:
             "triggered": bool(leakage_tripwire),
         },
         "reproducibility": {
-            "tolerance": "±1e-6 on metrics across x86_64 Linux CI runners, pinned deps",
+            # No tolerance is asserted here. This field previously recorded
+            # "±1e-6 on metrics" as a string that nothing in the repo ever
+            # compared anything against — a reproducibility guarantee with no
+            # mechanism behind it. What IS enforced: pinned deps, a fixed
+            # seed, and the SHA-sealed schema contract verified before the run.
+            "enforced_by": "pinned deps + fixed seed + schema SHA gate",
             "no_cross_arch_claim": True,
         },
     }
@@ -306,3 +311,21 @@ if __name__ == "__main__":
             default=str,
         )
     )
+
+    # Fail the run on a detected leak — AFTER results.json and the summary are
+    # written, so the evidence survives the failure. A confirmed leak used to
+    # be recorded as "triggered": true and exit 0, which made the benchmark's
+    # headline control the one gate that could never turn CI red, while
+    # prediction-health (a lesser check) did raise.
+    tripped = [
+        name
+        for name, outcome in result["leakage"].items()
+        if outcome and outcome.get("triggered")
+    ]
+    if result["leakage_tripwire"]["triggered"]:
+        tripped.append("r2_tripwire")
+    if tripped:
+        raise SystemExit(
+            f"LEAKAGE DETECTED ({', '.join(tripped)}) — see "
+            f"{RESULTS_PATH.name} for the recorded evidence."
+        )

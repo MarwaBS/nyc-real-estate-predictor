@@ -6,6 +6,43 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — undefended constants replaced with measured ones (A5 defense drill)
+
+- **The served price interval is calibrated, not asserted.** `±15%` was
+  hardcoded in three files and derived from nothing; measured against the test
+  split it contained the true price **32%** of the time while being presented
+  to users as a price range. It is replaced by the 10th-90th percentile of
+  `actual / predicted` measured on the **validation** split (0.624x / 1.598x),
+  which covers **79.0%** of test against an 80% target. The multipliers ship as
+  `models/price_interval.json`, pinned by the manifest, so a retrain that moves
+  the residuals rewrites them — constants in source would have gone stale
+  silently. The dashboard now labels the range with its coverage.
+- **`/health` returns 503 when the serving stack is not loaded.** It returned a
+  hardcoded `"ok"`, and every consumer (Dockerfile HEALTHCHECK, docker-compose
+  `service_healthy`, the HF start script, the CI smoke test) checks the HTTP
+  status while none reads the body — so a container with zero models passed all
+  four. The two model probes also swallowed exceptions with no logging.
+- **The benchmark leakage firewall fails the run.** A confirmed leak recorded
+  `"triggered": true` and exited 0, making the benchmark's headline control the
+  one gate that could never turn CI red. It now exits non-zero *after* writing
+  `results.json`, so the evidence survives the failure.
+- **`reproducibility.tolerance` claim removed.** It recorded `"±1e-6 on
+  metrics"` as a string nothing in the repo compared anything against. Replaced
+  with what is actually enforced: pinned deps, fixed seed, schema SHA gate.
+- **`daily_rate_limit` renamed to `predict_rate_limit`** (env var
+  `PREDICT_RATE_LIMIT`). The name promised a daily quota while the value was
+  per-minute, so `60/minute` advertised a cap of 60 while permitting 86,400/day.
+  The `/predict` docstring no longer hardcodes "the 61st request" into the
+  public `/docs` page, which was false for any deployment overriding the default.
+- **Vacuous assertions replaced.** `r2 > -10` (a constant predictor scores 0)
+  became `r2 > 0`; `0 <= macro_f1 <= 1.0` (a metric's own codomain) removed as
+  the majority-baseline check above it is the real gate; `predicted_price > 0`
+  became a $10k floor — the historical bug that served a Manhattan condo at
+  single-digit dollars would have passed the old assertion.
+- **CI actions pinned.** `trivy-action@master` and `free-disk-space@main` were
+  the only floating refs, and trivy is the action enforcing the HIGH/CRITICAL
+  gate — an upstream change could silently redefine it.
+
 ### Changed — test-set contamination removed (headline numbers move)
 
 - **Three-way train/val/test split.** Model selection (both classifiers and
