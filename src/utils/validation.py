@@ -62,15 +62,16 @@ def validate_cleaned_data(df: pd.DataFrame) -> list[str]:
 
 
 def assert_no_leakage(feature_names: list[str] | np.ndarray) -> None:
-    """Assert that no target-derived features are in the feature set."""
-    forbidden = {
-        "PRICE_PER_SQFT",
-        "price_per_sqft",
-        "LOG_PRICE",
-        "log_price",
-        "PRICE_ZONE",
-    }
-    present = forbidden & set(str(f) for f in feature_names)
+    """Reject any feature derived from the price target.
+
+    The rule is "the name mentions price", not a list of known spellings.
+    The list version passed a bare ``PRICE`` column — the target itself —
+    because only five derived spellings were enumerated, so the check
+    certified as clean exactly the input it existed to reject. No legitimate
+    feature in ``src.config`` mentions price, so anything that does is either
+    the target or built from it.
+    """
+    present = sorted(f for f in (str(n) for n in feature_names) if "price" in f.lower())
     if present:
         raise ValueError(
             f"DATA LEAKAGE DETECTED: target-derived features in training set: {present}"

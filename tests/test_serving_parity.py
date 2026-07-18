@@ -1,12 +1,12 @@
 """Serving-parity regression tests: one decode path for API + dashboard.
 
-The headline macro-F1 is measured under per-class THRESHOLD decoding
-(``src/models/threshold.py``), and the train-time frequency cap must be
-mirrored at serve time on EVERY surface. These tests pin the two halves
-that historically diverged:
+The published macro-F1 is measured under argmax (``src/models/decode.py``),
+which is exactly what both surfaces serve, and the train-time frequency cap
+must be mirrored at serve time on EVERY surface. These tests pin the two
+halves that historically diverged:
 
-- the API decoded with bare argmax, so the published (threshold-tuned)
-  metric was never the rule API users were actually served;
+- the two surfaces decoded differently, so the published metric was not the
+  rule API users were served;
 - the dashboard skipped ``apply_serving_cap``, so rare/unseen categories
   got the encoder's unseen default instead of the trained "other" encoding.
 """
@@ -34,13 +34,10 @@ VALID_PAYLOAD = {
 
 ENCODER_CLASSES = ["High", "Low", "Medium", "Very High"]
 
-# Chosen so threshold decoding and argmax DISAGREE: argmax picks "High"
-# (0.42), but with High's threshold at 0.9 the adjusted scores are
-# [0.42/0.9, 0.38/0.5, 0.12/0.5, 0.08/0.5] = [0.467, 0.76, 0.24, 0.16],
-# so the threshold rule serves "Low" with confidence 0.38 (the probability
-# of the served class, not proba.max()).
+# Deliberately not one-hot: the top two classes are close (0.42 vs 0.38) so
+# an off-by-one in the class-order decode picks a different, wrong zone name
+# instead of coincidentally landing on the right one.
 PROBA = [0.42, 0.38, 0.12, 0.08]
-THRESHOLDS = {"High": 0.9, "Low": 0.5, "Medium": 0.5, "Very High": 0.5}
 
 
 class _StubClf:
@@ -53,49 +50,33 @@ class _StubReg:
         return np.asarray([14.0])
 
 
-def _stubbed_client(
-    monkeypatch: pytest.MonkeyPatch, thresholds: dict[str, float] | None
-) -> TestClient:
+def _stubbed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     import api.main as m
 
     monkeypatch.setattr(m, "_get_classifier", lambda: _StubClf())
     monkeypatch.setattr(m, "_get_regressor", lambda: _StubReg())
     monkeypatch.setattr(m, "_get_capped_categories", dict)
     monkeypatch.setattr(m, "_get_zone_classes", lambda: ENCODER_CLASSES)
-    monkeypatch.setattr(m, "_get_thresholds", lambda: thresholds)
     return TestClient(m.app)
 
 
-def test_api_serves_threshold_decision_not_argmax(
+def test_api_decodes_through_the_encoder_class_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """/predict must apply the tuned per-class thresholds when they ship.
+    """/predict names the zone via the encoder's class order, and reports the
+    served class's own probability as confidence.
 
-    With bare argmax the response would be High@0.42 — i.e. the serving
-    rule the headline macro-F1 was measured under would never reach API
-    users. Confidence must be the probability of the class actually
-    served (0.38), not proba.max() (0.42), which describes a class the
-    user was not shown.
+    ENCODER_CLASSES is alphabetical, so index 0 is "High" — not the semantic
+    config order's "Low". Decoding through the config list would return the
+    wrong zone name for a correct prediction, which is precisely the rot that
+    shipped once already.
     """
-    resp = _stubbed_client(monkeypatch, THRESHOLDS).post("/predict", json=VALID_PAYLOAD)
-    assert resp.status_code == 200, resp.text
-    zone = resp.json()["zone"]
-    assert zone["price_zone"] == "Low"
-    assert zone["confidence"] == 0.38
-    # The full probability vector is still reported unmodified.
-    assert zone["probabilities"] == dict(zip(ENCODER_CLASSES, PROBA, strict=True))
-
-
-def test_api_falls_back_to_argmax_without_thresholds(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without the optional thresholds artifact the decode is plain argmax
-    with confidence = probability of the served class."""
-    resp = _stubbed_client(monkeypatch, None).post("/predict", json=VALID_PAYLOAD)
+    resp = _stubbed_client(monkeypatch).post("/predict", json=VALID_PAYLOAD)
     assert resp.status_code == 200, resp.text
     zone = resp.json()["zone"]
     assert zone["price_zone"] == "High"
     assert zone["confidence"] == 0.42
+    assert zone["probabilities"] == dict(zip(ENCODER_CLASSES, PROBA, strict=True))
 
 
 def _calls_in(source_path: Path) -> set[str]:
@@ -131,12 +112,12 @@ def test_dashboard_applies_serving_cap() -> None:
 
 
 def test_both_surfaces_decode_via_served_zone() -> None:
-    """API and dashboard must share ONE decode: src.models.threshold.served_zone.
+    """API and dashboard must share ONE decode: src.models.decode.served_zone.
 
     This is the structural pin against re-divergence — the exact rot that
-    shipped once already (API on argmax while the dashboard used
-    thresholds). If either surface stops calling served_zone, this fails
-    before any behavioural test has to notice.
+    shipped once already, when the two surfaces applied different decision
+    rules to the same probabilities. If either surface stops calling
+    served_zone, this fails before any behavioural test has to notice.
     """
     assert "served_zone" in _calls_in(REPO_ROOT / "api" / "main.py")
     assert "served_zone" in _calls_in(REPO_ROOT / "streamlit_app" / "app.py")

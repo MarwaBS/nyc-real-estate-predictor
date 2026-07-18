@@ -7,13 +7,13 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Model details
 
 - **Persons or organisations developing the model:** Marwa Ben Salem (solo).
-- **Model date:** 2026-07-04 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
+- **Model date:** 2026-07-18 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
 - **Model version:** v1.0.0.
 - **Model types:** two artifacts trained jointly on the same feature set:
-  - **Classifier** — `XGBoost` with per-class threshold tuning. 4-class price zone (Low / Medium / High / Very High).
-  - **Regressor** — `XGBoost` on `LOG_PRICE` target. Point-estimate. Predictions converted back via `expm1()`.
+  - **Classifier** — `XGBoost`, decoded by argmax. 4-class price zone (Low / Medium / High / Very High).
+  - **Regressor** — `LightGBM` on `LOG_PRICE` target. Point-estimate. Predictions converted back via `expm1()`.
 - **Additional models compared (not shipped as primary):** LightGBM, Random Forest (regression). The extended training path (`src/models/train_classification.py`, `src/dl/`) also implements Optuna search, CatBoost, a stacking ensemble, SMOTE-ENN, and a multi-task PyTorch dense net (entity embeddings + shared MLP trunk with classification + regression heads — not the TabNet architecture despite the legacy name) — runnable with `requirements-train.txt`, but not the source of the shipped artifacts.
-- **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the held-out split, per-class threshold tuning post-hoc. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
+- **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the **val** split, with **test** scored exactly once by the already-selected model. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
   - **Provenance-SHA caveat:** the `commit_sha` recorded in `reports/training_metrics.json` (and in `benchmarks/results.json`) is the PR-branch commit that produced the artifact. This repo squash-merges, which orphans branch commits, so those SHAs are **not ancestors of `main`** — the artifact's chain of custody is instead enforced continuously: the External Benchmark workflow re-derives the sealed metrics weekly from the committed model on live NYC.gov data, so an artifact/code mismatch surfaces as a red scheduled run rather than relying on SHA ancestry.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
 - **Licence:** MIT.
@@ -23,22 +23,23 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Primary intended uses:**
   - Portfolio demonstration of end-to-end ML engineering (data cleaning → feature engineering → modelling → tuning → explainability → API → UI → deployment).
-  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² vs. inflated R² (0.815 vs 0.997 when `PRICE_PER_SQFT` is leaked — ADR-001).
+  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² vs. inflated R² (0.800 vs 0.997 when `PRICE_PER_SQFT` is leaked — ADR-001).
 - **Primary intended users:** hiring managers / reviewers evaluating the author's ML engineering signal; engineers looking at how to structure a tabular-ML project with DL as an ablation.
 - **Out-of-scope uses:** the model is **NOT suitable for real pricing decisions**. It is trained on a ~4,500-row public Kaggle snapshot of NYC listings; it will drift against current-market reality, has no per-user auth / SLA, and is not fairness-audited beyond borough-level F1 disparity.
 
 ## Factors
 
-- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies materially (0.778 → 0.613).
+- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies materially (0.777 → 0.591).
 - **Evaluation factors:** price zone (4 classes, stratified), sublocality (target-encoded with smoothing), property type (one-hot).
 - **Factors NOT evaluated:** seller/buyer demographics (not in the dataset); temporal drift across listing date (dataset is a single snapshot); accessibility amenities (not in features).
 
 ## Metrics
 
 - **Model performance measures:**
-  - Classification: macro F1 = **0.724** (XGBoost + threshold tuning) on a stratified 20% hold-out (901 test / 3,603 train).
-  - Regression: R² = **0.815** (XGBoost), honest, no leakage (see ADR-001).
-- **Decision thresholds:** per-class probability thresholds tuned on validation split — Low=0.9, Medium=0.492, High=0.361, Very High=0.5. Improved macro F1 from 0.711 → 0.724 (+0.014). (Keyed by the label encoder's class order — the classifier's index order, recorded in the artefact's `classification.metrics.labels`. A previous version of this card attributed the values in semantic config order, which named three of the four thresholds after the wrong zone.)
+  - Classification: macro F1 = **0.698** (XGBoost) on the test split; 0.713 on val, which is where it was selected.
+  - Regression: R² = **0.800** (LightGBM) on test; 0.790 on val. Honest, no leakage (see ADR-001).
+  - Split: 2,882 train / 721 val / 901 test, stratified on price zone.
+- **Decision rule:** argmax over the classifier's per-class probabilities, decoded through the label encoder's class order (recorded in the artefact's `classification.metrics.labels`). Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those thresholds were fitted on the test labels and scored on the same labels, so the number was in-sample. Fitted on one half of the test set and scored on the other over 20 stratified splits, tuning is worth +0.0006 (std 0.0106) — noise — and has been removed.
 - **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
 
 ## Evaluation data
@@ -55,14 +56,14 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Quantitative analyses
 
-- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `DIST_MANHATTAN_CENTER` (1.149), `PROPERTYSQFT` (0.858), `BATH` (0.786), `DIST_CENTRAL_PARK` (0.404). Full top-10 in README.
+- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `DIST_MANHATTAN_CENTER` (1.245), `BATH` (0.890), `PROPERTYSQFT` (0.874), `DIST_CENTRAL_PARK` (0.490). Full top-10 in README.
 - **Intersectional results:** borough-level macro F1 (from the artifact's
   `fairness_by_borough`; a small missing-borough group is recorded as `nan`):
-  - Staten Island 0.778
-  - Bronx 0.681
-  - Brooklyn 0.677
-  - Manhattan 0.627
-  - Queens 0.613
+  - Staten Island 0.777
+  - Brooklyn 0.670
+  - Manhattan 0.634
+  - Bronx 0.612
+  - Queens 0.591
 
   Manhattan and Queens carry the largest class-distribution shift (more
   Very High / more Medium respectively), which depresses their F1 vs.
@@ -81,7 +82,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
   - `DIST_NEAREST_SUBWAY` is a proxy (equal to `DIST_MANHATTAN_CENTER`) **by design**: station-level data is not bundled with the repo, and training + serving must use identical feature semantics, so both sides compute the same proxy (`run_training.py` and `api/main.py`). Its marginal information value is zero; it remains in the schema for forward compatibility.
   - No uncertainty quantification — the predicted price has a fixed ±15% band, not a calibrated interval.
   - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only. Kept as-is because retraining requires the raw Kaggle dataset, which is not distributed with this repo; fix on the next retrain.
-  - **No naive-baseline column next to the headline metrics:** R²=0.815 (Kaggle split) and R²(log)=0.375 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
+  - **No naive-baseline column next to the headline metrics:** R²=0.800 (Kaggle split) and R²(log)=0.375 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
 - **Recommendations:**
   - Treat predictions as directional, not dollar-accurate.
   - Do not use for decisions that would materially affect a specific person (loan, rent, appraisal).

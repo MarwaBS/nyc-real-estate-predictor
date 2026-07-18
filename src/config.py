@@ -38,6 +38,12 @@ GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
 # ---------------------------------------------------------------------------
 RANDOM_SEED: int = 42
 TEST_SIZE: float = 0.2
+# Fraction of the post-test remainder held out for model selection and DL
+# early stopping. Every choice made during training reads VAL; TEST is scored
+# once, at the end, by the already-chosen model. Before this split existed,
+# candidate selection and threshold tuning both read the test labels, so the
+# published macro-F1 was an in-sample number wearing a hold-out's name.
+VAL_SIZE: float = 0.2
 CV_FOLDS: int = 5
 OPTUNA_TRIALS: int = 50
 

@@ -96,27 +96,6 @@ def get_zone_classes() -> list[str]:
     return [str(c) for c in get_label_encoder().classes_]
 
 
-_thresholds_cache: dict[str, float] | None = None
-_thresholds_loaded: bool = False
-
-
-def get_thresholds(path: Path | None = None) -> dict[str, float] | None:
-    """Load the tuned per-class serving thresholds (cached after first call).
-
-    Returns ``None`` when the artifact is absent: threshold tuning is an
-    optional serving refinement (``served_zone`` falls back to argmax),
-    unlike the label encoder, which is load-bearing for correctness. The
-    loaded/absent state is tracked separately from the value so a missing
-    file isn't re-probed on every request.
-    """
-    global _thresholds_cache, _thresholds_loaded
-    if not _thresholds_loaded:
-        resolved = path or MODELS_DIR / "optimal_thresholds.joblib"
-        _thresholds_cache = _load_model(resolved) if resolved.exists() else None
-        _thresholds_loaded = True
-    return _thresholds_cache
-
-
 def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
     """Predict price zone + probabilities for one or more properties.
 
