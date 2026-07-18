@@ -249,11 +249,11 @@ def train_and_evaluate(
 
 
 if __name__ == "__main__":
-    # This module is a library of training functions orchestrated by
-    # run_training.py (which owns data prep, label encoding, artifact
-    # provenance, and threshold tuning). The previous __main__ here logged
-    # a "run me via python -m ..." pointer at INFO and exited 0 — i.e.
-    # `make train` succeeded while training nothing. Fail loudly instead.
+    # This module is the extended training path (Optuna, CatBoost, stacking).
+    # Nothing imports it: run_training.py is self-contained and produces the
+    # shipped artifacts. The previous __main__ here logged a "run me via
+    # python -m ..." pointer at INFO and exited 0 — i.e. `make train`
+    # succeeded while training nothing. Fail loudly instead.
     import sys
 
     sys.exit(

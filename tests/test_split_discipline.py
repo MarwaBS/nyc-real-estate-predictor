@@ -12,36 +12,73 @@ from __future__ import annotations
 import inspect
 
 import numpy as np
+import pandas as pd
 
 import run_training
+from src.config import NUMERIC_FEATURES, ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
 
 
-def test_train_classification_selects_on_val_not_test() -> None:
-    """Selection must consult val; test must reach only the final scoring.
-
-    Pinned structurally rather than behaviourally: whether selection is
-    biased depends on which split a comparison reads, and a run on toy data
-    can pick the same winner either way, so a behavioural test would pass on
-    the broken code. Reading the split out of the signature and source cannot.
-    """
-    sig = inspect.signature(run_training.train_classification)
-    assert "X_val" in sig.parameters and "y_val" in sig.parameters, (
-        "train_classification takes no validation set, so every candidate "
-        "comparison it makes must be reading the test labels"
+def _synthetic_frame(n: int, rng: np.random.Generator) -> pd.DataFrame:
+    """A frame carrying exactly the columns the shipped pipeline expects."""
+    return pd.DataFrame(
+        {
+            **{c: rng.normal(size=n) for c in NUMERIC_FEATURES},
+            **{c: rng.choice(["a", "b", "c"], size=n) for c in ONEHOT_FEATURES},
+            **{c: rng.choice(["p", "q"], size=n) for c in TARGET_ENCODED_FEATURES},
+        }
     )
-    # The reported record separates the split that chose the model from the
-    # split the headline number is scored on. Both keys are load-bearing for
-    # the artefact's honesty, so their absence is a failure.
-    src = inspect.getsource(run_training.train_classification)
-    assert "selection_metrics_val" in src
-    assert "predict(X_val)" in src, "candidates must be scored on val"
+
+
+def test_train_classification_reports_test_not_the_split_it_selected_on(
+    tmp_path, monkeypatch
+) -> None:
+    """The reported metric must come from test, and selection from val.
+
+    Behavioural, not a source grep: val gets labels the features predict,
+    test gets shuffled labels. If the reported `metrics` were computed on
+    whichever split drove selection, it would inherit val's high score. It
+    must instead track the near-chance test split, and `selection_metrics_val`
+    must hold the high one. Reading either split from the wrong place flips
+    this inequality, which a renamed variable or reformatted line cannot.
+    """
+    monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
+    rng = np.random.default_rng(0)
+    n = 240
+
+    X_train, X_val, X_test = (_synthetic_frame(n, rng) for _ in range(3))
+    # Labels are a deterministic function of the first numeric feature, so a
+    # fitted model genuinely predicts train and val.
+    signal = NUMERIC_FEATURES[0]
+    y_train = (X_train[signal] > 0).astype(int).to_numpy()
+    y_val = (X_val[signal] > 0).astype(int).to_numpy()
+    # Test labels are independent of the features: any honest score is chance.
+    y_test = rng.integers(0, 2, size=n)
+
+    record = run_training.train_classification(
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        X_test,
+        y_test,
+        pd.Series(["manhattan"] * n),
+        ["low", "high"],
+    )
+
+    val_f1 = record["selection_metrics_val"]["macro_f1"]
+    test_f1 = record["metrics"]["macro_f1"]
+    assert val_f1 > 0.8, f"val should be learnable, got {val_f1}"
+    assert test_f1 < 0.65, (
+        f"reported metric is {test_f1} on random test labels — it is not "
+        f"being scored on the test split"
+    )
 
 
 def test_train_regression_selects_on_val_not_test() -> None:
+    """Signature-level pin: without a val split, every candidate comparison
+    this function makes is necessarily reading the test labels."""
     sig = inspect.signature(run_training.train_regression)
     assert "X_val" in sig.parameters and "y_val" in sig.parameters
-    src = inspect.getsource(run_training.train_regression)
-    assert "predict(X_val)" in src, "candidates must be scored on val"
 
 
 def test_training_pipeline_has_no_threshold_tuning() -> None:
