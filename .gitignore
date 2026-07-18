@@ -19,7 +19,6 @@ models/*.bak
 # HF Space and the weekly drift guard fails on any divergence.
 !models/price_zone_best.joblib
 !models/price_regressor_best.joblib
-!models/optimal_thresholds.joblib
 !models/label_encoder.joblib
 mlruns/
 # mlflow's sqlite backend file (created at repo root by a training run,
@@ -232,3 +231,7 @@ sbom.cyclonedx.json
 # artifact (the drift monitor's reference distribution) and is now
 # committed + pinned by models/MANIFEST.sha256 like the rest.
 .venv312/
+# Pinned Python 3.12.13 env used to reproduce committed artifacts bit-for-bit
+# (the default .venv runs 3.13, which cannot install numpy 1.26.4 and so
+# silently drifts off requirements.txt).
+.venv-pinned/

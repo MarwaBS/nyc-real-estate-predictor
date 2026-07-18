@@ -43,3 +43,18 @@ def test_assert_no_leakage_raises_on_log_price() -> None:
 def test_assert_no_leakage_passes_clean_features() -> None:
     """Clean features should pass without error."""
     assert_no_leakage(["BEDS", "BATH", "PROPERTYSQFT", "BOROUGH"])
+
+
+@pytest.mark.parametrize(
+    "leaky",
+    ["PRICE", "price", "Price", "SALE PRICE", "PRICE_ZONE_ENCODED", "price_bucket"],
+)
+def test_assert_no_leakage_catches_the_target_itself(leaky: str) -> None:
+    """The guard must reject the raw target, not just its derived spellings.
+
+    The enumerated-spellings version passed ``["BEDS", "PRICE"]`` — the guard
+    against leakage certified the most direct leak there is. Every case here
+    fails against that implementation.
+    """
+    with pytest.raises(ValueError, match="DATA LEAKAGE"):
+        assert_no_leakage(["BEDS", leaky])
