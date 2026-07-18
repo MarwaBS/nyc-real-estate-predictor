@@ -103,7 +103,7 @@ jobs:
         # the runtime layer is assembled. Jlumbroso's action frees ~15GB
         # by removing preinstalled Android SDK, .NET, dotnet, CodeQL, etc.
         # — tools we don't use in the build.
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: true
           android: true
@@ -139,7 +139,7 @@ jobs:
         # Container-layer vulnerability scan complementary to pip-audit.
         # `.trivyignore` at repo root holds managed-risk CVE IDs (starter
         # file is empty; mirrors ResumeForge pattern).
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: nyc-price-prediction:ci
           format: table

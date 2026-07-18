@@ -414,6 +414,59 @@ def train_regression(
     }
 
 
+# Fraction of listings the served price interval is calibrated to contain.
+# 0.80 rather than a tighter target because this model's honest spread is
+# already wide (see the multipliers written into the artefact): a narrower
+# nominal target would produce an interval that is precise-looking and no more
+# truthful, which is the failure being corrected here.
+PRICE_INTERVAL_TARGET = 0.80
+
+
+def calibrate_price_interval(
+    regressor: Any,
+    X_val: pd.DataFrame,
+    y_price_val: pd.Series,
+    X_test: pd.DataFrame,
+    y_price_test: pd.Series,
+    target: float = PRICE_INTERVAL_TARGET,
+) -> dict[str, Any]:
+    """Derive the served price interval from measured residuals.
+
+    The multipliers are the empirical quantiles of ``actual / predicted`` on
+    VAL — the split that exists for choosing serving-time quantities — and the
+    coverage they achieve is then reported once on TEST. Choosing them on test
+    would make the reported coverage the same in-sample number the old
+    threshold tuning produced.
+
+    This replaces a hardcoded +/-15%, which was not derived from anything and
+    contained the true price 32% of the time while being presented to users as
+    a price range.
+    """
+    lo_q, hi_q = (1.0 - target) / 2.0, 1.0 - (1.0 - target) / 2.0
+
+    def ratio(X: pd.DataFrame, y_log: pd.Series) -> np.ndarray:
+        predicted = np.expm1(np.asarray(regressor.predict(X), dtype=float))
+        actual = np.expm1(np.asarray(y_log, dtype=float))
+        return actual / predicted
+
+    r_val = ratio(X_val, y_price_val)
+    low, high = (float(q) for q in np.quantile(r_val, [lo_q, hi_q]))
+
+    def coverage(r: np.ndarray) -> float:
+        return float(np.mean((r >= low) & (r <= high)))
+
+    record = {
+        "target_coverage": target,
+        "low_multiplier": round(low, 4),
+        "high_multiplier": round(high, 4),
+        "calibrated_on": "val",
+        "coverage_val": round(coverage(r_val), 4),
+        "coverage_test": round(coverage(ratio(X_test, y_price_test)), 4),
+    }
+    logger.info("Price interval: %s", record)
+    return record
+
+
 def _git_commit_sha() -> str | None:
     try:
         out = subprocess.run(
@@ -588,6 +641,25 @@ def main() -> None:
     reg_record = train_regression(
         X_train, y_price_train, X_val, y_price_val, X_test, y_price_test
     )
+
+    # 5b. Calibrate the served price interval on val, report coverage on test.
+    # Committed as a serving artefact rather than hardcoded so it cannot rot
+    # away from the model it describes: a retrain that shifts the residuals
+    # rewrites this file, and tests/test_price_interval.py reads the recorded
+    # coverage. Constants in source would have to be updated by hand, and the
+    # gate that would catch them going stale needs the raw dataset, which CI
+    # does not have.
+    interval = calibrate_price_interval(
+        joblib.load(MODELS_DIR / "price_regressor_best.joblib"),
+        X_val,
+        y_price_val,
+        X_test,
+        y_price_test,
+    )
+    (MODELS_DIR / "price_interval.json").write_text(
+        json.dumps(interval, indent=2) + "\n", encoding="utf-8"
+    )
+    reg_record["price_interval"] = interval
 
     # 6. Generate SHAP explanations
     logger.info("=" * 60)

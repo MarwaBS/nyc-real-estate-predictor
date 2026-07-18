@@ -45,7 +45,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/install/bin:$PATH \
     PYTHONPATH=/install/lib/python3.12/site-packages
 
-# Minimal runtime system deps + OS security patches. CACHE_EPOCH (set to
+# Minimal runtime system deps + OS security patches.
+#
+# libgomp1 is the OpenMP runtime LightGBM dlopens at import (lightgbm/
+# libpath.py -> ctypes.cdll.LoadLibrary). It is NOT optional: the shipped
+# regressor is a LightGBM model, so without it `joblib.load` raises
+# `OSError: libgomp.so.1: cannot open shared object file` and the container
+# serves 503 for every prediction. It is listed here rather than left to the
+# builder stage because only /install is copied forward — system shared
+# libraries installed in the builder do not survive into the runtime image.
+#
+# This was live in the published image and CI did not catch it: the smoke
+# test's `curl -fsS /health` passed against a /health that returned a
+# hardcoded "ok" without loading anything. The gate could not fail, so it
+# certified a container that could not serve. Both halves are fixed here.
+#
+# CACHE_EPOCH (set to
 # the ISO year-week by CI) changes the command's cache key weekly, forcing
 # this layer — and only the layers below it — to rebuild so `apt-get
 # upgrade` actually re-runs against current Debian security repos. The
@@ -54,7 +69,7 @@ ARG CACHE_EPOCH=static
 RUN echo "apt refresh epoch: ${CACHE_EPOCH}" \
     && apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

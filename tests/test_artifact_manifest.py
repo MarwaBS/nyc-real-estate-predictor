@@ -28,6 +28,7 @@ SERVING_ARTIFACTS = {
     "price_zone_best.joblib",
     "price_regressor_best.joblib",
     "label_encoder.joblib",
+    "price_interval.json",
     "drift_baseline.json",
 }
 
