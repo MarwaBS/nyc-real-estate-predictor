@@ -13,7 +13,7 @@ This repository contains **two separate evaluation surfaces** that should not be
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
-| Trained-model evaluation | Kaggle 2023 listings (4,504 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.815 on 20% holdout | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; models + data are local-only, so this artefact is the auditable record) |
+| Trained-model evaluation | Kaggle 2023 listings (4,504 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.800 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; models + data are local-only, so this artefact is the auditable record) |
 | External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.375 on 18,314 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
 
 The external benchmark is the independently verifiable surface: `python -m benchmarks.run_benchmark` on any clone downloads the public data, verifies the schema lock, and recomputes the number. The flagship evaluation is honest but local — its data and models have no public remote (DVC without a remote), so its numbers are backed by the committed metrics artefact, not by stranger-reproducibility. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
@@ -28,18 +28,37 @@ Every number in this section is read from the committed evidence artefact
 scikit-learn version, seed, split sizes). If a number here is not in that
 file, it does not belong here.
 
-| Task | Model | Metric | Score |
-|---|---|---|---|
-| Price Zone (4-class) | **XGBoost + threshold tuning** | Macro F1 | **0.724** |
-| Price Zone (4-class) | XGBoost (argmax) | Macro F1 | 0.711 |
-| Price Zone (4-class) | LightGBM | Macro F1 | 0.692 |
-| Price Regression | **XGBoost** | R2 (honest, no leakage) | **0.815** |
-| Price Regression | Random Forest | R2 (honest, no leakage) | 0.804 |
-| Price Regression | LightGBM | R2 (honest, no leakage) | 0.796 |
+Headline scores are on the **test** split, produced by the model that the
+**val** split selected. Candidates are compared on val only; test is scored
+once, after selection is fixed.
 
-All scores on held-out 20% stratified test set (3,603 train / 901 test). No data leakage. Artifacts produced under the pinned environment (Python 3.12, numpy 1.26.4, scikit-learn 1.8.0 — recorded in the artifact's provenance block together with `working_tree_clean` and the producing commit).
+| Task | Model | Metric | Val (selection) | **Test (reported)** |
+|---|---|---|---|---|
+| Price Zone (4-class) | **XGBoost** (selected) | Macro F1 | 0.713 | **0.698** |
+| Price Zone (4-class) | LightGBM | Macro F1 | 0.683 | not scored |
+| Price Regression | **LightGBM** (selected) | R2 | 0.790 | **0.800** |
+| Price Regression | Random Forest | R2 | 0.788 | not scored |
+| Price Regression | XGBoost | R2 | 0.782 | not scored |
 
-Threshold tuning optimized per-class probability thresholds (Low=0.9, Medium=0.492, High=0.361, Very High=0.5), improving macro F1 from 0.711 to 0.724 (+0.014). Thresholds are keyed by the label encoder's class order — the classifier's own index order, recorded in the artefact's `classification.metrics.labels`. (An earlier artefact keyed them with the semantic config order, which attached three of the four values to the wrong zone.)
+Split: 2,882 train / 721 val / 901 test, stratified on price zone. Losing
+candidates show "not scored" because they never touch test — scoring them
+there and then quoting the winner's number is how a selected maximum gets
+published as a hold-out estimate. Artifacts produced under the pinned
+environment (Python 3.12.13, numpy 1.26.4, scikit-learn 1.8.0 — recorded in
+the artifact's provenance block together with `working_tree_clean` and the
+producing commit).
+
+**These numbers replace a previously published 0.724 macro F1, and the
+change is a correction, not a regression.** That figure came from per-class
+thresholds fitted against the *test* labels and then scored on those same
+labels, so the advertised "+0.014 gain" was the tuner reading its own answer
+sheet. Measured honestly — thresholds fitted on half the test set and scored
+on the other half, over 20 stratified splits — tuning was worth +0.0006 mean
+(std 0.0106), helping 12 splits and hurting 8. It is noise, so it has been
+removed rather than moved to val, and serving decodes with plain argmax. The
+remaining drop (0.711 argmax → 0.698) is the cost of carving a real
+validation split out of training data: the classifier now learns from 2,882
+rows instead of 3,603.
 
 > The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
 > optional training stage when `requirements-train.txt` extras (torch) are
@@ -54,16 +73,16 @@ ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | DIST_MANHATTAN_CENTER | 1.149 |
-| 2 | PROPERTYSQFT | 0.858 |
-| 3 | BATH | 0.786 |
-| 4 | DIST_CENTRAL_PARK | 0.404 |
-| 5 | SUBLOCALITY (target-encoded) | 0.391 |
-| 6 | TOTAL_ROOMS | 0.347 |
-| 7 | ROOMS_PER_SQFT | 0.299 |
-| 8 | ZIPCODE (target-encoded) | 0.203 |
-| 9 | TYPE_condo (one-hot) | 0.200 |
-| 10 | BED_BATH_RATIO | 0.137 |
+| 1 | DIST_MANHATTAN_CENTER | 1.245 |
+| 2 | BATH | 0.890 |
+| 3 | PROPERTYSQFT | 0.874 |
+| 4 | DIST_CENTRAL_PARK | 0.490 |
+| 5 | SUBLOCALITY (target-encoded) | 0.359 |
+| 6 | ROOMS_PER_SQFT | 0.310 |
+| 7 | TOTAL_ROOMS | 0.272 |
+| 8 | ZIPCODE (target-encoded) | 0.240 |
+| 9 | TYPE_condo (one-hot) | 0.208 |
+| 10 | BOROUGH_bronx (one-hot) | 0.125 |
 
 ### Fairness by borough
 
@@ -72,11 +91,11 @@ rows with missing borough is also recorded in the artifact as `"nan"`):
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.778 |
-| Bronx | 0.681 |
-| Brooklyn | 0.677 |
-| Manhattan | 0.627 |
-| Queens | 0.613 |
+| Staten Island | 0.777 |
+| Brooklyn | 0.670 |
+| Manhattan | 0.634 |
+| Bronx | 0.612 |
+| Queens | 0.591 |
 
 ---
 
@@ -124,7 +143,7 @@ Drop reasons (sum reconciles to `n_dropped` — enforced at run time):
 
 **Read the number honestly:** 0.375 R²(log) is what borough + sqft + ZIP
 explain about 2024 family-dwelling sale prices, full stop. It is *supposed*
-to be far below the flagship's in-distribution 0.815 — the point of the
+to be far below the flagship's in-distribution 0.800 — the point of the
 benchmark is that this gap is measured and sealed, not hidden.
 
 **Reproduce it yourself** (no private data needed — the lean model is
@@ -331,9 +350,8 @@ feature).
 **What produced the shipped artefacts (and every number in §Results):**
 `run_training.py` — XGBoost vs LightGBM for classification, XGBoost vs
 LightGBM vs Random Forest for regression, fixed hyperparameters, best
-model selected on the held-out split, plus per-class threshold tuning.
-That is the path whose outputs are recorded in
-`reports/training_metrics.json`.
+model selected on the **val** split and then scored once on **test**. That
+is the path whose outputs are recorded in `reports/training_metrics.json`.
 
 **Extended training path (optional, `requirements-train.txt`):**
 `src/models/train_classification.py` / `train_dl.py` additionally
@@ -346,7 +364,7 @@ so this README does not quote numbers from them.
 
 | Model (shipped path) | Tuning | Class Imbalance |
 |---|---|---|
-| XGBoost | fixed hyperparameters | none (threshold tuning post-hoc) |
+| XGBoost | fixed hyperparameters | none |
 | LightGBM | fixed hyperparameters | class_weight="balanced" |
 
 ### Regression: Actual Price
@@ -427,7 +445,7 @@ PRICE = PRICE_PER_SQFT * PROPERTYSQFT   # trivial algebra
 ```
 
 R2=0.997 was not a real prediction — it was circular computation. After removing this feature:
-- Honest R2 = **0.815** (XGBoost, best) — a real result, not inflated
+- Honest R2 = **0.800** (LightGBM, selected on val) — a real result, not inflated
 - This is enforced by `test_no_leakage.py` in CI
 - Documented in [ADR-001](docs/decisions/001-remove-price-per-sqft.md)
 

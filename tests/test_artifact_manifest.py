@@ -27,7 +27,6 @@ MANIFEST = MODELS_DIR / "MANIFEST.sha256"
 SERVING_ARTIFACTS = {
     "price_zone_best.joblib",
     "price_regressor_best.joblib",
-    "optimal_thresholds.joblib",
     "label_encoder.joblib",
     "drift_baseline.json",
 }
@@ -73,21 +72,6 @@ def test_every_serving_artifact_matches_its_manifest_hash() -> None:
             f"artifact changed without a manifest update (or vice versa). "
             f"Regenerate the manifest only as part of a deliberate retrain."
         )
-
-
-def test_committed_thresholds_are_the_canonical_july_values() -> None:
-    """Pins the exact failure the 2026-07-14 re-audit caught live: the Space
-    served the CHANGELOG-convicted misattributed thresholds over April
-    models (21.4% of a probe grid decoded differently). The canonical
-    values come from the 2026-07-04 run recorded in
-    reports/training_metrics.json."""
-    thresholds = joblib.load(MODELS_DIR / "optimal_thresholds.joblib")
-    assert thresholds == {
-        "High": 0.361,
-        "Low": 0.9,
-        "Medium": 0.492,
-        "Very High": 0.5,
-    }
 
 
 def test_committed_encoder_is_alphabetical_and_complete() -> None:

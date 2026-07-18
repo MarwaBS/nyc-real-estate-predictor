@@ -31,3 +31,18 @@ runnable, but its output is not what the API and dashboard serve. This
 record originally read as if Optuna tuning was the shipped decision;
 it is the explored decision, superseded for shipping by the simpler
 fixed-hyperparameter pipeline (reproducibility over the last ~0.01 F1).
+
+## Status update (2026-07-18)
+
+"Best-of-candidates selection" above meant selection **on the test split**:
+candidates were compared on test and the winner's test score was published as
+a hold-out result. Selection now happens on a dedicated validation split and
+test is scored once, by the already-chosen model.
+
+The classifier decision is unchanged — XGBoost still wins, now on val
+(macro F1 0.713 vs LightGBM 0.683). The **regressor** decision changed:
+LightGBM (val R2 0.790) now wins over Random Forest (0.788) and XGBoost
+(0.782), where XGBoost had won under test-split selection. Random Forest was
+also bounded with `min_samples_leaf=10` — unbounded, its 500 fully-grown
+trees produced a 129 MB artifact that exceeds GitHub's file limit and could
+not be committed to the registry at all.
