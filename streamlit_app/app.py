@@ -29,7 +29,7 @@ st.markdown("Predict price zones and estimated values for NYC properties using M
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_models():
-    """Load classifier + regressor + label encoder + thresholds. Returns Nones on failure.
+    """Load classifier + regressor + label encoder. Returns Nones on failure.
 
     The label encoder is loaded alongside the classifier because it is the
     single source of truth for decoding class indices into zone names: the
@@ -43,13 +43,9 @@ def load_models():
         zone_classes = [
             str(c) for c in joblib.load(MODELS_DIR / "label_encoder.joblib").classes_
         ]
-        thresholds = None
-        thresh_path = MODELS_DIR / "optimal_thresholds.joblib"
-        if thresh_path.exists():
-            thresholds = joblib.load(thresh_path)
-        return clf, reg, zone_classes, thresholds
+        return clf, reg, zone_classes
     except FileNotFoundError:
-        return None, None, None, None
+        return None, None, None
 
 
 def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
@@ -115,7 +111,7 @@ with col2:
     st.subheader("Prediction Results")
 
     if predict_btn:
-        clf, reg, zone_classes, thresholds = load_models()
+        clf, reg, zone_classes = load_models()
 
         if clf is None or reg is None or zone_classes is None:
             st.error("Models not found. Train them first: `python run_training.py`")
@@ -134,12 +130,10 @@ with col2:
             # encoder's class order (zone_classes), never the config list.
             proba = clf.predict_proba(features)[0]
 
-            # served_zone picks the class actually served (threshold logic in
-            # threshold mode, else argmax) and returns confidence as the
-            # probability of THAT class — not proba.max(), which in threshold
-            # mode can name a different class than the one shown.
-            from src.models.threshold import served_zone
-            zone_name, confidence = served_zone(proba, zone_classes, thresholds)
+            # served_zone is the same decode the API uses, so both surfaces
+            # answer identically for identical input.
+            from src.models.decode import served_zone
+            zone_name, confidence = served_zone(proba, zone_classes)
 
             # Regression
             log_price = float(reg.predict(features)[0])

@@ -6,6 +6,36 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — test-set contamination removed (headline numbers move)
+
+- **Three-way train/val/test split.** Model selection (both classifiers and
+  all three regressors) previously compared candidates on the *test* split
+  and then published the winner's score from that same split — a selected
+  maximum reported as a hold-out estimate. Candidates are now compared on a
+  new val split (2,882 / 721 / 901) and test is scored exactly once, by the
+  already-selected model.
+- **Deep-learning early stopping no longer watches test.** `patience=15` was
+  evaluated against the test labels, which selects the stopping epoch on test.
+  It now reads the val split.
+- **Per-class threshold tuning removed entirely.** Thresholds were fitted
+  against the test labels and the resulting macro F1 (0.724) published as a
+  hold-out result, so the advertised +0.014 gain over argmax was in-sample.
+  Fitted on one half of the test set and scored on the other across 20
+  stratified splits, the effect is +0.0006 (std 0.0106), helping 12 and
+  hurting 8 — noise. Removed rather than moved to val. `src/models/threshold.py`
+  is replaced by `src/models/decode.py` (argmax only, one shared decode for
+  API + dashboard); `models/optimal_thresholds.joblib` is deleted.
+- **Reported metrics (test split, this retrain):** classification macro F1
+  **0.698** (XGBoost; 0.713 on val), regression R² **0.800** (LightGBM;
+  0.790 on val). The drop from the old 0.711 argmax figure is the cost of
+  carving a real validation split out of training data — 2,882 training rows
+  instead of 3,603 — and the drop from 0.724 is the removal of the
+  contamination itself.
+- **`assert_no_leakage` rejects any price-derived name.** It enumerated five
+  spellings, so `["BEDS", "PRICE"]` — the raw target — passed the leakage
+  guard. It now rejects any feature name containing "price"; no legitimate
+  feature in `src/config.py` does.
+
 ### Added
 - `LICENSE` (MIT) matching the README stack-table claim.
 - `SECURITY.md` with disclosure policy + in-scope / out-of-scope boundaries.

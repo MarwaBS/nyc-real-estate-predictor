@@ -21,14 +21,14 @@ Live demo of an end-to-end ML service for NYC real estate. Pick a property profi
 - **Streamlit** on `:7860` — the dashboard you see above. It runs the prediction **in-process**, importing the same `src/` serving code the API uses.
 - **FastAPI** on `localhost:8000` — `/predict`, `/health`. Started alongside the dashboard (the entrypoint waits for its `/health` before Streamlit comes up), but HF Spaces only exposes port 7860, so the API is **not reachable from outside this container**. To call the API yourself, run the repo's Docker image locally (see the GitHub README).
 
-> **This is a portfolio demo, not a deployable real-estate predictor.** The model is trained on a 4,504-row Kaggle snapshot of NYC listings; it will drift against current-market reality. See the `MODEL_CARD.md` in the GitHub repo for the full framing, fairness analysis (per-borough disparity), and the data-leakage story (R²=0.997 → 0.815 honest).
+> **This is a portfolio demo, not a deployable real-estate predictor.** The model is trained on a 4,504-row Kaggle snapshot of NYC listings; it will drift against current-market reality. See the `MODEL_CARD.md` in the GitHub repo for the full framing, fairness analysis (per-borough disparity), and the data-leakage story (R²=0.997 → 0.800 honest).
 
 ## How the prediction works
 
 1. The sidebar collects property inputs (beds, bath, sqft, borough, type, zipcode, lat/long).
 2. `build_features` derives the model's feature frame (room ratios, log-sqft, distances to Manhattan Center / Central Park), then the train-time frequency cap is mirrored via `apply_serving_cap` (train/serve parity).
-3. The XGBoost zone classifier produces per-class probabilities; the served zone is decoded by `served_zone` — per-class threshold logic when the tuned thresholds artifact ships, argmax otherwise — through the **shipped label encoder's** class order.
-4. The XGBoost regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows a ±15% range.
+3. The XGBoost zone classifier produces per-class probabilities; the served zone is decoded by `served_zone` (argmax) through the **shipped label encoder's** class order.
+4. The LightGBM regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows a ±15% range.
 
 Both the dashboard and the API decode through the same `served_zone` function, so what you see here is the same decision rule the API serves.
 
@@ -39,8 +39,8 @@ Both the dashboard and the API decode through the same `served_zone` function, s
 | End-to-end ML pipeline (clean → feature-engineer → model → serve → UI) | Predict 2026 NYC prices accurately (data is a snapshot) |
 | Multi-model comparison (XGBoost / LightGBM / Random Forest) | Beat Zillow Zestimate at scale |
 | Data-leakage detection + ADR-001 documentation | Provide loan-grade pricing |
-| Fairness-by-borough analysis (Queens F1=0.613 → Staten Island 0.778) | Mitigate the documented disparity |
-| Per-class threshold tuning (+0.014 macro F1) | Online learning |
+| Fairness-by-borough analysis (Queens F1=0.591 → Staten Island 0.777) | Mitigate the documented disparity |
+| Val/test separation — selection on val, test scored once | Online learning |
 
 ## Links
 
