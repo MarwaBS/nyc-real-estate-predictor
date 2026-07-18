@@ -19,11 +19,20 @@
 FROM python:3.12-slim-bookworm
 
 # ── System deps + OS security patches ──────────────────────────────────────
+# libgomp1 is the OpenMP runtime LightGBM dlopens at import; the shipped
+# regressor is a LightGBM model, so without it every prediction fails with
+# `OSError: libgomp.so.1`. It is named EXPLICITLY even though build-essential
+# already pulls it in transitively via gcc: relying on that means the day
+# someone trims build-essential (it is only here for source builds, and every
+# pinned dep ships a manylinux wheel) the demo breaks at predict time with an
+# error that points at LightGBM rather than at the removed package. The
+# project-root Dockerfile hit exactly this failure with no such cushion.
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         curl \
         build-essential \
+        libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

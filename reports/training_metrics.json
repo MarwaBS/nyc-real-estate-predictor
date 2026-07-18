@@ -1,6 +1,6 @@
 {
-  "run_date": "2026-07-18T20:31:59.534965+00:00",
-  "commit_sha": "02622336979ecd46d7a3273076d3a0c7b986b5b6",
+  "run_date": "2026-07-18T21:15:56.562938+00:00",
+  "commit_sha": "955965675c9b50159f97f8a6323e9b7cbb668dd6",
   "working_tree_clean": false,
   "provenance": {
     "python": "3.12.13",
@@ -271,9 +271,9 @@
     },
     "candidates_val": {
       "random_forest": {
-        "r2": 0.7875048269311565,
-        "rmse": 0.4729738411412678,
-        "mae_usd": 848687.935448743
+        "r2": 0.7875048269311564,
+        "rmse": 0.47297384114126784,
+        "mae_usd": 848687.9354487429
       },
       "xgboost": {
         "r2": 0.7819038744119567,
@@ -285,6 +285,14 @@
         "rmse": 0.47058820457543654,
         "mae_usd": 787414.8160742085
       }
+    },
+    "price_interval": {
+      "target_coverage": 0.8,
+      "low_multiplier": 0.6243,
+      "high_multiplier": 1.5983,
+      "calibrated_on": "val",
+      "coverage_val": 0.8003,
+      "coverage_test": 0.7902
     }
   },
   "note": "Training data and model artefacts are local-only (DVC, no public remote), so these numbers are not independently reproducible by a stranger; the independently reproducible evidence for this repo is benchmarks/results.json (committed model + public NYC.gov data)."

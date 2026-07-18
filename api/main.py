@@ -8,7 +8,7 @@ import math
 from typing import Any
 
 import pandas as pd
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -48,11 +48,11 @@ app.add_middleware(
 
 # Rate limiting — slowapi is a hard dependency, and the limit is actually
 # WIRED to the prediction route below (a Limiter with no decorated routes
-# enforces nothing). The limit comes from settings (DAILY_RATE_LIMIT env), not a
-# hardcoded literal — previously `settings.daily_rate_limit` was dead config while
+# enforces nothing). The limit comes from settings (PREDICT_RATE_LIMIT env), not a
+# hardcoded literal — previously `settings.predict_rate_limit` was dead config while
 # this constant silently overrode it. /health stays unlimited: k8s/uptime probes
 # must never be throttled into flapping.
-PREDICT_RATE_LIMIT = _settings.daily_rate_limit
+PREDICT_RATE_LIMIT = _settings.predict_rate_limit
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 # starlette types the handler's exc param as the base Exception; slowapi's
@@ -207,9 +207,12 @@ def _build_features(prop: PropertyInput) -> pd.DataFrame:
 def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
     """Predict price zone and estimated price for a property.
 
-    Rate-limited per client IP (``PREDICT_RATE_LIMIT``); the 61st request
-    in a minute receives HTTP 429 from slowapi's handler. The ``request``
-    parameter is required by slowapi's decorator contract.
+    Rate-limited per client IP at the configured ``PREDICT_RATE_LIMIT``;
+    requests beyond it receive HTTP 429 from slowapi's handler. The rate is
+    deployment-configurable, so no specific request count is quoted here —
+    this docstring is rendered into the public /docs page, where a hardcoded
+    number would misdescribe every deployment that overrides the default.
+    The ``request`` parameter is required by slowapi's decorator contract.
     """
     try:
         features = _build_features(prop)
@@ -227,6 +230,7 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
         # served_zone is the single serving decode for BOTH surfaces (API +
         # dashboard), so the two cannot drift apart on the same input.
         from src.models.decode import served_zone
+        from src.models.predict import price_range
 
         zone_name, confidence = served_zone(proba, zone_classes)
 
@@ -245,10 +249,9 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
             ),
             price=PricePrediction(
                 predicted_price=round(price, -2),
-                price_range={
-                    "low": round(price * 0.85, -2),
-                    "high": round(price * 1.15, -2),
-                },
+                # Same calibrated interval the predict module and dashboard
+                # serve — one implementation, so the three cannot disagree.
+                price_range=price_range(price),
             ),
         )
     except FileNotFoundError as exc:
@@ -272,31 +275,45 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
 
 
 @app.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+def health(response: Response) -> HealthResponse:
     """Health check — reports serving-stack availability. Not auth-gated.
+
+    A failed probe returns **503**, not 200 with a false flag in the body.
+    Every consumer of this endpoint checks the HTTP status and none reads the
+    body: the Dockerfile HEALTHCHECK (``curl -fsS``), docker-compose's
+    ``service_healthy`` gate for the dashboard, the HF Space start script, and
+    the CI smoke test, which pipes the body to /dev/null. While this returned
+    a hardcoded "ok", a container with zero models loaded passed all four.
 
     The label encoder is verified EXPLICITLY, not just the classifier and
     regressor: it is the source of truth for decoding class indices into zone
     names, so a loadable clf/reg with a missing or unloadable encoder would
     still serve mislabeled zones. ``models_loaded`` is therefore true only when
-    all three load; ``label_encoder_loaded`` surfaces the encoder on its own."""
+    all three load; ``label_encoder_loaded`` surfaces the encoder on its own.
+    """
     clf_reg_ok = False
     try:
         _get_classifier()
         _get_regressor()
         clf_reg_ok = True
     except Exception:
-        pass
+        # Logged, not swallowed: a silent probe failure is how an unhealthy
+        # container looks identical to a healthy one in the logs.
+        logger.exception("Health probe: classifier/regressor failed to load")
 
     encoder_ok = False
     try:
         _get_label_encoder()
         encoder_ok = True
     except Exception:
-        pass
+        logger.exception("Health probe: label encoder failed to load")
+
+    models_loaded = clf_reg_ok and encoder_ok
+    if not models_loaded:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return HealthResponse(
-        status="ok",
-        models_loaded=clf_reg_ok and encoder_ok,
+        status="ok" if models_loaded else "degraded",
+        models_loaded=models_loaded,
         label_encoder_loaded=encoder_ok,
     )
