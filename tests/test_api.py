@@ -37,7 +37,7 @@ def _models_present() -> bool:
 @contextmanager
 def reloaded_app(**env: str | None) -> Iterator[object]:
     """Reload ``api.main`` with the given env applied so import-time globals
-    (``api_key``, ``daily_rate_limit`` → the limiter decorator) are rebuilt.
+    (``api_key``, ``predict_rate_limit`` → the limiter decorator) are rebuilt.
     ``None`` deletes the var for the duration of the block."""
     saved = {k: os.environ.get(k) for k in env}
     try:
@@ -99,10 +99,37 @@ def test_health_reports_label_encoder_unloadable(
     monkeypatch.setattr(m, "_get_label_encoder", _encoder_missing)
 
     resp = TestClient(m.app).get("/health")
-    assert resp.status_code == 200, resp.text
+    # 503, not 200: every consumer of /health checks the HTTP status and none
+    # reads the body, so a 200 here means a container serving mislabeled zones
+    # is reported healthy to Docker, docker-compose, the HF Space, and CI.
+    assert resp.status_code == 503, resp.text
     data = resp.json()
+    assert data["status"] == "degraded"
     assert data["label_encoder_loaded"] is False
     assert data["models_loaded"] is False
+
+
+def test_health_returns_503_when_no_models_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A container with nothing loaded must fail its healthcheck.
+
+    This is the case the CI smoke test (`curl -fsS /health`, body discarded)
+    is meant to catch. While /health returned a hardcoded "ok", an image
+    built with zero model artifacts passed that gate green.
+    """
+    import api.main as m
+
+    def _missing() -> object:
+        raise FileNotFoundError("no artifacts in image")
+
+    monkeypatch.setattr(m, "_get_classifier", _missing)
+    monkeypatch.setattr(m, "_get_regressor", _missing)
+    monkeypatch.setattr(m, "_get_label_encoder", _missing)
+
+    resp = TestClient(m.app).get("/health")
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["models_loaded"] is False
 
 
 def test_health_reports_healthy_when_full_stack_loads(
@@ -137,7 +164,11 @@ def test_predict_returns_200_with_valid_input() -> None:
     assert set(body) == {"zone", "price"}
     assert body["zone"]["price_zone"] in {"Low", "Medium", "High", "Very High"}
     assert 0.0 <= body["zone"]["confidence"] <= 1.0
-    assert body["price"]["predicted_price"] > 0
+    # A floor with domain meaning, not `> 0`: the payload is a 1,200 sqft
+    # Manhattan condo, and the cheapest row anywhere in the training data is
+    # ~$2.5k. `> 0` would have passed the historical bug that served a
+    # Manhattan condo at single-digit dollars.
+    assert body["price"]["predicted_price"] > 10_000, body["price"]
     assert body["price"]["price_range"]["low"] <= body["price"]["price_range"]["high"]
 
 
@@ -220,7 +251,7 @@ def test_predict_rate_limit_returns_429() -> None:
     """Under a tight per-IP limit, repeated calls eventually return 429. The limit
     is enforced before the body, so this holds even when models are absent (the
     pre-429 calls may be 200 or 503; only the 429 transition matters)."""
-    with reloaded_app(DAILY_RATE_LIMIT="3/minute") as m:
+    with reloaded_app(PREDICT_RATE_LIMIT="3/minute") as m:
         c = TestClient(m.app)
         statuses = [
             c.post("/predict", json=VALID_PAYLOAD).status_code for _ in range(8)

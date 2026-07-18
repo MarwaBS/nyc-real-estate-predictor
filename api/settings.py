@@ -7,7 +7,7 @@ Three environment variables drive the API's security posture:
     ALLOWED_ORIGINS         — comma-separated list; default "*"
     API_KEY                 — if set, /predict requires X-API-Key header
                               matching; if unset, /predict is open (dev mode)
-    DAILY_RATE_LIMIT        — slowapi-style rate limit for /predict; default
+    PREDICT_RATE_LIMIT      — slowapi-style rate limit for /predict; default
                               "60/minute" (wired to the route, overridable)
 
 The `validate_cors_not_wildcard_in_prod` model-validator is the critical
@@ -42,12 +42,16 @@ class APISettings(BaseSettings):
             "comparison). If empty, /predict is open (dev/portfolio mode)."
         ),
     )
-    daily_rate_limit: str = Field(
+    # Renamed from daily_rate_limit: the name promised a daily quota while
+    # the value was per-minute, so "60/minute" advertised a cap of 60 while
+    # permitting 86,400 requests a day. The window now lives in the value,
+    # where a reader can see it.
+    predict_rate_limit: str = Field(
         default="60/minute",
         description=(
             "slowapi-format rate limit for /predict (per client IP). Read by the "
             "API at import time and applied to the route; override via the "
-            "DAILY_RATE_LIMIT env var."
+            "PREDICT_RATE_LIMIT env var."
         ),
     )
 

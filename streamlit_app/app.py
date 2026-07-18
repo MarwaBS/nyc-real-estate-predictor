@@ -142,7 +142,17 @@ with col2:
             # Display results
             st.metric("Price Zone", zone_name, f"{confidence:.0%} confidence")
             st.metric("Estimated Price", f"${price:,.0f}")
-            st.caption(f"Range: ${price * 0.85:,.0f} - ${price * 1.15:,.0f}")
+            # Same calibrated interval the API serves, and labelled with the
+            # coverage it was measured to achieve — a range without its
+            # coverage invites the reader to assume a precision it lacks.
+            from src.models.predict import get_price_interval, price_range
+
+            band = price_range(price)
+            target = get_price_interval()["target_coverage"]
+            st.caption(
+                f"{target:.0%} of listings fall in ${band['low']:,.0f} - "
+                f"${band['high']:,.0f}"
+            )
 
             # Probability chart — plotly preserves zone ordering (st.bar_chart sorts alphabetically and truncates "Very High").
             # Probabilities are keyed by the encoder's class order, then

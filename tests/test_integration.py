@@ -137,7 +137,6 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
         f"accuracy {clf_metrics['accuracy']:.3f} does not beat the "
         f"majority-class baseline {majority_rate:.3f}"
     )
-    assert 0 <= clf_metrics["macro_f1"] <= 1.0
 
     # 5. Train regression
     reg_pipeline = build_regression_pipeline(
@@ -146,7 +145,13 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
     reg_pipeline.fit(x_train, yp_train)
     reg_pred = reg_pipeline.predict(x_test)
     reg_metrics = evaluate_regressor(yp_test, reg_pred, log_target=True)
-    assert reg_metrics["r2"] > -10, "Regressor R2 must be reasonable"
+    # R2 > 0 is the meaningful floor: R2 is defined so that predicting the
+    # target's mean scores exactly 0, so this asserts the regressor beats the
+    # trivial baseline. The previous bound (-10) was satisfied by a constant
+    # predictor and by almost any broken model.
+    assert reg_metrics["r2"] > 0, (
+        f"R2 {reg_metrics['r2']:.3f} does not beat predicting the mean"
+    )
 
     # 6. Predict single sample
     single = x_test.iloc[:1]

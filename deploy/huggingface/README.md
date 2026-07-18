@@ -15,7 +15,7 @@ short_description: NYC price-zone classification + regression with XGBoost
 [![XGBoost](https://img.shields.io/badge/ML-XGBoost-orange)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/MODEL_CARD.md)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/api/main.py)
 
-Live demo of an end-to-end ML service for NYC real estate. Pick a property profile in the sidebar and the dashboard returns a **price zone** (Low / Medium / High / Very High) plus an **estimated price** with a ±15% range.
+Live demo of an end-to-end ML service for NYC real estate. Pick a property profile in the sidebar and the dashboard returns a **price zone** (Low / Medium / High / Very High) plus an **estimated price** with a range calibrated to contain 80% of listings (measured 79.0% on held-out data).
 
 **Two processes, one container:**
 - **Streamlit** on `:7860` — the dashboard you see above. It runs the prediction **in-process**, importing the same `src/` serving code the API uses.
@@ -28,7 +28,7 @@ Live demo of an end-to-end ML service for NYC real estate. Pick a property profi
 1. The sidebar collects property inputs (beds, bath, sqft, borough, type, zipcode, lat/long).
 2. `build_features` derives the model's feature frame (room ratios, log-sqft, distances to Manhattan Center / Central Park), then the train-time frequency cap is mirrored via `apply_serving_cap` (train/serve parity).
 3. The XGBoost zone classifier produces per-class probabilities; the served zone is decoded by `served_zone` (argmax) through the **shipped label encoder's** class order.
-4. The LightGBM regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows a ±15% range.
+4. The LightGBM regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows the calibrated interval from `models/price_interval.json` (0.624x-1.598x the point estimate), labelled with the coverage it was measured to achieve.
 
 Both the dashboard and the API decode through the same `served_zone` function, so what you see here is the same decision rule the API serves.
 
