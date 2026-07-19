@@ -5,6 +5,7 @@ Both serving surfaces (the API and the Streamlit dashboard) call
 once before — the API decoded one way and the dashboard another, so the two
 disagreed on the same input — and one shared function is what stops that.
 """
+
 from __future__ import annotations
 
 import numpy as np

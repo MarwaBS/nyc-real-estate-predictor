@@ -1,4 +1,5 @@
 """Train price zone classification models — XGBoost, LightGBM, CatBoost, RF."""
+
 from __future__ import annotations
 
 import logging
@@ -7,8 +8,7 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, StackingClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
 from src.config import (
@@ -33,17 +33,20 @@ def _get_feature_columns() -> list[str]:
 
 
 def _resample_smote_enn(
-    X: pd.DataFrame, y: np.ndarray,
+    X: pd.DataFrame,
+    y: np.ndarray,
 ) -> tuple[pd.DataFrame, np.ndarray]:
     """Apply SMOTE-ENN for balanced resampling (better than SMOTE alone)."""
     try:
         from imblearn.combine import SMOTEENN
+
         sampler = SMOTEENN(random_state=RANDOM_SEED)
         X_res, y_res = sampler.fit_resample(X, y)
         logger.info("SMOTE-ENN: %d -> %d samples", len(X), len(X_res))
         return pd.DataFrame(X_res, columns=X.columns), y_res
     except ImportError:
         from imblearn.over_sampling import SMOTE
+
         sampler = SMOTE(random_state=RANDOM_SEED)
         X_res, y_res = sampler.fit_resample(X, y)
         logger.info("SMOTE fallback: %d -> %d samples", len(X), len(X_res))
@@ -149,7 +152,12 @@ def tune_with_optuna(
         model = builder(trial)
         pipeline = build_classification_pipeline(model, preprocessor)
         scores = cross_val_score(
-            pipeline, X_train, y_train, cv=skf, scoring="f1_macro", n_jobs=-1,
+            pipeline,
+            X_train,
+            y_train,
+            cv=skf,
+            scoring="f1_macro",
+            n_jobs=-1,
         )
         return float(scores.mean())
 
@@ -196,8 +204,11 @@ def train_and_evaluate(
     logger.info("=== Training Random Forest baseline ===")
     rf_pipeline = build_classification_pipeline(
         RandomForestClassifier(
-            n_estimators=500, max_depth=20, class_weight="balanced_subsample",
-            random_state=RANDOM_SEED, n_jobs=-1,
+            n_estimators=500,
+            max_depth=20,
+            class_weight="balanced_subsample",
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         )
     )
     rf_pipeline.fit(X_train, y_train)
@@ -233,7 +244,9 @@ def train_and_evaluate(
     best_name = max(results, key=lambda k: results[k]["macro_f1"])
     best_pipeline = results[best_name]["pipeline"]
 
-    logger.info("Best classifier: %s (macro_f1=%.4f)", best_name, results[best_name]["macro_f1"])
+    logger.info(
+        "Best classifier: %s (macro_f1=%.4f)", best_name, results[best_name]["macro_f1"]
+    )
 
     # Save best model
     model_path = MODELS_DIR / "price_zone_best.joblib"
@@ -243,7 +256,9 @@ def train_and_evaluate(
     # Fairness analysis by borough
     if borough_test is not None:
         best_pred = best_pipeline.predict(X_test)
-        results["fairness"] = evaluate_fairness_by_group(y_test, best_pred, borough_test)
+        results["fairness"] = evaluate_fairness_by_group(
+            y_test, best_pred, borough_test
+        )
 
     return results
 

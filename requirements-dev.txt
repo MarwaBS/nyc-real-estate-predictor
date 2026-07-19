@@ -16,3 +16,12 @@ pandas-stubs>=2.2
 # Security
 pip-audit>=2.7
 bandit>=1.7
+
+# External-benchmark data path (benchmarks/datasets/nyc_rolling_sales_2024.py):
+# `requests` downloads the NYC.gov rolling-sales workbooks and `openpyxl` is the
+# engine pandas.read_excel needs to parse them. Both were previously undeclared
+# — requests resolved transitively through streamlit and openpyxl only via an
+# inline `pip install` in benchmark.yml, so a fresh env could import the module
+# and fail at download time.
+requests==2.34.2
+openpyxl==3.1.5
