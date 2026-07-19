@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 # the upstream export, not a listing price.
 INT32_MAX = 2_147_483_647
 
+# The columns clean_pipeline dereferences unconditionally. Checked up front so
+# a caller passing the wrong frame gets a named failure instead of a KeyError
+# from whichever step happens to touch a missing column first.
+_REQUIRED_RAW_COLUMNS = frozenset(
+    {"PRICE", "PROPERTYSQFT", "LATITUDE", "LONGITUDE", "BEDS", "BATH"}
+)
+
 
 def deduplicate(df: pd.DataFrame) -> pd.DataFrame:
     """Remove exact duplicates and near-duplicates by lat/lon + price."""
@@ -174,7 +181,20 @@ def normalize_type(df: pd.DataFrame, col: str = "TYPE") -> pd.DataFrame:
 
 
 def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
-    """Run the full cleaning pipeline end-to-end."""
+    """Run the full cleaning pipeline end-to-end on a RAW frame.
+
+    Single-pass by design, and not idempotent: ``cap_outliers`` recomputes its
+    IQR bounds from whatever it is given, so cleaning an already-cleaned frame
+    tightens the cap around the previously capped distribution and drops
+    further rows. The input is the raw export; ``run_training.py`` is the only
+    caller and passes ``load_raw()``.
+    """
+    missing = sorted(_REQUIRED_RAW_COLUMNS - set(df.columns))
+    if missing:
+        raise KeyError(
+            f"clean_pipeline requires the raw export columns; missing: {missing}"
+        )
+
     logger.info("Starting cleaning pipeline on %d rows", len(df))
 
     df = deduplicate(df)
@@ -196,10 +216,16 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     df = impute_missing(df)
 
     # Drop 32-bit integer overflow sentinels before capping. The raw snapshot
-    # holds exactly one PRICE of 2,147,483,647 (2**31 - 1) where the next
-    # highest real listing is 195,000,000 -- it is a serialisation artefact,
-    # not a price. Capping would silently convert it into a plausible-looking
-    # listing at the IQR bound rather than removing it, so it has to go first.
+    # holds exactly one PRICE of 2,147,483,647 (2**31 - 1); the next highest
+    # real listing is 195,000,000, so this is a serialisation artefact rather
+    # than an expensive property. It is removed rather than capped because it
+    # is not a price at all -- unlike the genuine high-end listings the cap
+    # legitimately clips, which stay in the dataset at the cap value.
+    #
+    # The threshold catches this sentinel and anything above it; it is not a
+    # general implausible-price filter. A merely absurd value (say 2**31 - 2)
+    # would still be capped like any other outlier, which is the right
+    # treatment for a number that could be a price.
     before = len(df)
     df = df[df["PRICE"] < INT32_MAX]
     logger.info("Dropped %d rows with overflow-sentinel PRICE", before - len(df))

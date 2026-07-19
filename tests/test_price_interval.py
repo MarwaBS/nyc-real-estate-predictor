@@ -57,19 +57,21 @@ def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
         def predict(self, X: pd.DataFrame) -> np.ndarray:
             return np.full(len(X), np.log1p(1.0))
 
-    # Disjoint ranges, so val-quantiles and test-quantiles cannot coincide.
+    # Disjoint ranges, so the two splits' quantiles cannot coincide. Named
+    # "val"/"holdout" rather than "val"/"test" because calibrating on a split
+    # named "test" is refused outright -- see the leak test below.
     val = pd.Series(np.log1p(rng.uniform(1.0, 2.0, 500)))
-    test = pd.Series(np.log1p(rng.uniform(10.0, 20.0, 500)))
+    holdout = pd.Series(np.log1p(rng.uniform(10.0, 20.0, 500)))
     splits = {
         "val": (pd.DataFrame({"f": np.zeros(500)}), val),
-        "test": (pd.DataFrame({"f": np.zeros(500)}), test),
+        "holdout": (pd.DataFrame({"f": np.zeros(500)}), holdout),
     }
 
     on_val = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="val")
-    on_test = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="test")
+    on_test = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="holdout")
 
     assert on_val["calibrated_on"] == "val"
-    assert on_test["calibrated_on"] == "test"
+    assert on_test["calibrated_on"] == "holdout"
     # The stub predicts a flat $1, so each multiplier is a quantile of that
     # split's own actuals: val must land inside [1, 2] and test inside
     # [10, 20], the ranges the two splits were drawn from. Asserting the
@@ -77,6 +79,22 @@ def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
     # slack factor picked to pass rather than a derived expectation.
     assert 1.0 <= on_val["high_multiplier"] <= 2.0
     assert 10.0 <= on_test["high_multiplier"] <= 20.0
+
+
+def test_calibrate_price_interval_refuses_to_calibrate_on_test() -> None:
+    """The leak must be refused at the call, not merely labelled afterwards.
+
+    Changing the call site to calibrate_on="test" previously left all 140
+    tests green: the artefact-reading gate above only inspects the committed
+    file, and CI never retrains, so the leak would ship and be detected only
+    once someone regenerated and committed the artefact.
+    """
+    splits = {
+        "val": (pd.DataFrame({"f": [0.0]}), pd.Series([1.0])),
+        "test": (pd.DataFrame({"f": [0.0]}), pd.Series([1.0])),
+    }
+    with pytest.raises(ValueError, match="out-of-sample"):
+        calibrate_price_interval(object(), splits, calibrate_on="test")
 
 
 def test_calibrate_price_interval_rejects_an_unknown_split() -> None:

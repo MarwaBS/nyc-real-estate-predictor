@@ -442,6 +442,19 @@ def calibrate_price_interval(
     if calibrate_on not in splits:
         raise KeyError(f"calibrate_on={calibrate_on!r} is not one of {sorted(splits)}")
 
+    # Refuse to fit the served interval on the split its coverage is reported
+    # against. Labelling is now honest either way, but honesty about a leak is
+    # not a substitute for not shipping one: `coverage_test` is advertised as
+    # an out-of-sample number, and calibrating here would make it in-sample by
+    # construction. The call site was one word away from that, and no test
+    # could catch it -- CI never retrains, so the artefact-reading gate only
+    # notices after someone regenerates the file and commits it.
+    if calibrate_on == "test":
+        raise ValueError(
+            "refusing to calibrate the served interval on the test split: "
+            "coverage_test is reported as out-of-sample evidence"
+        )
+
     lo_q, hi_q = (1.0 - target) / 2.0, 1.0 - (1.0 - target) / 2.0
 
     def ratio(X: pd.DataFrame, y_log: pd.Series) -> np.ndarray:
@@ -484,6 +497,13 @@ def _git_working_tree_clean() -> bool | None:
 
     A metrics artefact generated from a dirty tree cannot be tied to its
     commit_sha's source, so the flag is recorded rather than assumed.
+
+    MUST be sampled before the run writes anything. This training script
+    produces models/, output/cleaned_house_dataset.csv and price_interval.json,
+    so calling it at write time inspects a tree the script has already dirtied
+    and the field records ``false`` on every run, including runs that started
+    from a pristine checkout. A provenance flag that can never read ``true``
+    reports nothing.
     """
     try:
         out = subprocess.run(
@@ -498,6 +518,7 @@ def _git_working_tree_clean() -> bool | None:
 
 
 def _write_training_metrics(
+    tree_clean_at_start: bool | None,
     clf_record: dict[str, Any],
     reg_record: dict[str, Any],
     *,
@@ -507,13 +528,15 @@ def _write_training_metrics(
     features: list[str],
 ) -> None:
     """Write ``reports/training_metrics.json`` — the committed artefact the
-    README's headline numbers must quote. Models and data stay local (DVC
-    without a remote), so this file plus its provenance block is the
-    auditable record of what a training run actually produced."""
+    README's headline numbers must quote.
+
+    ``tree_clean_at_start`` is passed in rather than sampled here: see
+    ``_git_working_tree_clean``. By the time this runs the script has already
+    written the models and the cleaned dataset."""
     artefact = {
         "run_date": _dt.datetime.now(_dt.UTC).isoformat(),
         "commit_sha": _git_commit_sha(),
-        "working_tree_clean": _git_working_tree_clean(),
+        "working_tree_clean": tree_clean_at_start,
         "provenance": {
             "python": sys.version.split()[0],
             "numpy": np.__version__,
@@ -534,11 +557,12 @@ def _write_training_metrics(
         "classification": clf_record,
         "regression": reg_record,
         "note": (
-            "Training data and model artefacts are local-only (DVC, no "
-            "public remote), so these numbers are not independently "
-            "reproducible by a stranger; the independently reproducible "
-            "evidence for this repo is benchmarks/results.json (committed "
-            "model + public NYC.gov data)."
+            "Reproducible from a clean clone: the raw Kaggle CSV "
+            "(Resources/NY-House-Dataset.csv) and every model artefact are "
+            "committed, so `python run_training.py` regenerates this file and "
+            "the models it describes. A prior revision claimed these numbers "
+            "were not independently reproducible, which was true only while "
+            "the data sat behind a DVC remote that was never configured."
         ),
     }
     reports_dir = Path("reports")
@@ -553,6 +577,10 @@ def _write_training_metrics(
 def main() -> None:
     """Run the full training pipeline."""
     logger.info("NYC PRICE PREDICTION — TRAINING PIPELINE")
+
+    # Sampled first: prepare_data writes the cleaned dataset, so anything
+    # after this point sees a tree this script dirtied.
+    tree_clean_at_start = _git_working_tree_clean()
 
     # 1. Prepare data
     df, y_zone, y_log_price, borough = prepare_data()
@@ -687,6 +715,7 @@ def main() -> None:
     # is +0.0006 mean with std 0.0106, helping 12 splits and hurting 8: noise.
     # Serving decodes with argmax.
     _write_training_metrics(
+        tree_clean_at_start,
         clf_record,
         reg_record,
         n_train=len(X_train),
