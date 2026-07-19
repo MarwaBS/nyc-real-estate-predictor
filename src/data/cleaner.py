@@ -1,9 +1,9 @@
 """Data cleaning pipeline — deduplicate, impute, normalize, validate."""
+
 from __future__ import annotations
 
 import logging
 
-import numpy as np
 import pandas as pd
 
 from src.config import BOROUGH_MAP
@@ -78,7 +78,13 @@ def cap_outliers(
         n_capped = (result[col] != capped).sum()
         result[col] = capped
         if n_capped > 0:
-            logger.info("Capped %d outliers in %s (range: %.0f - %.0f)", n_capped, col, lower, upper)
+            logger.info(
+                "Capped %d outliers in %s (range: %.0f - %.0f)",
+                n_capped,
+                col,
+                lower,
+                upper,
+            )
 
     return result
 

@@ -1,4 +1,5 @@
 """Model evaluation — metrics, confusion matrix, reports, plots."""
+
 from __future__ import annotations
 
 import logging
@@ -43,7 +44,10 @@ def evaluate_classifier(
         "labels": list(labels) if labels is not None else None,
         "confusion_matrix": confusion_matrix(y_true, y_pred).tolist(),
         "classification_report": classification_report(
-            y_true, y_pred, target_names=labels, output_dict=True,
+            y_true,
+            y_pred,
+            target_names=labels,
+            output_dict=True,
         ),
     }
 
@@ -72,9 +76,13 @@ def evaluate_regressor(
         # Convert back to original scale for interpretable metrics
         y_true_orig = np.expm1(y_true)
         y_pred_orig = np.expm1(y_pred)
-        metrics["rmse_usd"] = float(np.sqrt(mean_squared_error(y_true_orig, y_pred_orig)))
+        metrics["rmse_usd"] = float(
+            np.sqrt(mean_squared_error(y_true_orig, y_pred_orig))
+        )
         metrics["mae_usd"] = float(mean_absolute_error(y_true_orig, y_pred_orig))
-        metrics["mape"] = float(mean_absolute_percentage_error(y_true_orig, y_pred_orig))
+        metrics["mape"] = float(
+            mean_absolute_percentage_error(y_true_orig, y_pred_orig)
+        )
 
     logger.info(
         "Regression: R2=%.4f, RMSE=%.4f, MAE=%.4f",

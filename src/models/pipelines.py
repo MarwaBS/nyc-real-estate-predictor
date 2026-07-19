@@ -1,4 +1,5 @@
 """sklearn Pipeline + ColumnTransformer definitions — reproducible preprocessing."""
+
 from __future__ import annotations
 
 import logging
@@ -14,10 +15,13 @@ logger = logging.getLogger(__name__)
 # Target encoding requires category_encoders — optional dependency
 try:
     from category_encoders import TargetEncoder
+
     _HAS_TARGET_ENCODER = True
 except ImportError:
     _HAS_TARGET_ENCODER = False
-    logger.warning("category_encoders not installed — falling back to OneHot for high-cardinality features")
+    logger.warning(
+        "category_encoders not installed — falling back to OneHot for high-cardinality features"
+    )
 
 
 def build_preprocessor(
@@ -36,7 +40,11 @@ def build_preprocessor(
 
     transformers = [
         ("num", StandardScaler(), numeric_features),
-        ("cat_onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False), onehot_features),
+        (
+            "cat_onehot",
+            OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+            onehot_features,
+        ),
     ]
 
     if target_encoded_features:
@@ -49,7 +57,9 @@ def build_preprocessor(
             transformers.append(
                 (
                     "cat_fallback",
-                    OneHotEncoder(handle_unknown="ignore", sparse_output=False, max_categories=50),
+                    OneHotEncoder(
+                        handle_unknown="ignore", sparse_output=False, max_categories=50
+                    ),
                     target_encoded_features,
                 ),
             )
@@ -75,10 +85,12 @@ def build_classification_pipeline(
 ) -> Pipeline:
     """Wrap preprocessor + model into a single Pipeline."""
     preprocessor = preprocessor or build_preprocessor()
-    return Pipeline([
-        ("preprocessor", preprocessor),
-        ("classifier", model),
-    ])
+    return Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            ("classifier", model),
+        ]
+    )
 
 
 def build_regression_pipeline(
@@ -87,7 +99,9 @@ def build_regression_pipeline(
 ) -> Pipeline:
     """Wrap preprocessor + model into a single Pipeline."""
     preprocessor = preprocessor or build_preprocessor()
-    return Pipeline([
-        ("preprocessor", preprocessor),
-        ("regressor", model),
-    ])
+    return Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            ("regressor", model),
+        ]
+    )

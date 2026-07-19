@@ -21,10 +21,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MODELS_DIR = REPO_ROOT / "models"
 MANIFEST = MODELS_DIR / "MANIFEST.sha256"
 
-# The exact set the API + dashboard load at serve time (loader defaults in
-# src/models/predict.py + drift baseline). Manifest must cover exactly this
-# set — a served file missing from the manifest is ungoverned vintage.
+# Every committed model artefact whose exact bytes back a published claim: the
+# four the API + dashboard load at serve time (loader defaults in
+# src/models/predict.py + drift baseline), plus benchmark_regressor.joblib.
+# The benchmark model is not served, but README advertises the external
+# benchmark as "fully reproducible by anyone" and its published R2(log)
+# depends on these bytes, so an unpinned vintage there is the same defect as
+# an unpinned serving model. Manifest must cover exactly this set — a
+# committed artefact missing from it is ungoverned vintage.
 SERVING_ARTIFACTS = {
+    "benchmark_regressor.joblib",
     "price_zone_best.joblib",
     "price_regressor_best.joblib",
     "label_encoder.joblib",

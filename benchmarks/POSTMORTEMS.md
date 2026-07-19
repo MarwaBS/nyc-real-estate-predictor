@@ -44,7 +44,8 @@ Data manifest (SHA-256 truncated):
 ### Expected vs actual
 
 Expected before the run: some kept rows, model inference producing a
-lower R² than the Kaggle holdout (training = 0.815), with the leakage
+lower R² than the Kaggle holdout (training = 0.815 as of this run; 0.835
+on the current data), with the leakage
 gate still passing.
 
 Actual: zero kept rows; no predictions produced; leakage gate still
@@ -97,7 +98,8 @@ benchmark run.
 2. **SCHEMA_MAP v1 feature space does not intersect the trained
    model's required feature space sufficiently for inference.** The
    model was trained on the Kaggle 2023 listings schema and requires
-   15 features including `BEDS`, `BATH`, `DIST_MANHATTAN_CENTER`,
+   15 features as of this run (14 today) including `BEDS`, `BATH`,
+   `DIST_MANHATTAN_CENTER`,
    `DIST_CENTRAL_PARK`, `DIST_NEAREST_SUBWAY`, and `SUBLOCALITY`.
    NYC.gov Rolling Sales 2024 publishes transaction data only — it
    does not include room counts, coordinates, or neighbourhood

@@ -10,7 +10,10 @@ is not evidence, it is decoration.
 
 from __future__ import annotations
 
+import inspect
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -25,30 +28,55 @@ def metrics() -> dict:
     return json.loads(ARTEFACT.read_text(encoding="utf-8"))
 
 
-def test_working_tree_clean_is_sampled_before_the_run_writes_anything(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The flag must reflect the tree at start, not the tree the run dirtied.
+def test_working_tree_clean_is_sampled_before_main_writes_anything() -> None:
+    """The sample must happen before the first write in ``main``, not after.
 
-    Fails against the previous code, which called _git_working_tree_clean()
-    inside the writer: by then prepare_data had written the cleaned CSV and
-    the models, so a run starting from a pristine checkout still recorded
-    false. Here a True is threaded in and must survive to the artefact.
+    Threading a True into ``_write_training_metrics`` and asserting True comes
+    out cannot detect this bug: it never exercises the ordering the field
+    depends on. Moving the sample back to where it was -- after prepare_data
+    writes the cleaned dataset -- left that version of this test green and the
+    original defect fully reintroduced.
+
+    So assert the ordering directly, on the source of ``main``: the
+    ``_git_working_tree_clean()`` call must appear before the first call that
+    writes to disk. ``prepare_data`` writes CLEANED_DATASET, which is the
+    earliest write in the run.
     """
-    monkeypatch.chdir(tmp_path)
+    source = inspect.getsource(run_training.main)
 
-    run_training._write_training_metrics(
-        True,
-        {"selected_model": "stub", "metrics": {}},
-        {"selected_model": "stub", "metrics": {}},
-        n_train=1,
-        n_val=1,
-        n_test=1,
-        features=["f"],
+    sample_at = source.find("_git_working_tree_clean()")
+    first_write_at = source.find("prepare_data()")
+
+    assert sample_at != -1, "main no longer samples the working tree at all"
+    assert first_write_at != -1, "main no longer calls prepare_data"
+    assert sample_at < first_write_at, (
+        "working_tree_clean is sampled after prepare_data() has already "
+        "written the cleaned dataset, so it can only ever record False"
     )
 
-    written = json.loads((tmp_path / "reports" / "training_metrics.json").read_text())
-    assert written["working_tree_clean"] is True
+
+def test_write_training_metrics_records_the_flag_it_is_given() -> None:
+    """The threaded value must survive into the artefact unchanged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd = os.getcwd()
+        os.chdir(tmp)
+        try:
+            for flag in (True, False):
+                run_training._write_training_metrics(
+                    flag,
+                    {"selected_model": "stub", "metrics": {}},
+                    {"selected_model": "stub", "metrics": {}},
+                    n_train=1,
+                    n_val=1,
+                    n_test=1,
+                    features=["f"],
+                )
+                written = json.loads(
+                    Path("reports/training_metrics.json").read_text(encoding="utf-8")
+                )
+                assert written["working_tree_clean"] is flag
+        finally:
+            os.chdir(cwd)
 
 
 def test_provenance_note_does_not_deny_reproducibility(metrics: dict) -> None:

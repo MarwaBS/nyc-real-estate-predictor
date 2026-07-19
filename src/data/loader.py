@@ -1,4 +1,5 @@
 """Data loading — single entry point for all dataset I/O."""
+
 from __future__ import annotations
 
 import logging
@@ -9,6 +10,7 @@ import pandas as pd
 from src.config import CLEANED_DATASET, RAW_DATASET
 
 logger = logging.getLogger(__name__)
+
 
 def load_raw(path: Path | None = None) -> pd.DataFrame:
     """Load the raw NY-House-Dataset.csv (column names upper-cased/stripped).
