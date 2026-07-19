@@ -70,7 +70,13 @@ def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
 
     assert on_val["calibrated_on"] == "val"
     assert on_test["calibrated_on"] == "test"
-    assert on_test["high_multiplier"] > on_val["high_multiplier"] * 4
+    # The stub predicts a flat $1, so each multiplier is a quantile of that
+    # split's own actuals: val must land inside [1, 2] and test inside
+    # [10, 20], the ranges the two splits were drawn from. Asserting the
+    # constructed ranges beats asserting a ratio threshold, which would be a
+    # slack factor picked to pass rather than a derived expectation.
+    assert 1.0 <= on_val["high_multiplier"] <= 2.0
+    assert 10.0 <= on_test["high_multiplier"] <= 20.0
 
 
 def test_calibrate_price_interval_rejects_an_unknown_split() -> None:

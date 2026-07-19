@@ -166,10 +166,13 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     result = results[0]
     assert "predicted_price" in result
     assert "price_range" in result
-    # A real NYC listing price, not just positive: expm1 of a plausible
-    # log-price is positive for almost any broken model, so `> 0` passes on
-    # output the pipeline should never produce.
-    assert 10_000 < result["predicted_price"] < 100_000_000
+    # Bounded by the training target's own range rather than `> 0`: the model
+    # predicts log-price and the caller un-logs it, so a broken transform
+    # surfaces as a wildly out-of-scale number that is still positive. The
+    # cleaned dataset's PRICE spans $2,494 to $4,483,000 (the IQR cap), so a
+    # served price outside one order of magnitude either side of that range is
+    # a scaling bug, not a listing.
+    assert 250 < result["predicted_price"] < 45_000_000
     assert result["price_range"]["low"] < result["price_range"]["high"]
 
 
