@@ -53,9 +53,14 @@ def test_documents_name_the_regressor_that_actually_shipped() -> None:
     """MODEL_CARD named LightGBM while the artefact was XGBoost."""
     shipped = METRICS["regression"]["selected_model"]
     card = _read("MODEL_CARD.md")
-    claimed = re.search(r"\*\*Regressor\*\* — `(\w+)`", card)
+    claimed = re.search(r"\*\*Regressor\*\*\s*[-—]\s*`([^`]+)`", card)
     assert claimed is not None, "MODEL_CARD no longer states a regressor"
-    assert claimed.group(1).lower() == shipped.lower(), (
+
+    # Normalised: the artefact says "random_forest", prose says "Random Forest".
+    def normalise(s: str) -> str:
+        return s.lower().replace(" ", "_")
+
+    assert normalise(claimed.group(1)) == normalise(shipped), (
         f"MODEL_CARD names {claimed.group(1)}; the artefact is {shipped}"
     )
 

@@ -39,14 +39,11 @@ def mock_models(tmp_path: Path) -> Path:
             "PROPERTYSQFT": rng.uniform(400, 4000, n),
             "TOTAL_ROOMS": rng.uniform(2, 10, n),
             "BED_BATH_RATIO": rng.uniform(0.5, 3.0, n),
-            "LOG_SQFT": rng.uniform(6, 9, n),
             "ROOMS_PER_SQFT": rng.uniform(0.001, 0.01, n),
             "DIST_MANHATTAN_CENTER": rng.uniform(0, 30, n),
             "DIST_CENTRAL_PARK": rng.uniform(0, 30, n),
-            "DIST_NEAREST_SUBWAY": rng.uniform(0, 5, n),
             "BOROUGH": rng.choice(["manhattan", "brooklyn", "queens"], n),
             "TYPE": rng.choice(["condo", "house", "co-op"], n),
-            "PROPERTY_CATEGORY": rng.choice(["residential", "commercial"], n),
             "ZIPCODE": rng.choice(["10022", "11217", "10001"], n),
             "SUBLOCALITY": rng.choice(["midtown", "fort greene", "chelsea"], n),
         }
@@ -87,14 +84,11 @@ def _test_row() -> pd.DataFrame:
                 "PROPERTYSQFT": 1200.0,
                 "TOTAL_ROOMS": 4.0,
                 "BED_BATH_RATIO": 1.0,
-                "LOG_SQFT": 7.09,
                 "ROOMS_PER_SQFT": 0.003,
                 "DIST_MANHATTAN_CENTER": 0.5,
                 "DIST_CENTRAL_PARK": 3.0,
-                "DIST_NEAREST_SUBWAY": 0.5,
                 "BOROUGH": "manhattan",
                 "TYPE": "condo",
-                "PROPERTY_CATEGORY": "residential",
                 "ZIPCODE": "10022",
                 "SUBLOCALITY": "midtown",
             }
@@ -103,56 +97,19 @@ def _test_row() -> pd.DataFrame:
 
 
 def test_predict_price_zone(mock_models: Path, _test_row: pd.DataFrame) -> None:
+    """The zone is the predicted price, bucketed through the shared decode."""
     import src.models.predict as pred_mod
+    from src.models.decode import zone_for_price
 
-    pred_mod._classifier_cache = None
-    pred_mod._label_encoder_cache = None
-    # Load from mock path
-    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
-    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
+    pred_mod._regressor_cache = None
+    pred_mod.get_regressor(mock_models / "price_regressor_best.joblib")
+
     results = pred_mod.predict_price_zone(_test_row)
     assert isinstance(results, list) and len(results) == 1
-    result = results[0]
-    assert "price_zone" in result
-    assert "confidence" in result
-    assert "probabilities" in result
-    # Correctness, not membership: the decoded label must be the encoder's
-    # name for the predicted class index (a bare membership check in
-    # PRICE_ZONE_LABELS stayed green while 3 of 4 labels decoded wrong).
-    expected = le.inverse_transform(clf.predict(_test_row))[0]
-    assert result["price_zone"] == expected
-    assert 0 <= result["confidence"] <= 1
-
-
-def test_predict_decodes_via_encoder_classes_not_config_order(
-    mock_models: Path,
-) -> None:
-    """Regression: serving decode order must equal ``label_encoder.classes_``.
-
-    The mock encoder's alphabetical order differs from the config order, so
-    a decode through ``PRICE_ZONE_LABELS`` mislabels every prediction except
-    'Very High'. Asserts exact label equality across a batch spanning
-    multiple predicted classes, and that the probabilities dict is keyed in
-    encoder-class order.
-    """
-    import src.models.predict as pred_mod
-
-    pred_mod._classifier_cache = None
-    pred_mod._label_encoder_cache = None
-    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
-    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
-
-    # Re-use the training frame as the batch — the overfit mock RF predicts
-    # a spread of classes on it, so the check cannot pass vacuously.
-    batch = joblib.load(mock_models / "train_features.joblib")
-    predicted_idx = clf.predict(batch)
-    assert len(set(predicted_idx.tolist())) >= 2, "batch must span classes"
-
-    results = pred_mod.predict_price_zone(batch)
-    expected_labels = le.inverse_transform(predicted_idx)
-    for result, expected in zip(results, expected_labels, strict=True):
-        assert result["price_zone"] == expected
-        assert list(result["probabilities"]) == list(le.classes_)
+    # Correctness, not membership: the zone must be the bucket the served
+    # price falls in, not merely a valid label.
+    price = pred_mod.predict_price(_test_row)[0]["predicted_price"]
+    assert results[0]["price_zone"] == zone_for_price(price)
 
 
 def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:

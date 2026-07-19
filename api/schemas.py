@@ -44,11 +44,16 @@ class PropertyInput(BaseModel):
 
 
 class ZonePrediction(BaseModel):
-    """Price zone classification result."""
+    """Price segment, derived from the predicted price.
+
+    No ``confidence`` or ``probabilities``: the zone is a bucketing of a point
+    estimate, not a classifier output, so there is no class posterior to
+    report. Deriving a number from the interval and calling it confidence
+    would be a figure nothing measured. Uncertainty is served where it was
+    actually calibrated -- ``PricePrediction.price_range``.
+    """
 
     price_zone: str
-    confidence: float
-    probabilities: dict[str, float]
 
 
 class PricePrediction(BaseModel):
@@ -77,13 +82,10 @@ class PredictionResponse(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response.
 
-    ``models_loaded`` is true only when the FULL serving stack loads: the
-    classifier, the regressor, AND the label encoder. ``label_encoder_loaded``
-    surfaces the encoder specifically — it is the source of truth for decoding
-    class indices into zone names, so a loadable classifier/regressor with a
-    missing encoder would still serve mislabeled zones.
+    ``models_loaded`` is true only when the full serving stack loads: the
+    regressor AND the calibrated price interval. Both are required to answer a
+    prediction, so either one missing means the service cannot serve.
     """
 
     status: str
     models_loaded: bool
-    label_encoder_loaded: bool

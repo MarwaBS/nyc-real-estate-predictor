@@ -1,22 +1,34 @@
-"""The single decode from class probabilities to a served zone.
+"""The single conversion from a predicted price to a served zone.
 
-Both serving surfaces (the API and the Streamlit dashboard) call
-``served_zone`` rather than each doing their own ``argmax``. They diverged
-once before — the API decoded one way and the dashboard another, so the two
-disagreed on the same input — and one shared function is what stops that.
+There is no classifier. The zone is a deterministic function of price --
+``PRICE_ZONE = cut(PRICE, PRICE_ZONE_BINS)`` -- so a separate classification
+model was predicting a bucketing of what the regressor already predicts: two
+models, the same features, the same signal. It was deleted and the zone is
+derived from the estimate.
+
+Training scores zones through this same function, so the reported macro-F1
+describes exactly what serving returns. Two models could not offer that: the
+classifier's answer and the regressor's bucketed price could disagree on the
+same listing and nothing would notice.
 """
 
 from __future__ import annotations
 
-import numpy as np
+import bisect
+
+from src.config import PRICE_ZONE_BINS, PRICE_ZONE_LABELS
+
+# Interior cut-points only: the bins are [0, q1, q2, q3, inf] and bisect needs
+# the three thresholds that separate the four labels.
+_CUTS = list(PRICE_ZONE_BINS[1:-1])
 
 
-def served_zone(proba: np.ndarray, labels: list[str]) -> tuple[str, float]:
-    """Return ``(zone_name, confidence)`` for a single-row probability vector.
+def zone_for_price(price: float) -> str:
+    """The zone a price falls in.
 
-    ``labels`` is the zone name per class index, in the model's ``classes_``
-    order; indexing it with anything else silently renames the prediction.
+    ``bisect_left`` places a price exactly on a cut-point in the LOWER zone,
+    matching ``pd.cut``'s right-closed ``(a, b]`` intervals used to build the
+    training labels. The cut-points are quantiles of the training prices, so
+    exact ties do occur and train and serve must break them identically.
     """
-    row = np.asarray(proba, dtype=float).ravel()
-    zone_idx = int(np.argmax(row))
-    return labels[zone_idx], float(row[zone_idx])
+    return PRICE_ZONE_LABELS[bisect.bisect_left(_CUTS, float(price))]

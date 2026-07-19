@@ -39,41 +39,35 @@ def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add derived numerical features (no target-derived features)."""
     result = df.copy()
 
+    # Sums and ratios, not transforms. A gradient-boosted tree splits on
+    # thresholds, so it is invariant to any monotone transform of a single
+    # feature -- LOG_SQFT gave it exactly the partitions PROPERTYSQFT already
+    # gives and was removed. A ratio is different: the tree can only approximate
+    # BEDS/BATH through many awkward splits, so computing it is real signal.
     result["TOTAL_ROOMS"] = result["BEDS"] + result["BATH"]
     result["BED_BATH_RATIO"] = result["BEDS"] / result["BATH"].clip(lower=1)
-    result["LOG_SQFT"] = np.log1p(result["PROPERTYSQFT"])
     result["ROOMS_PER_SQFT"] = result["TOTAL_ROOMS"] / result["PROPERTYSQFT"].clip(
         lower=1
     )
 
-    logger.info(
-        "Added 4 numeric features: TOTAL_ROOMS, BED_BATH_RATIO, LOG_SQFT, ROOMS_PER_SQFT"
-    )
+    logger.info("Added 3 numeric features: TOTAL_ROOMS, BED_BATH_RATIO, ROOMS_PER_SQFT")
     return result
 
 
 def add_geospatial_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add the geospatial features the models actually consume.
+    """Haversine distances to the two landmarks the models consume.
 
-    Three distance features: haversine distances to two landmarks plus
-    ``DIST_NEAREST_SUBWAY``, which is BY DESIGN the Manhattan-center
-    distance — station-level data is not bundled with the repo, training
-    and serving must use identical semantics, and the API computes the
-    same proxy (see MODEL_CARD.md). H3 indexing and KMeans neighborhood
-    clustering were explored during EDA but never fed any model
-    (ColumnTransformer dropped them), so they are not computed here —
-    dead compute in the production path is a lie waiting to be quoted.
+    DIST_NEAREST_SUBWAY used to be assigned here as a copy of
+    DIST_MANHATTAN_CENTER and called a proxy. A duplicate column is not a
+    proxy -- it carries zero information by construction and cost a feature
+    slot while implying the model knew something about transit access. It is
+    gone; station-level data is still not bundled.
+
+    H3 indexing and KMeans clustering were explored in EDA and never fed any
+    model, so they are not computed here either.
     """
-    result = df.copy()
-
-    # Haversine distances to key landmarks
-    result = add_distance_features(result, REFERENCE_POINTS)
+    result = add_distance_features(df.copy(), REFERENCE_POINTS)
     logger.info("Added distance features: DIST_MANHATTAN_CENTER, DIST_CENTRAL_PARK")
-
-    # Documented proxy — identical at train and serve time.
-    result["DIST_NEAREST_SUBWAY"] = result["DIST_MANHATTAN_CENTER"]
-    logger.info("DIST_NEAREST_SUBWAY = DIST_MANHATTAN_CENTER (documented proxy)")
-
     return result
 
 

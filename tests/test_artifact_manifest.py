@@ -31,9 +31,7 @@ MANIFEST = MODELS_DIR / "MANIFEST.sha256"
 # committed artefact missing from it is ungoverned vintage.
 SERVING_ARTIFACTS = {
     "benchmark_regressor.joblib",
-    "price_zone_best.joblib",
     "price_regressor_best.joblib",
-    "label_encoder.joblib",
     "price_interval.json",
     "drift_baseline.json",
 }
@@ -79,13 +77,3 @@ def test_every_serving_artifact_matches_its_manifest_hash() -> None:
             f"artifact changed without a manifest update (or vice versa). "
             f"Regenerate the manifest only as part of a deliberate retrain."
         )
-
-
-def test_committed_encoder_is_alphabetical_and_complete() -> None:
-    encoder = joblib.load(MODELS_DIR / "label_encoder.joblib")
-    assert [str(c) for c in encoder.classes_] == [
-        "High",
-        "Low",
-        "Medium",
-        "Very High",
-    ]

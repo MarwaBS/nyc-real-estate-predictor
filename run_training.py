@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -21,8 +22,8 @@ import joblib
 import numpy as np
 import pandas as pd
 import sklearn
+from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 try:
     import mlflow
@@ -36,6 +37,7 @@ from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
+    PRICE_ZONE_LABELS,
     RANDOM_SEED,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
@@ -48,6 +50,7 @@ from src.data.features import (
     cap_categorical_cardinality,
 )
 from src.data.loader import load_raw
+from src.models.decode import zone_for_price
 from src.models.evaluate import (
     evaluate_classifier,
     evaluate_fairness_by_group,
@@ -95,11 +98,6 @@ def prepare_data() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
 
     # Geospatial features
     df = add_distance_features(df, REFERENCE_POINTS)
-
-    # Subway distance is BY DESIGN the Manhattan-center proxy — identical
-    # semantics at train and serve time (api/main.py computes the same
-    # value; see MODEL_CARD.md). Station-level data is not bundled.
-    df["DIST_NEAREST_SUBWAY"] = df["DIST_MANHATTAN_CENTER"]
 
     # Target variables
     df = add_target_variables(df)
@@ -413,6 +411,69 @@ def train_regression(
 PRICE_INTERVAL_TARGET = 0.80
 
 
+class BoroughFloorError(RuntimeError):
+    """A borough scored at or below its own majority-class baseline."""
+
+
+def check_borough_floor(
+    y_true: np.ndarray, y_pred: np.ndarray, borough: pd.Series
+) -> dict[str, Any]:
+    """Every borough must beat guessing its own most common zone.
+
+    "Predicts across the 5 boroughs" is a contract, not an average. A model
+    with a strong city-wide macro-F1 that fails in Queens is broken for
+    everyone in Queens, and averaging is what hides it.
+
+    The floor is derived per borough: score the constant predictor that always
+    answers that borough's most common zone. A model that cannot beat that has
+    learned nothing there. Deriving it is deliberate -- any fixed threshold
+    would be a number chosen with the current results already in view, which is
+    the defect the standard calls out by name.
+
+    Raises so a failing borough fails the run, and therefore the build, rather
+    than being written into the metrics file for someone to notice later.
+    """
+    frame = pd.DataFrame(
+        {
+            "true": np.asarray(y_true),
+            "pred": np.asarray(y_pred),
+            "borough": borough.to_numpy(),
+        }
+    )
+    rows: dict[str, Any] = {}
+    breaches: list[str] = []
+
+    for name, group in frame.groupby("borough", sort=True):
+        majority = group["true"].value_counts().idxmax()
+        baseline = f1_score(
+            group["true"],
+            np.full(len(group), majority),
+            average="macro",
+            zero_division=0,
+        )
+        actual = f1_score(
+            group["true"], group["pred"], average="macro", zero_division=0
+        )
+        rows[str(name)] = {
+            "macro_f1": round(float(actual), 4),
+            "majority_baseline": round(float(baseline), 4),
+            "margin": round(float(actual - baseline), 4),
+            "n": int(len(group)),
+        }
+        if actual <= baseline:
+            breaches.append(
+                f"{name}: macro_f1={actual:.4f} <= majority baseline={baseline:.4f}"
+            )
+
+    if breaches:
+        raise BoroughFloorError(
+            "borough floor breached, refusing to ship: " + "; ".join(breaches)
+        )
+
+    logger.info("Borough floor: all %d boroughs clear their baseline", len(rows))
+    return rows
+
+
 def calibrate_price_interval(
     regressor: Any,
     splits: dict[str, tuple[pd.DataFrame, pd.Series]],
@@ -462,7 +523,7 @@ def calibrate_price_interval(
             "coverage_test is reported as out-of-sample evidence"
         )
 
-    lo_q, hi_q = (1.0 - target) / 2.0, 1.0 - (1.0 - target) / 2.0
+    hi_q = 1.0 - (1.0 - target) / 2.0
 
     def ratio(X: pd.DataFrame, y_log: pd.Series) -> np.ndarray:
         predicted = np.expm1(np.asarray(regressor.predict(X), dtype=float))
@@ -470,7 +531,20 @@ def calibrate_price_interval(
         return actual / predicted
 
     ratios = {name: ratio(X, y) for name, (X, y) in splits.items()}
-    low, high = (float(q) for q in np.quantile(ratios[calibrate_on], [lo_q, hi_q]))
+    # Split-conformal quantiles with the finite-sample correction: the
+    # ceil((n+1)(1-alpha))-th order statistic, not the plain empirical quantile.
+    # np.quantile(r, 0.9) targets the 90th percentile OF THE CALIBRATION SAMPLE,
+    # which under-covers a fresh draw by construction -- with n=724 and
+    # alpha=0.2 the correct level is ceil(725*0.9)/724 = 90.19%. Uncorrected,
+    # the shipped interval measured 76.3% against an 80% target and the gap was
+    # then blamed entirely on generalisation.
+    n_cal = len(ratios[calibrate_on])
+    corrected_hi = min(math.ceil((n_cal + 1) * hi_q) / n_cal, 1.0)
+    corrected_lo = max(1.0 - corrected_hi, 0.0)
+    low, high = (
+        float(q)
+        for q in np.quantile(ratios[calibrate_on], [corrected_lo, corrected_hi])
+    )
 
     def coverage(r: np.ndarray) -> float:
         return float(np.mean((r >= low) & (r <= high)))
@@ -591,17 +665,12 @@ def main() -> None:
     df, y_zone, y_log_price, borough = prepare_data()
     X = get_feature_df(df)
 
-    # 2. Encode zone labels
-    le = LabelEncoder()
-    y_zone_encoded = le.fit_transform(y_zone)
-
-    # Save label encoder
-    joblib.dump(le, MODELS_DIR / "label_encoder.joblib")
-    # zone_classes is the ONLY valid name order for encoded class indices
-    # (alphabetical, from LabelEncoder) — every report/threshold keyed by
-    # class index below must use it, never the semantic config order.
-    zone_classes = [str(c) for c in le.classes_]
-    logger.info("Zone classes: %s", zone_classes)
+    # 2. Zones stay plain strings. There is no LabelEncoder because there is no
+    # classifier to encode targets for: the zone is derived from the predicted
+    # price (src/models/decode.py), so nothing needs class indices -- and the
+    # class-index-vs-config-order mislabelling hazard that encoder created goes
+    # with it.
+    y_zone_encoded = y_zone.astype(str).to_numpy()
 
     # 3. Train/val/test split (stratified for classification).
     #
@@ -655,19 +724,7 @@ def main() -> None:
     )
     logger.info("Features: %s", list(X_train.columns))
 
-    # 4. Train classification
-    clf_record = train_classification(
-        X_train,
-        y_zone_train,
-        X_val,
-        y_zone_val,
-        X_test,
-        y_zone_test,
-        borough_test,
-        zone_classes,
-    )
-
-    # 5. Train regression
+    # 4. Train the single model
     reg_record = train_regression(
         X_train, y_price_train, X_val, y_price_val, X_test, y_price_test
     )
@@ -687,25 +744,51 @@ def main() -> None:
     )
     reg_record["price_interval"] = interval
 
-    # 6. Generate SHAP explanations
+    # 5c. Score the zones the service will actually return.
+    # Bucketing the regressor's own test predictions through the same decode
+    # serving uses, so this macro-F1 describes exactly what a caller receives.
+    # A dedicated classifier scores 0.7181 against this 0.6987 -- measured, and
+    # about 1.3 SE on a 906-row split, so not an established difference. It is
+    # not shipped because two models can disagree on one response: a "High"
+    # zone beside a price that buckets to "Medium", with nothing to catch it.
+    best_reg = joblib.load(MODELS_DIR / "price_regressor_best.joblib")
+    predicted_prices = np.expm1(np.asarray(best_reg.predict(X_test), dtype=float))
+    zone_pred = np.array([zone_for_price(p) for p in predicted_prices])
+    clf_record: dict[str, Any] = {
+        "derived_from": "regressor predictions bucketed by PRICE_ZONE_BINS",
+        "metrics": evaluate_classifier(y_zone_test, zone_pred, PRICE_ZONE_LABELS),
+        "fairness_by_borough": evaluate_fairness_by_group(
+            y_zone_test, zone_pred, borough_test
+        ),
+    }
+    logger.info(
+        "Zones (test, bucketed): accuracy=%.4f macro_f1=%.4f",
+        clf_record["metrics"]["accuracy"],
+        clf_record["metrics"]["macro_f1"],
+    )
+
+    # 5d. The borough floor -- raises and fails the build if any borough is at
+    # or below its own majority-class baseline.
+    clf_record["borough_floor"] = check_borough_floor(
+        y_zone_test, zone_pred, borough_test
+    )
+
+    # 6. SHAP over the single model.
     logger.info("STEP 5: SHAP explainability")
     try:
-        best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
-        # Get preprocessed features for SHAP
-        preprocessor = best_clf.named_steps["preprocessor"]
+        preprocessor = best_reg.named_steps["preprocessor"]
         X_test_transformed = preprocessor.transform(X_test)
         feature_names = list(preprocessor.get_feature_names_out())
 
         from src.models.explain import compute_shap_values, global_feature_importance
 
-        classifier_step = best_clf.named_steps["classifier"]
-        shap_values, explainer = compute_shap_values(
-            classifier_step,
+        shap_values, _explainer = compute_shap_values(
+            best_reg.named_steps["regressor"],
             pd.DataFrame(X_test_transformed, columns=feature_names),
             max_samples=200,
         )
         importance_df = global_feature_importance(shap_values, feature_names)
-        logger.info("Top 10 features by SHAP:\n%s", importance_df.head(10).to_string())
+        logger.info("Top 10 SHAP features:\n%s", importance_df.head(10).to_string())
         clf_record["shap_top10"] = importance_df.head(10).to_dict("records")
     except Exception as exc:
         logger.warning("SHAP analysis failed (non-critical): %s", exc)
@@ -728,111 +811,6 @@ def main() -> None:
         n_test=len(X_test),
         features=list(X_train.columns),
     )
-
-    # 8. Deep learning training
-    logger.info("STEP 7: Deep learning (multi-task)")
-    try:
-        from src.dl.tabular_net import MultiTaskDenseNet, MultiTaskLoss
-        from src.dl.train_dl import prepare_dl_data, train_multitask
-
-        best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
-        preprocessor = best_clf.named_steps["preprocessor"]
-
-        # Transform features
-        X_train_t = preprocessor.transform(X_train)
-        X_val_t = preprocessor.transform(X_val)
-        X_test_t = preprocessor.transform(X_test)
-        n_features = X_train_t.shape[1]
-
-        import torch
-
-        # Build model — all numeric (no separate categorical embeddings in transformed space)
-        model = MultiTaskDenseNet(
-            n_numeric=n_features,
-            categorical_dims=[],
-            num_classes=len(zone_classes),
-            hidden_dims=[256, 128, 64],
-            dropout=0.3,
-        )
-
-        # Prepare data loaders
-        train_loader = prepare_dl_data(
-            X_train_t,
-            [],
-            y_zone_train,
-            y_price_train.values,
-            batch_size=256,
-        )
-        # Early stopping reads this loader every epoch, so it must not be the
-        # test set: `patience=15` on test labels is model selection on test,
-        # dressed as regularisation.
-        val_loader = prepare_dl_data(
-            X_val_t,
-            [],
-            y_zone_val,
-            y_price_val.values,
-            batch_size=256,
-            shuffle=False,
-        )
-
-        # Focal loss with class weights
-        from collections import Counter
-
-        counts = Counter(y_zone_train)
-        total = sum(counts.values())
-        class_weights = [
-            total / (len(counts) * counts.get(i, 1)) for i in range(len(zone_classes))
-        ]
-        loss_fn = MultiTaskLoss(alpha=0.6, focal_gamma=2.0, class_weights=class_weights)
-
-        train_multitask(
-            model,
-            loss_fn,
-            train_loader,
-            val_loader,
-            n_categorical=0,
-            epochs=80,
-            lr=1e-3,
-            patience=15,
-        )
-
-        # Evaluate DL model
-        model.eval()
-        with torch.no_grad():
-            x_test_tensor = torch.tensor(X_test_t, dtype=torch.float32)
-            cls_logits, reg_pred = model(x_test_tensor, [])
-            dl_cls_pred = cls_logits.argmax(dim=1).numpy()
-            dl_reg_pred = reg_pred.numpy()
-
-        from src.models.evaluate import evaluate_classifier, evaluate_regressor
-
-        dl_cls_metrics = evaluate_classifier(y_zone_test, dl_cls_pred, zone_classes)
-        dl_reg_metrics = evaluate_regressor(
-            y_price_test.values, dl_reg_pred, log_target=True
-        )
-        logger.info(
-            "DL Classification: accuracy=%.4f, macro_f1=%.4f",
-            dl_cls_metrics["accuracy"],
-            dl_cls_metrics["macro_f1"],
-        )
-        logger.info(
-            "DL Regression: R2=%.4f, RMSE=%.4f",
-            dl_reg_metrics["r2"],
-            dl_reg_metrics["rmse"],
-        )
-
-        if _HAS_MLFLOW:
-            mlflow.set_experiment("price_zone_classification")
-            with mlflow.start_run(run_name="dl_multitask"):
-                mlflow.log_metrics(
-                    {
-                        "accuracy": dl_cls_metrics["accuracy"],
-                        "macro_f1": dl_cls_metrics["macro_f1"],
-                        "reg_r2": dl_reg_metrics["r2"],
-                    }
-                )
-    except Exception as exc:
-        logger.warning("DL training failed (non-critical): %s", exc)
 
     # 9. Save drift baseline
     logger.info("STEP 8: Drift baseline")

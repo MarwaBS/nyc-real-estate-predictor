@@ -94,16 +94,6 @@ def test_training_pipeline_has_no_threshold_tuning() -> None:
     assert "optimal_thresholds" not in src
 
 
-def test_dl_early_stopping_does_not_watch_the_test_set() -> None:
-    """`patience` on test labels is model selection wearing a val loader's
-    name: the epoch chosen is the one that happened to score best on test."""
-    src = inspect.getsource(run_training.main)
-    val_loader_call = src[src.index("val_loader = prepare_dl_data") :][:200]
-    assert "X_val_t" in val_loader_call
-    assert "y_zone_val" in val_loader_call
-    assert "X_test_t" not in val_loader_call
-
-
 def test_split_sizes_are_three_way_and_disjoint() -> None:
     """train/val/test must partition the data — no row in two of them."""
     from sklearn.model_selection import train_test_split

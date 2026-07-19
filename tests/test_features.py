@@ -21,7 +21,6 @@ def test_add_numeric_features_creates_expected_columns(
     result = add_numeric_features(sample_raw_data)
     assert "TOTAL_ROOMS" in result.columns
     assert "BED_BATH_RATIO" in result.columns
-    assert "LOG_SQFT" in result.columns
     assert "ROOMS_PER_SQFT" in result.columns
 
 
@@ -29,11 +28,6 @@ def test_total_rooms_is_beds_plus_bath(sample_raw_data: pd.DataFrame) -> None:
     result = add_numeric_features(sample_raw_data)
     expected = sample_raw_data["BEDS"] + sample_raw_data["BATH"]
     pd.testing.assert_series_equal(result["TOTAL_ROOMS"], expected, check_names=False)
-
-
-def test_log_sqft_is_positive(sample_raw_data: pd.DataFrame) -> None:
-    result = add_numeric_features(sample_raw_data)
-    assert (result["LOG_SQFT"] > 0).all()
 
 
 def test_add_target_variables_creates_price_zone(sample_raw_data: pd.DataFrame) -> None:
@@ -75,14 +69,14 @@ def test_apply_serving_cap_maps_unknown_to_other() -> None:
     assert out["BOROUGH"].tolist() == ["manhattan"] * 3
 
 
-def _real_classifier():
+def _real_model():
     import joblib
 
     from src.config import MODELS_DIR
 
-    path = MODELS_DIR / "price_zone_best.joblib"
+    path = MODELS_DIR / "price_regressor_best.joblib"
     if not path.exists():
-        pytest.skip("shipped classifier artefact not present")
+        pytest.skip("shipped model artefact not present")
     return joblib.load(path)
 
 
@@ -96,7 +90,7 @@ def test_learned_capped_categories_finds_only_capped_columns() -> None:
     and must NOT appear -- listing it here previously described a pre-cleaned
     CSV that no code in this repo produced.
     """
-    clf = _real_classifier()
+    clf = _real_model()
     known = learned_capped_categories(clf)
 
     assert "ZIPCODE" in known
@@ -106,13 +100,20 @@ def test_learned_capped_categories_finds_only_capped_columns() -> None:
     assert {"BOROUGH", "TYPE", "SUBLOCALITY"}.isdisjoint(known)
 
 
-def test_serving_cap_closes_train_serve_skew() -> None:
-    """End-to-end parity on the SHIPPED model: an unseen ZIPCODE/SUBLOCALITY, after
-    the serving cap, predicts identically to the explicit 'other' bucket — and
-    differently from the un-capped raw input (proving the skew was real and is now
-    closed)."""
-    clf = _real_classifier()
-    known = learned_capped_categories(clf)
+def test_serving_cap_maps_unseen_categories_to_the_trained_bucket() -> None:
+    """Serving must encode an unseen ZIP the way training encoded rare ones.
+
+    Asserts PARITY only. An earlier version also asserted the un-capped input
+    predicts differently -- "the skew was real" -- which held for the deleted
+    classifier's probability vector but does NOT hold for the regressor:
+    measured on the shipped model, raw and "other" differ by 2e-15, because
+    TargetEncoder's unseen fallback is the global mean and this model's
+    "other" encoding sits on it. The cap is kept for train/serve parity (a
+    retrain can move those apart), not because it currently changes an answer,
+    and this test no longer claims otherwise.
+    """
+    model = _real_model()
+    known = learned_capped_categories(model)
 
     base = {
         "BEDS": 2,
@@ -120,14 +121,11 @@ def test_serving_cap_closes_train_serve_skew() -> None:
         "PROPERTYSQFT": 1200.0,
         "TOTAL_ROOMS": 4.0,
         "BED_BATH_RATIO": 1.0,
-        "LOG_SQFT": float(np.log1p(1200.0)),
         "ROOMS_PER_SQFT": 4.0 / 1200.0,
         "DIST_MANHATTAN_CENTER": 1.0,
         "DIST_CENTRAL_PARK": 1.0,
-        "DIST_NEAREST_SUBWAY": 1.0,
         "BOROUGH": "manhattan",
         "TYPE": "condo",
-        "PROPERTY_CATEGORY": "residential",
         "ZIPCODE": "99999",  # unseen
         "SUBLOCALITY": "nowhere_ville",  # unseen
     }
@@ -135,13 +133,7 @@ def test_serving_cap_closes_train_serve_skew() -> None:
     capped = apply_serving_cap(raw, known)
     explicit_other = raw.copy()
     explicit_other["ZIPCODE"] = "other"
-    explicit_other["SUBLOCALITY"] = "other"
 
-    p_capped = clf.predict_proba(capped)[0]
-    p_other = clf.predict_proba(explicit_other)[0]
-    p_raw = clf.predict_proba(raw)[0]
-
-    # Parity: capped unseen == explicit "other".
-    np.testing.assert_allclose(p_capped, p_other, atol=1e-9)
-    # The skew was real: raw (un-capped) differs from the trained "other" bucket.
-    assert not np.allclose(p_raw, p_other, atol=1e-6)
+    np.testing.assert_allclose(
+        model.predict(capped)[0], model.predict(explicit_other)[0], atol=1e-9
+    )

@@ -108,28 +108,24 @@ def test_calibrate_price_interval_rejects_an_unknown_split() -> None:
 def test_measured_coverage_is_close_to_the_target_it_advertises(
     interval: dict,
 ) -> None:
-    """The interval's claim is its coverage, so that is what must hold.
+    """Coverage must sit within 2 binomial standard errors of the target.
 
-    Fails on the pre-fix +/-15% band, whose coverage was 0.32 against any
-    sensible target.
+    2 SE, not 3. The previous bound was 3 SE for one reason: at 2 SE the
+    shipped interval failed, because the calibration used the plain empirical
+    quantile instead of split conformal's finite-sample correction. Picking
+    the multiplier that let the number pass, then writing a derivation around
+    it, is the defect this file exists to catch -- so the math was fixed and
+    the bound tightened rather than the reverse.
 
-    The tolerance is 3 binomial standard errors of a proportion at the target,
-    not a round number: sqrt(0.8*0.2/906) = 0.0133 on the 906-row test split,
-    so 3 SE = 0.040. Anything inside that is indistinguishable from sampling
-    variation on a split this size; anything outside is a real miscalibration.
-    The previous 0.05 was picked by eye and happened to sit just above the
-    measured gap.
-
-    Note the shipped interval is at 0.0373 = 2.8 SE, so it is inside this
-    bound but NOT comfortably: the under-coverage is most likely a real
-    val-to-test generalisation gap rather than noise. MODEL_CARD records that.
+    sqrt(0.8*0.2/906) = 0.0133 on the 906-row test split, so 2 SE = 0.0266.
     """
     target = interval["target_coverage"]
     n_test = 906
-    tolerance = 3 * math.sqrt(target * (1 - target) / n_test)
+    tolerance = 2 * math.sqrt(target * (1 - target) / n_test)
     assert abs(interval["coverage_test"] - target) <= tolerance, (
         f"interval advertises {target:.0%} coverage but measured "
-        f"{interval['coverage_test']:.1%} on the test split"
+        f"{interval['coverage_test']:.1%} on the test split -- "
+        f"{abs(interval['coverage_test'] - target) / (tolerance / 2):.2f} SE away"
     )
 
 

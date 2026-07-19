@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pandas as pd
 import streamlit as st
 
-from src.config import CENTRAL_PARK, MANHATTAN_CENTER, MODELS_DIR, PRICE_ZONE_LABELS
+from src.config import CENTRAL_PARK, MANHATTAN_CENTER, MODELS_DIR
 from src.utils.geo import haversine
 
 st.set_page_config(
@@ -23,7 +23,7 @@ st.set_page_config(
 
 st.title("NYC Real Estate Price Prediction")
 st.markdown(
-    "Predict price zones and estimated values for NYC properties using ML + DL models."
+    "Predict NYC property prices with a calibrated range, plus the price zone that estimate falls in."
 )
 
 
@@ -31,32 +31,25 @@ st.markdown(
 # Load models once (cached)
 # ---------------------------------------------------------------------------
 @st.cache_resource
-def load_models():
-    """Load classifier + regressor + label encoder. Returns Nones on failure.
+def load_model():
+    """Load the single regressor. Returns None on failure.
 
-    The label encoder is loaded alongside the classifier because it is the
-    single source of truth for decoding class indices into zone names: the
-    classifier's class order is ``le.classes_`` (alphabetical), NOT the
-    semantic ``PRICE_ZONE_LABELS`` config order.
+    One model: the zone is the predicted price bucketed through the same
+    decode the API uses, so there is no classifier and no label encoder to
+    keep in step with it.
     """
     import joblib
 
     try:
-        clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
-        reg = joblib.load(MODELS_DIR / "price_regressor_best.joblib")
-        zone_classes = [
-            str(c) for c in joblib.load(MODELS_DIR / "label_encoder.joblib").classes_
-        ]
-        return clf, reg, zone_classes
+        return joblib.load(MODELS_DIR / "price_regressor_best.joblib")
     except FileNotFoundError:
-        return None, None, None
+        return None
 
 
 def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
     """Build feature DataFrame from user input."""
     total_rooms = beds + bath
     bed_bath_ratio = beds / max(bath, 1.0)
-    log_sqft = math.log1p(sqft)
     rooms_per_sqft = total_rooms / max(sqft, 1.0)
     dist_manhattan = haversine(lat, lon, *MANHATTAN_CENTER)
     dist_central_park = haversine(lat, lon, *CENTRAL_PARK)
@@ -69,11 +62,9 @@ def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
                 "PROPERTYSQFT": float(sqft),
                 "TOTAL_ROOMS": total_rooms,
                 "BED_BATH_RATIO": bed_bath_ratio,
-                "LOG_SQFT": log_sqft,
                 "ROOMS_PER_SQFT": rooms_per_sqft,
                 "DIST_MANHATTAN_CENTER": dist_manhattan,
                 "DIST_CENTRAL_PARK": dist_central_park,
-                "DIST_NEAREST_SUBWAY": dist_manhattan,
                 "BOROUGH": borough.lower(),
                 "TYPE": prop_type.lower(),
                 "ZIPCODE": zipcode,
@@ -140,9 +131,9 @@ with col2:
     st.subheader("Prediction Results")
 
     if predict_btn:
-        clf, reg, zone_classes = load_models()
+        reg = load_model()
 
-        if clf is None or reg is None or zone_classes is None:
+        if reg is None:
             st.error("Models not found. Train them first: `python run_training.py`")
         else:
             features = build_features(
@@ -155,24 +146,19 @@ with col2:
             # the encoder's unseen default.
             from src.data.features import apply_serving_cap, learned_capped_categories
 
-            features = apply_serving_cap(features, learned_capped_categories(clf))
+            features = apply_serving_cap(features, learned_capped_categories(reg))
 
-            # Classification — class indices decode via the SHIPPED label
-            # encoder's class order (zone_classes), never the config list.
-            proba = clf.predict_proba(features)[0]
-
-            # served_zone is the same decode the API uses, so both surfaces
-            # answer identically for identical input.
-            from src.models.decode import served_zone
-
-            zone_name, confidence = served_zone(proba, zone_classes)
-
-            # Regression
             log_price = float(reg.predict(features)[0])
             price = math.expm1(log_price)
 
-            # Display results
-            st.metric("Price Zone", zone_name, f"{confidence:.0%} confidence")
+            # zone_for_price is the same decode the API uses, so both surfaces
+            # answer identically for identical input.
+            from src.models.decode import zone_for_price
+
+            # No confidence figure: the zone is a bucketed point estimate, not
+            # a classifier output, so there is no posterior to report.
+            # Uncertainty is shown where it was calibrated -- the range below.
+            st.metric("Price Zone", zone_for_price(price))
             st.metric("Estimated Price", f"${price:,.0f}")
             # Same calibrated interval the API serves, and labelled with the
             # coverage it was measured to achieve — a range without its
@@ -186,32 +172,6 @@ with col2:
                 f"${band['high']:,.0f}"
             )
 
-            # Probability chart — plotly preserves zone ordering (st.bar_chart sorts alphabetically and truncates "Very High").
-            # Probabilities are keyed by the encoder's class order, then
-            # DISPLAYED in the semantic Low -> Very High order.
-            import plotly.express as px
-
-            prob_by_zone = {
-                z: round(float(p), 3) for z, p in zip(zone_classes, proba, strict=True)
-            }
-            chart_df = pd.DataFrame(
-                {
-                    "Zone": PRICE_ZONE_LABELS,
-                    "Probability": [prob_by_zone[z] for z in PRICE_ZONE_LABELS],
-                }
-            )
-            fig = px.bar(
-                chart_df,
-                x="Zone",
-                y="Probability",
-                category_orders={"Zone": PRICE_ZONE_LABELS},
-            )
-            fig.update_layout(
-                height=300,
-                margin={"l": 10, "r": 10, "t": 10, "b": 10},
-                showlegend=False,
-            )
-            st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Enter property details and click **Predict**.")
 
@@ -220,5 +180,5 @@ with col2:
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.caption(
-    "Models: XGBoost + LightGBM + CatBoost + Multi-Task DL | Data: NYC Housing Dataset (4,500+ listings)"
+    "Model: one gradient-boosted regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
 )

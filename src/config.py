@@ -47,7 +47,13 @@ CV_FOLDS: int = 5
 OPTUNA_TRIALS: int = 50
 
 # Price zone thresholds (USD)
-PRICE_ZONE_BINS: list[float] = [0, 500_000, 1_000_000, 2_000_000, float("inf")]
+# Equal-frequency quartiles of the cleaned training distribution, so the four
+# zones carry ~1,130 listings each. The previous [0, 500k, 1M, 2M] were round
+# numbers with no derivation behind them, and they split the data 1610/1183/
+# 929/805 — the model was asked to separate classes the data does not contain
+# in equal measure. tests/test_zone_bins.py recomputes the quartiles from the
+# data and fails if these drift from it.
+PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_495_000, float("inf")]
 PRICE_ZONE_LABELS: list[str] = ["Low", "Medium", "High", "Very High"]
 
 # SQFT category thresholds
@@ -61,11 +67,9 @@ NUMERIC_FEATURES: list[str] = [
     "PROPERTYSQFT",
     "TOTAL_ROOMS",
     "BED_BATH_RATIO",
-    "LOG_SQFT",
     "ROOMS_PER_SQFT",
     "DIST_MANHATTAN_CENTER",
     "DIST_CENTRAL_PARK",
-    "DIST_NEAREST_SUBWAY",
 ]
 
 # PROPERTY_CATEGORY was removed: training, the API, and the dashboard all

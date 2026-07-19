@@ -13,7 +13,7 @@ This repository contains **two separate evaluation surfaces** that should not be
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
-| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
+| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.812 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
 | External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
 
 Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
@@ -34,11 +34,8 @@ once, after selection is fixed.
 
 | Task | Model | Metric | Val (selection) | **Test (reported)** |
 |---|---|---|---|---|
-| Price Zone (4-class) | **XGBoost** (selected) | Macro F1 | 0.721 | **0.727** |
-| Price Zone (4-class) | LightGBM | Macro F1 | 0.715 | not scored |
-| Price Regression | **XGBoost** (selected) | R2 | 0.826 | **0.835** |
-| Price Regression | LightGBM | R2 | 0.822 | not scored |
-| Price Regression | Random Forest | R2 | 0.818 | not scored |
+| Price Regression | **Random Forest** (selected) | R2 | 0.784 | **0.812** |
+| Price Zone (bucketed from the above) | — | Macro F1 | — | **0.699** |
 
 Split: 2,896 train / 724 val / 906 test, stratified on price zone. Losing
 candidates show "not scored" because they never touch test — scoring them
@@ -78,16 +75,16 @@ ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | DIST_MANHATTAN_CENTER | 1.167 |
-| 2 | BATH | 0.923 |
-| 3 | PROPERTYSQFT | 0.800 |
-| 4 | DIST_CENTRAL_PARK | 0.455 |
-| 5 | ROOMS_PER_SQFT | 0.314 |
-| 6 | ZIPCODE (target-encoded) | 0.277 |
-| 7 | TYPE_co-op (one-hot) | 0.271 |
-| 8 | TOTAL_ROOMS | 0.264 |
-| 9 | BED_BATH_RATIO | 0.190 |
-| 10 | SUBLOCALITY (target-encoded) | 0.187 |
+| 1 | BATH | 0.446 |
+| 2 | DIST_MANHATTAN_CENTER | 0.343 |
+| 3 | TOTAL_ROOMS | 0.125 |
+| 4 | PROPERTYSQFT | 0.102 |
+| 5 | SUBLOCALITY (target-encoded) | 0.066 |
+| 6 | TYPE_co-op (one-hot) | 0.060 |
+| 7 | ZIPCODE (target-encoded) | 0.036 |
+| 8 | DIST_CENTRAL_PARK | 0.035 |
+| 9 | BOROUGH_brooklyn (one-hot) | 0.015 |
+| 10 | ROOMS_PER_SQFT | 0.012 |
 
 ### Fairness by borough
 
@@ -97,11 +94,11 @@ cleaning rather than carried into training as an unnamed category.
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.887 |
-| Brooklyn | 0.688 |
-| Manhattan | 0.680 |
-| The Bronx | 0.640 |
-| Queens | 0.601 |
+| Staten Island | 0.741 |
+| The Bronx | 0.694 |
+| Queens | 0.685 |
+| Manhattan | 0.632 |
+| Brooklyn | 0.621 |
 
 The spread (0.887 Staten Island vs 0.601 Queens) is wide enough to matter and
 is reported unexplained: Staten Island has the most concentrated zone
@@ -167,7 +164,7 @@ have been published. Recorded here rather than quietly overwritten.
 
 **Read the number honestly:** 0.250 R²(log) is what borough + sqft + ZIP
 explain about 2024 family-dwelling sale prices, full stop. It is *supposed*
-to be far below the flagship's in-distribution 0.835 — the point of the
+to be far below the flagship's in-distribution 0.812 — the point of the
 benchmark is that this gap is measured and sealed, not hidden.
 
 **Reproduce it yourself** (no private data needed — the lean model is
@@ -481,7 +478,7 @@ PRICE = PRICE_PER_SQFT * PROPERTYSQFT   # trivial algebra
 ```
 
 R2=0.997 was not a real prediction — it was circular computation. After removing this feature:
-- Honest R2 = **0.835** (XGBoost, selected on val) — a real result, not inflated
+- Honest R2 = **0.812** (Random Forest, selected on val) — a real result, not inflated
 - This is enforced by `test_no_leakage.py` in CI
 - Documented in [ADR-001](docs/decisions/001-remove-price-per-sqft.md)
 
