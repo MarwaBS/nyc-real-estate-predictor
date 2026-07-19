@@ -8,7 +8,7 @@ import math
 from typing import Any
 
 import pandas as pd
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
+from fastapi import FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -64,9 +64,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 # ---------------------------------------------------------------------------
 # Auth dependency — optional X-API-Key header, enabled only when API_KEY is set
 # ---------------------------------------------------------------------------
-async def verify_api_key(
-    x_api_key: str | None = Header(default=None),
-) -> None:
+def _verify_api_key(x_api_key: str | None) -> None:
     """Timing-safe X-API-Key check.
 
     No-op when the process is started without an `API_KEY` env var (dev /
@@ -152,13 +150,13 @@ def _build_features(prop: PropertyInput) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
-@app.post(
-    "/predict",
-    response_model=PredictionResponse,
-    dependencies=[Depends(verify_api_key)],
-)
+@app.post("/predict", response_model=PredictionResponse)
 @limiter.limit(PREDICT_RATE_LIMIT)
-def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
+def predict(
+    request: Request,
+    prop: PropertyInput,
+    x_api_key: str | None = Header(default=None),
+) -> PredictionResponse:
     """Predict price zone and estimated price for a property.
 
     Rate-limited per client IP at the configured ``PREDICT_RATE_LIMIT``;
@@ -167,7 +165,17 @@ def predict(request: Request, prop: PropertyInput) -> PredictionResponse:
     this docstring is rendered into the public /docs page, where a hardcoded
     number would misdescribe every deployment that overrides the default.
     The ``request`` parameter is required by slowapi's decorator contract.
+
+    The API key is checked HERE rather than through ``dependencies=[...]`` on
+    the route. FastAPI resolves route dependencies before calling the endpoint,
+    and the limiter decorates the endpoint -- so a rejected key returned 403
+    without ever reaching the counter. Measured: 15 wrong-key requests produced
+    15x 403 and zero 429, leaving key brute-force unbounded while SECURITY.md
+    scoped DoS out *because* this endpoint is rate-limited. Checking inside the
+    handler puts the limiter first, so bad keys are counted like any other
+    request.
     """
+    _verify_api_key(x_api_key)
     try:
         features = _build_features(prop)
         # Mirror the train-time frequency cap: map rare/unseen SUBLOCALITY/ZIPCODE

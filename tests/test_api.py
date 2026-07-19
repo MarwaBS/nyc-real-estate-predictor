@@ -271,3 +271,26 @@ def test_predict_rejects_negative_sqft() -> None:
 def test_docs_endpoint_accessible() -> None:
     response = client.get("/docs")
     assert response.status_code == 200
+
+
+def test_rate_limit_applies_to_rejected_api_keys() -> None:
+    """SECURITY.md scopes DoS out BECAUSE /predict is rate-limited, so the
+    limit has to hold for the requests an attacker actually sends.
+
+    It did not. `dependencies=[Depends(verify_api_key)]` on the route resolved
+    before slowapi's decorator, so a wrong key returned 403 without reaching
+    the counter -- measured, 15 wrong-key requests gave 15x 403 and zero 429,
+    leaving key brute-force unbounded behind a policy that relied on the
+    control. The check now runs inside the handler, after the limiter.
+    """
+    with reloaded_app(API_KEY="secret", PREDICT_RATE_LIMIT="3/minute") as m:
+        client = TestClient(m.app)
+        codes = [
+            client.post(
+                "/predict", json=VALID_PAYLOAD, headers={"X-API-Key": "wrong"}
+            ).status_code
+            for _ in range(8)
+        ]
+
+    assert 403 in codes, codes
+    assert 429 in codes, f"brute force unbounded: {codes}"
