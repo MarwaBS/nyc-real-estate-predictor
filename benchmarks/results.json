@@ -1,8 +1,8 @@
 {
-  "run_date": "2026-06-12T01:31:09.047468+00:00",
-  "run_ended": "2026-06-12T01:31:28.276930+00:00",
-  "commit_sha": "9c1c3a2c57602816033263201640624c5eef3d55",
-  "working_tree_clean": true,
+  "run_date": "2026-07-19T01:42:00.906552+00:00",
+  "run_ended": "2026-07-19T01:42:10.497906+00:00",
+  "commit_sha": "76a13286f2fdee20c2ce7cb834aadb15c9c5cfda",
+  "working_tree_clean": false,
   "schema_map_version": "v3",
   "schema_map_sha256": "d2fa4b5c8ff22098477939f77f1445270785bc1a40548e07dbd63234f8e1b864",
   "data_source": "https://www.nyc.gov/site/finance/property/property-rolling-sales-data.page",
@@ -10,44 +10,44 @@
     {
       "borough": "manhattan",
       "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_manhattan.xlsx",
-      "bytes_downloaded": 1758462,
-      "sha256": "e9a56198601a32f12e58ed823f97bde717cc54a2bc4500cb9d00ff3bf4d85358"
+      "bytes_downloaded": 2066073,
+      "sha256": "afa33ab7741c7f05a1638ed3546bf098570ffb732fa03d3bac06b72fc7dbdd0b"
     },
     {
       "borough": "bronx",
       "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_bronx.xlsx",
-      "bytes_downloaded": 631388,
-      "sha256": "13d66f21e222867365e0e6c9a4e411a15c94872cea4fffbe82d29228758fe730"
+      "bytes_downloaded": 738171,
+      "sha256": "6da8b20adea7c989dec228baa2ce495f3a951214a6818510ed68c7912176e1c8"
     },
     {
       "borough": "brooklyn",
       "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_brooklyn.xlsx",
-      "bytes_downloaded": 2228231,
-      "sha256": "82b26ffa1f616e9aee52e42413cefded57b82c9395828008ff71c1e0a399047b"
+      "bytes_downloaded": 2543129,
+      "sha256": "43088a7f0b4bbcff9c264c0f17f3f4ed2a3533b9b86049cf6e0d306687cae072"
     },
     {
       "borough": "queens",
       "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_queens.xlsx",
-      "bytes_downloaded": 2518258,
-      "sha256": "4053edcb3b2bb0014fba9e0b35af66603c89ec7f1ad1912e3613cac86eb1e776"
+      "bytes_downloaded": 2865753,
+      "sha256": "97c9d17a63f5f693588941b5a67975dc25b3f064d8917cee94aacad3332b2175"
     },
     {
       "borough": "statenisland",
       "url": "https://www.nyc.gov/assets/finance/downloads/pdf/rolling_sales/rollingsales_statenisland.xlsx",
-      "bytes_downloaded": 728759,
-      "sha256": "322c0d42fa0b225087d26a9be217a212cee16e383177121755a64fd3c052103f"
+      "bytes_downloaded": 801246,
+      "sha256": "019ec3bccadfba83569c83e34946498fe2037e1dd920707db38a20371d73ce9b"
     }
   ],
-  "n_raw": 79929,
-  "n_dropped": 61615,
-  "n_scored": 18314,
+  "n_raw": 80476,
+  "n_dropped": 62155,
+  "n_scored": 18321,
   "drop_reasons": {
-    "sale_price_non_positive": 27316,
-    "sale_price_out_of_range": 2016,
-    "missing_gross_sqft": 28572,
-    "missing_year_built": 22,
+    "sale_price_non_positive": 27683,
+    "sale_price_out_of_range": 2001,
+    "missing_gross_sqft": 28705,
+    "missing_year_built": 21,
     "missing_zip": 1,
-    "not_family_dwelling": 3688
+    "not_family_dwelling": 3744
   },
   "feature_columns": [
     "borough",
@@ -66,7 +66,7 @@
   },
   "inference": {
     "status": "succeeded",
-    "n_predictions": 18314,
+    "n_predictions": 18321,
     "expected_features": [
       "borough",
       "property_sqft",
@@ -86,15 +86,15 @@
   },
   "performance": {
     "status": "computed",
-    "r2_log_space": 0.3749906737380688,
-    "n_scored": 18314
+    "r2_log_space": 0.24950462842587617,
+    "n_scored": 18321
   },
   "leakage_tripwire": {
     "threshold": 0.95,
     "triggered": false
   },
   "reproducibility": {
-    "tolerance": "\u00b11e-6 on metrics across x86_64 Linux CI runners, pinned deps",
+    "enforced_by": "pinned deps + fixed seed + schema SHA gate",
     "no_cross_arch_claim": true
   }
 }

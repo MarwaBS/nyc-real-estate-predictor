@@ -166,7 +166,10 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     result = results[0]
     assert "predicted_price" in result
     assert "price_range" in result
-    assert result["predicted_price"] > 0
+    # A real NYC listing price, not just positive: expm1 of a plausible
+    # log-price is positive for almost any broken model, so `> 0` passes on
+    # output the pipeline should never produce.
+    assert 10_000 < result["predicted_price"] < 100_000_000
     assert result["price_range"]["low"] < result["price_range"]["high"]
 
 

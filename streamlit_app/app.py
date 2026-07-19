@@ -70,7 +70,6 @@ def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
         "DIST_NEAREST_SUBWAY": dist_manhattan,
         "BOROUGH": borough.lower(),
         "TYPE": prop_type.lower(),
-        "PROPERTY_CATEGORY": "residential",
         "ZIPCODE": zipcode,
         "SUBLOCALITY": "unknown",
     }])

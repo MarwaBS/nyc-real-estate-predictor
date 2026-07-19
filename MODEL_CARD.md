@@ -23,7 +23,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Primary intended uses:**
   - Portfolio demonstration of end-to-end ML engineering (data cleaning → feature engineering → modelling → tuning → explainability → API → UI → deployment).
-  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² vs. inflated R² (0.800 vs 0.997 when `PRICE_PER_SQFT` is leaked — ADR-001).
+  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² (0.835) vs. the near-perfect R² a leaked `PRICE_PER_SQFT` produces (0.997, measured on the earlier dataset revision in ADR-001 and not re-measured since).
 - **Primary intended users:** hiring managers / reviewers evaluating the author's ML engineering signal; engineers looking at how to structure a tabular-ML project with DL as an ablation.
 - **Out-of-scope uses:** the model is **NOT suitable for real pricing decisions**. It is trained on a ~4,500-row public Kaggle snapshot of NYC listings; it will drift against current-market reality, has no per-user auth / SLA, and is not fairness-audited beyond borough-level F1 disparity.
 
@@ -36,17 +36,19 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Metrics
 
 - **Model performance measures:**
-  - Classification: macro F1 = **0.698** (XGBoost) on the test split; 0.713 on val, which is where it was selected.
-  - Regression: R² = **0.800** (LightGBM) on test; 0.790 on val. Honest, no leakage (see ADR-001).
+  - Classification: macro F1 = **0.727** (XGBoost) on the test split; 0.721 on val, which is where it was selected.
+  - Regression: R² = **0.835** (XGBoost) on test; 0.826 on val. Honest, no leakage (see ADR-001).
   - Split: 2,882 train / 721 val / 901 test, stratified on price zone.
 - **Decision rule:** argmax over the classifier's per-class probabilities, decoded through the label encoder's class order (recorded in the artefact's `classification.metrics.labels`). Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those thresholds were fitted on the test labels and scored on the same labels, so the number was in-sample. Fitted on one half of the test set and scored on the other over 20 stratified splits, tuning is worth +0.0006 (std 0.0106) — noise — and has been removed.
 - **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
 
 ## Evaluation data
 
-- **Datasets:** `Resources/NY-House-Dataset.csv` (Kaggle public snapshot, ~4,800 rows cleaned to 4,504).
+- **Datasets:** `Resources/NY-House-Dataset.csv` (Kaggle public snapshot, 4,801 rows cleaned to 4,526). The raw CSV is committed, so `python run_training.py` regenerates the cleaned dataset and every artefact below from a fresh clone.
 - **Motivation:** illustrative; chosen for small-enough-to-experiment-with size while having enough geospatial and categorical signal to make feature engineering non-trivial.
-- **Preprocessing:** `src/data/cleaner.py` handles dedupe, borough-aware imputation, outlier capping, and normalisation. Target `PRICE_ZONE` is derived via fixed cut-points (documented in `src/config.py`).
+- **Preprocessing:** `src/data/cleaner.py` handles dedupe, borough/ZIP derivation, borough-aware imputation, overflow-sentinel removal, outlier capping, and normalisation. Target `PRICE_ZONE` is derived via fixed cut-points (documented in `src/config.py`).
+
+  `BOROUGH` and `ZIPCODE` do not exist in the raw export and are derived: borough from `SUBLOCALITY` → `ADMINISTRATIVE_AREA_LEVEL_2` → `LOCALITY` through `BOROUGH_MAP` (78.5% / 0.8% / 47.0% individually, 99.2% chained), ZIP by extracting 5 digits from the misnamed `STATE` field (100%). The 36 rows no source resolves have shifted geocode columns (`LOCALITY` = "United States", `ADMINISTRATIVE_AREA_LEVEL_2` holding a ZIP) and are dropped rather than guessed at.
 
 ## Training data
 
@@ -80,9 +82,11 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Caveats:**
   - `DIST_NEAREST_SUBWAY` is a proxy (equal to `DIST_MANHATTAN_CENTER`) **by design**: station-level data is not bundled with the repo, and training + serving must use identical feature semantics, so both sides compute the same proxy (`run_training.py` and `api/main.py`). Its marginal information value is zero; it remains in the schema for forward compatibility.
-  - **Uncertainty is an empirical interval, not a distribution.** The served price range is the 10th-90th percentile of `actual / predicted` measured on the validation split (multipliers 0.624x / 1.598x, recorded in `models/price_interval.json`), and it covers **79.0%** of the test split against an 80% target. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
-  - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only. Kept as-is because retraining requires the raw Kaggle dataset, which is not distributed with this repo; fix on the next retrain.
-  - **No naive-baseline column next to the headline metrics:** R²=0.800 (Kaggle split) and R²(log)=0.375 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
+  - **Uncertainty is an empirical interval, not a distribution.** The served price range is the 10th-90th percentile of `actual / predicted` measured on the validation split (multipliers 0.671x / 1.390x, recorded in `models/price_interval.json`), and it covers **76.3%** of the test split against an 80% target. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
+  - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only.
+  - **The IQR cap factor (3.0) is inherited, not derived.** It clips PRICE at Q3 + 3·IQR ≈ $4.49M, which compresses the genuine luxury tail (real listings at $56M-$195M land at the cap) rather than removing it. That is a defensible-but-unproven choice: no experiment in this repo establishes 3.0 over 1.5 or over dropping the tail outright, so it is recorded here as a known weakness rather than presented as tuned.
+  - **One overflow sentinel is dropped, not capped.** The raw export contains a single `PRICE` of 2,147,483,647 (2³¹−1) where the next-highest real listing is $195M. It is removed before capping, because capping would convert it into a plausible-looking listing at the IQR bound instead of eliminating it.
+  - **No naive-baseline column next to the headline metrics:** R²=0.835 (Kaggle split) and R²(log)=0.250 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
 - **Recommendations:**
   - Treat predictions as directional, not dollar-accurate.
   - Do not use for decisions that would materially affect a specific person (loan, rent, appraisal).
