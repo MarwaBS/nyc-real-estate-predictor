@@ -37,21 +37,21 @@ REFERENCE_POINTS: dict[str, tuple[float, float]] = {
 
 def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add derived numerical features (no target-derived features)."""
-    result = df.copy()
+    listings = df.copy()
 
     # Sums and ratios, not transforms. A gradient-boosted tree splits on
     # thresholds, so it is invariant to any monotone transform of a single
     # feature -- LOG_SQFT gave it exactly the partitions PROPERTYSQFT already
     # gives and was removed. A ratio is different: the tree can only approximate
     # BEDS/BATH through many awkward splits, so computing it is real signal.
-    result["TOTAL_ROOMS"] = result["BEDS"] + result["BATH"]
-    result["BED_BATH_RATIO"] = result["BEDS"] / result["BATH"].clip(lower=1)
-    result["ROOMS_PER_SQFT"] = result["TOTAL_ROOMS"] / result["PROPERTYSQFT"].clip(
-        lower=1
-    )
+    listings["TOTAL_ROOMS"] = listings["BEDS"] + listings["BATH"]
+    listings["BED_BATH_RATIO"] = listings["BEDS"] / listings["BATH"].clip(lower=1)
+    listings["ROOMS_PER_SQFT"] = listings["TOTAL_ROOMS"] / listings[
+        "PROPERTYSQFT"
+    ].clip(lower=1)
 
     logger.info("Added 3 numeric features: TOTAL_ROOMS, BED_BATH_RATIO, ROOMS_PER_SQFT")
-    return result
+    return listings
 
 
 def add_geospatial_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -66,29 +66,29 @@ def add_geospatial_features(df: pd.DataFrame) -> pd.DataFrame:
     H3 indexing and KMeans clustering were explored in EDA and never fed any
     model, so they are not computed here either.
     """
-    result = add_distance_features(df.copy(), REFERENCE_POINTS)
+    listings = add_distance_features(df.copy(), REFERENCE_POINTS)
     logger.info("Added distance features: DIST_MANHATTAN_CENTER, DIST_CENTRAL_PARK")
-    return result
+    return listings
 
 
 def add_target_variables(df: pd.DataFrame) -> pd.DataFrame:
     """Create target columns for classification and regression."""
-    result = df.copy()
+    listings = df.copy()
 
     # Price zones (classification target)
-    result["PRICE_ZONE"] = pd.cut(
-        result["PRICE"],
+    listings["PRICE_ZONE"] = pd.cut(
+        listings["PRICE"],
         bins=PRICE_ZONE_BINS,
         labels=PRICE_ZONE_LABELS,
         include_lowest=True,
     )
 
     # Log price (regression target — stabilizes variance)
-    result["LOG_PRICE"] = np.log1p(result["PRICE"])
+    listings["LOG_PRICE"] = np.log1p(listings["PRICE"])
 
     # SQFT category (secondary classification)
-    result["SQFT_CATEGORY"] = pd.cut(
-        result["PROPERTYSQFT"],
+    listings["SQFT_CATEGORY"] = pd.cut(
+        listings["PROPERTYSQFT"],
         bins=SQFT_BINS,
         labels=SQFT_LABELS,
         include_lowest=True,
@@ -97,7 +97,7 @@ def add_target_variables(df: pd.DataFrame) -> pd.DataFrame:
     logger.info(
         "Added targets: PRICE_ZONE (4 classes), LOG_PRICE, SQFT_CATEGORY (3 classes)"
     )
-    return result
+    return listings
 
 
 def cap_categorical_cardinality(
@@ -106,13 +106,13 @@ def cap_categorical_cardinality(
     max_categories: int = 50,
 ) -> pd.DataFrame:
     """Frequency-cap high-cardinality categoricals — keep top N, rest = 'other'."""
-    result = df.copy()
+    listings = df.copy()
     for col in columns:
-        if col not in result.columns:
+        if col not in listings.columns:
             continue
-        top = result[col].value_counts().nlargest(max_categories).index
-        n_capped = (~result[col].isin(top)).sum()
-        result[col] = result[col].where(result[col].isin(top), "other")
+        top = listings[col].value_counts().nlargest(max_categories).index
+        n_capped = (~listings[col].isin(top)).sum()
+        listings[col] = listings[col].where(listings[col].isin(top), "other")
         if n_capped > 0:
             logger.info(
                 "Capped %s: %d values -> 'other' (top %d kept)",
@@ -120,7 +120,7 @@ def cap_categorical_cardinality(
                 n_capped,
                 max_categories,
             )
-    return result
+    return listings
 
 
 def learned_capped_categories(pipeline: object) -> dict[str, set]:
@@ -171,11 +171,11 @@ def apply_serving_cap(df: pd.DataFrame, known: dict[str, set]) -> pd.DataFrame:
     capped column — the inference-time mirror of :func:`cap_categorical_cardinality`,
     keyed off the categories the fitted model actually learned (see
     :func:`learned_capped_categories`)."""
-    result = df.copy()
+    listings = df.copy()
     for col, allowed in known.items():
-        if col in result.columns:
-            result[col] = result[col].where(result[col].isin(allowed), "other")
-    return result
+        if col in listings.columns:
+            listings[col] = listings[col].where(listings[col].isin(allowed), "other")
+    return listings
 
 
 def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
