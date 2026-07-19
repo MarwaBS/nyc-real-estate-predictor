@@ -3,7 +3,7 @@
 [![CI](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20Demo-on%20Hugging%20Face-yellow)](https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor)
 
-**Classify NYC properties into price zones and predict actual values using gradient boosting ensembles and multi-task deep learning on 4,500+ listings with geospatial features.**
+**Classify NYC properties into price zones and predict actual values using gradient boosting on 4,500+ listings with geospatial features.**
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 

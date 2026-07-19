@@ -28,3 +28,24 @@ Build a multi-task PyTorch network with:
   (`MultiTaskDenseNet`), NOT TabNet — it has no attention/sparsemax feature
   selection. TabNet remains a *future* alternative worth evaluating for its
   built-in attention-based interpretability, but it is not what this ADR builds.
+
+## Status update (2026-07-19) — reversed; the code is deleted
+
+`src/dl/` no longer exists. This record is retained because an ADR is a log of
+what was decided, not a description of the current tree — deleting it would
+erase the fact that the approach was tried.
+
+What was measured before removal, on the same split as the tree models:
+
+| | macro F1 |
+|---|---|
+| Multi-task dense net | 0.666 |
+| Gradient-boosted tree | 0.727 |
+
+The net scored below the tree, its results were quoted in no document, and its
+139 statements sat at 0% test coverage. The prediction in "Consequences" above
+— *"performance may not exceed XGBoost on tabular data (expected) — the value
+is in demonstrating the approach"* — held on the first clause. The second no
+longer justified the cost: on 4,526 rows the tree wins, trains in seconds, and
+is interpretable via SHAP, while the net added a `torch` pin carrying two
+security advisories for a capability nothing shipped.

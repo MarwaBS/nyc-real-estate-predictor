@@ -6,6 +6,54 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — one model, derived zones, conformal interval, borough floor
+
+- **The classifier is deleted; the zone is the predicted price bucketed.**
+  `PRICE_ZONE` is a deterministic function of price, so a second model was
+  fitting the same features to the same signal. Measured cost on identical
+  bins: a dedicated classifier scores macro F1 **0.7181** against the bucketed
+  **0.6987** — about 1.3 SE on a 906-row split, so not an established
+  difference. Not shipped because two models can disagree on one response: a
+  "High" zone beside a price that buckets to "Medium", with nothing to catch
+  it. Training scores zones through the same decode serving uses.
+- **Zone cut-points are quartiles of the training prices** ($499,000 /
+  $825,000 / $1,495,000), replacing `[0, 500k, 1M, 2M]` — round numbers with no
+  derivation. Classes go from 1610/1183/929/805 to 1162/1131/1117/1116.
+  **Side effect: the borough spread narrowed from 0.29 to 0.12** and Queens
+  moved from worst (0.601) to third (0.685). Much of the previously reported
+  fairness gap was an artefact of the bins, which gave Staten Island one
+  dominant class that was easy to score.
+- **The interval is properly conformal.** Calibration used the plain empirical
+  quantile where split conformal requires the ceil((n+1)(1-alpha))-th order
+  statistic; uncorrected it under-covers by construction. Coverage moved
+  **0.7627 -> 0.8179**, and the test tolerance returned to 2 SE from the 3 SE
+  that had been chosen only because 2 SE failed.
+- **Every borough must beat its own majority-class baseline or the build
+  fails.** Derived per borough from its own class distribution, so it is not a
+  threshold picked with the results in view. Margins +0.46 to +0.59.
+- **Features removed with proof:** `LOG_SQFT` (trees are invariant to monotone
+  transforms — measured val R2 0.7715 with and without, identical to four
+  decimals); `DIST_NEAREST_SUBWAY` (was assigned as a copy of
+  `DIST_MANHATTAN_CENTER`; a duplicate column is not a proxy).
+- **Deleted:** the multi-task net (measured macro F1 0.666 vs the tree's 0.727,
+  quoted nowhere, 139 statements at 0% coverage), `train_classification.py` and
+  `train_regression.py` (zero importers), the label encoder and its
+  class-index-ordering hazard, and the `torch`, `catboost`, `optuna` and
+  `imbalanced-learn` pins that no longer had a single import.
+- **Reported metrics (test split):** regression R2 **0.812** (Random Forest),
+  zones macro F1 **0.699**. Not comparable to earlier figures — the quartile
+  bins changed the classification target and the stratification, so the splits
+  differ. Coverage rose 69% -> 81% by deleting untested code.
+
+### Fixed — rate limiting did not apply to rejected API keys
+
+- `SECURITY.md` scopes DoS out because `/predict` is rate-limited, but
+  route-level `dependencies=[Depends(verify_api_key)]` resolved before
+  slowapi's decorator: measured, **15 wrong-key requests produced 15x 403 and
+  zero 429**, leaving key brute-force unbounded behind a policy that relied on
+  the control. The check now runs inside the handler, after the limiter —
+  measured after: 403, 403, 403, 429...
+
 ### Fixed — the coverage gate was measured over a subset
 
 - **The 88% floor described a hand-picked subset.** `pyproject.toml` omitted 8
