@@ -7,6 +7,7 @@ sklearn 1.5.2 deserialised a 1.8.0-trained pipeline into garbage and the
 pipeline kept serving ($2 Manhattan condos) — the failure mode is silent
 corruption, so the guard must be a hard stop, not a log line.
 """
+
 from __future__ import annotations
 
 import json
@@ -72,7 +73,9 @@ def get_regressor(path: Path | None = None) -> Any:
     """Load the best regressor (cached after first call)."""
     global _regressor_cache
     if _regressor_cache is None:
-        _regressor_cache = _load_model(path or MODELS_DIR / "price_regressor_best.joblib")
+        _regressor_cache = _load_model(
+            path or MODELS_DIR / "price_regressor_best.joblib"
+        )
     return _regressor_cache
 
 

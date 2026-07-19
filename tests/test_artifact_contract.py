@@ -1,7 +1,7 @@
 """Artifact-contract tests — the SHIPPED model artefacts must serve correct zone labels.
 
-These tests load the real ``models/*.joblib`` artefacts (DVC/local-only, so
-they skip in CI like the other model-guarded tests) and probe the CAPABILITY:
+These tests load the real ``models/*.joblib`` artefacts, which are committed
+and MANIFEST-pinned, and probe the CAPABILITY:
 the decoded zone label must be the label encoder's name for the predicted
 class index, and it must be consistent with the predicted price. The prior
 suite asserted only label MEMBERSHIP, which stayed green while the API

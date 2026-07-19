@@ -6,6 +6,7 @@ each run). ``check_drift`` is an OFFLINE utility for comparing a batch of
 candidate data against that baseline — it is not wired into the serving path,
 so nothing here runs at inference time.
 """
+
 from __future__ import annotations
 
 import json
@@ -89,7 +90,9 @@ def detect_drift(
             }
 
     if drifted:
-        logger.warning("Drift detected in %d features: %s", len(drifted), list(drifted.keys()))
+        logger.warning(
+            "Drift detected in %d features: %s", len(drifted), list(drifted.keys())
+        )
     else:
         logger.info("No drift detected (threshold=%.2f)", threshold)
 

@@ -1,4 +1,5 @@
 """Model explainability — SHAP values, feature importance, per-prediction explanations."""
+
 from __future__ import annotations
 
 import logging
@@ -22,10 +23,7 @@ def compute_shap_values(
     import shap
 
     # Sample for performance if dataset is large
-    if len(X) > max_samples:
-        X_sample = X.sample(n=max_samples, random_state=42)
-    else:
-        X_sample = X
+    X_sample = X.sample(n=max_samples, random_state=42) if len(X) > max_samples else X
 
     # Use TreeExplainer for tree models, KernelExplainer as fallback
     try:
@@ -58,11 +56,20 @@ def get_top_features_for_prediction(
             # aggregate magnitude across classes for a single ranking.
             values = values.mean(axis=1)
 
-    importance = list(zip(feature_names, values))
+    # strict=True: one SHAP value per feature name. A mismatch means the
+    # explainer's output shape disagrees with the transformed feature list,
+    # and truncating would silently mis-pair names to values -- the resulting
+    # top-10 table would look plausible and attribute importance to the wrong
+    # features.
+    importance = list(zip(feature_names, values, strict=True))
     importance.sort(key=lambda x: abs(x[1]), reverse=True)
 
     return [
-        {"feature": name, "shap_value": round(float(val), 4), "direction": "+" if val > 0 else "-"}
+        {
+            "feature": name,
+            "shap_value": round(float(val), 4),
+            "direction": "+" if val > 0 else "-",
+        }
         for name, val in importance[:top_n]
     ]
 
@@ -83,10 +90,16 @@ def global_feature_importance(
             vals = vals.mean(axis=2)
 
     mean_importance = vals.mean(axis=0)
-    importance_df = pd.DataFrame({
-        "feature": feature_names,
-        "mean_abs_shap": mean_importance,
-    }).sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
+    importance_df = (
+        pd.DataFrame(
+            {
+                "feature": feature_names,
+                "mean_abs_shap": mean_importance,
+            }
+        )
+        .sort_values("mean_abs_shap", ascending=False)
+        .reset_index(drop=True)
+    )
 
     logger.info("Top 5 features by SHAP: %s", importance_df.head(5).to_dict("records"))
     return importance_df

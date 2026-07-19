@@ -1,4 +1,5 @@
 """Train price regression models — XGBoost, LightGBM, CatBoost, RF."""
+
 from __future__ import annotations
 
 import logging
@@ -29,34 +30,49 @@ def train_and_evaluate(
 
     models_to_train = {
         "random_forest": RandomForestRegressor(
-            n_estimators=500, random_state=RANDOM_SEED, n_jobs=-1,
+            n_estimators=500,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         ),
     }
 
     # Add gradient boosting models
     try:
         from xgboost import XGBRegressor
+
         models_to_train["xgboost"] = XGBRegressor(
-            max_depth=6, n_estimators=500, learning_rate=0.1,
-            random_state=RANDOM_SEED, n_jobs=-1,
+            max_depth=6,
+            n_estimators=500,
+            learning_rate=0.1,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
         )
     except ImportError:
         logger.warning("XGBoost not installed — skipping")
 
     try:
         from lightgbm import LGBMRegressor
+
         models_to_train["lightgbm"] = LGBMRegressor(
-            num_leaves=63, n_estimators=500, learning_rate=0.1,
-            random_state=RANDOM_SEED, n_jobs=-1, verbose=-1,
+            num_leaves=63,
+            n_estimators=500,
+            learning_rate=0.1,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+            verbose=-1,
         )
     except ImportError:
         logger.warning("LightGBM not installed — skipping")
 
     try:
         from catboost import CatBoostRegressor
+
         models_to_train["catboost"] = CatBoostRegressor(
-            depth=6, iterations=500, learning_rate=0.1,
-            random_seed=RANDOM_SEED, verbose=0,
+            depth=6,
+            iterations=500,
+            learning_rate=0.1,
+            random_seed=RANDOM_SEED,
+            verbose=0,
         )
     except ImportError:
         logger.warning("CatBoost not installed — skipping")

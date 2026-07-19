@@ -71,7 +71,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
   Reported without a causal explanation, because none was measured. Staten
   Island does have the most concentrated zone distribution (55.9% Medium vs
-  Queens' most-common 37.3%), but no experiment here establishes that as the
+  Queens' most-common 37.7%), but no experiment here establishes that as the
   cause. Not currently mitigated (would need per-borough calibration or
   reweighting).
 
