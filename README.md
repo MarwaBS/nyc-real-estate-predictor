@@ -62,11 +62,6 @@ dropped instead of being capped into a plausible-looking listing. Test macro F1
 sits slightly above val here (0.727 vs 0.721); on a 906-row test split that is
 ordinary split-to-split variance, not evidence of a better model.
 
-> The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
-> optional training stage when `requirements-train.txt` extras (torch) are
-> installed; its results are not part of the shipped artefact and are
-> therefore not quoted here.
-
 ### SHAP feature importance (top 10)
 
 From the artefact's `classification.shap_top10` (mean |SHAP| over the test
@@ -236,13 +231,7 @@ src/data/features.py        Geospatial (haversine distances), numeric, target en
     v
 src/models/pipelines.py     sklearn Pipeline + ColumnTransformer (reproducible preprocessing)
     |
-    +---> src/models/train_classification.py   XGBoost / LightGBM / CatBoost / Stacking
-    |         Optuna Bayesian tuning (50 trials) + SMOTE-ENN for class imbalance
-    |
     +---> src/models/train_regression.py       Same models, LOG_PRICE target
-    |
-    +---> src/dl/tabular_net.py                Multi-task PyTorch: shared trunk
-    |         Entity embeddings + Focal Loss + CosineAnnealing + early stopping
     |
     +---> src/models/explain.py                SHAP (global + per-prediction) + fairness
     |
@@ -257,8 +246,7 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 |---|---|---|
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
-| **ML models** | `src/models/` | sklearn Pipelines (shipped); Optuna tuning, stacking ensemble, SMOTE-ENN (extended path, not shipped) |
-| **Deep learning** | `src/dl/` | Multi-task dense net (PyTorch): entity embeddings + shared MLP trunk, classification + regression heads, Focal Loss |
+| **ML models** | `src/models/` | sklearn Pipelines; one gradient-boosted regressor |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
 | **UI** | `streamlit_app/` | Interactive NYC map, prediction form, probability charts |
@@ -386,51 +374,9 @@ LightGBM vs Random Forest for regression, fixed hyperparameters, best
 model selected on the **val** split and then scored once on **test**. That
 is the path whose outputs are recorded in `reports/training_metrics.json`.
 
-**Extended training path (optional, `requirements-train.txt`):**
-`src/models/train_classification.py` / `train_dl.py` additionally
-implement Optuna Bayesian tuning, CatBoost, a stacking ensemble,
-SMOTE-ENN imbalance handling, and the multi-task PyTorch net. These are
-real, runnable code — but their outputs are not the shipped artefacts,
-so this README does not quote numbers from them.
-
-### Classification: Price Zone (Low / Medium / High / Very High)
-
-| Model (shipped path) | Tuning | Class Imbalance |
-|---|---|---|
-| XGBoost | fixed hyperparameters | none |
-| LightGBM | fixed hyperparameters | class_weight="balanced" |
-
 ### Regression: Actual Price
 
-XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance). Predictions converted back via `expm1()`.
-
-### Deep Learning: Multi-Task Dense Net
-
-(Entity embeddings + a shared MLP trunk with classification and regression heads —
-a plain dense network, **not** the TabNet architecture. No sequential attention,
-sparsemax feature selection, or per-sample attention masks.)
-
-```
-Numeric (10 feats) -> BatchNorm -> Dense(128)
-Categorical        -> Entity Embeddings -> Dense(128)
-                         |
-                    Shared Trunk: 256 -> 128 -> 64 (BatchNorm + Dropout)
-                         |
-              +----------+----------+
-              |                     |
-     Classification Head      Regression Head
-     Dense(4, Softmax)        Dense(1, Linear)
-     Focal Loss               MSE Loss
-              |                     |
-              +-- Combined: 0.6*CE + 0.4*MSE --+
-```
-
-- Optimizer: AdamW (weight_decay=1e-4)
-- LR scheduler: CosineAnnealingWarmRestarts(T_0=10)
-- Early stopping: patience=15 epochs
-- Gradient clipping: max_norm=1.0
-
----
+XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance), compared on val; the winner is scored once on test. Predictions converted back via `expm1()`.
 
 ## Explainability
 
@@ -496,14 +442,9 @@ nyc-real-estate-predictor/
 │   │   └── features.py           Feature engineering + leakage guard
 │   ├── models/
 │   │   ├── pipelines.py          sklearn Pipeline + ColumnTransformer
-│   │   ├── train_classification.py  XGBoost/LGBM/CatBoost + Optuna + stacking
-│   │   ├── train_regression.py   Same models for LOG_PRICE
 │   │   ├── evaluate.py           Metrics, confusion matrix, fairness
 │   │   ├── explain.py            SHAP values + global importance
 │   │   └── predict.py            Load model + inference
-│   ├── dl/
-│   │   ├── tabular_net.py        Multi-task PyTorch net + Focal Loss
-│   │   └── train_dl.py           Training loop, early stopping, LR scheduler
 │   └── utils/
 │       ├── geo.py                Haversine distances (vectorised numpy)
 │       └── validation.py         Schema checks, assert_no_leakage()
@@ -526,7 +467,6 @@ nyc-real-estate-predictor/
 ├── docs/decisions/               Architecture Decision Records
 │   ├── 001-remove-price-per-sqft.md
 │   ├── 002-xgboost-primary-model.md
-│   └── 003-multi-task-deep-learning.md
 │
 ├── notebooks/                    EDA + analysis (import from src/)
 ├── models/                       Flagship artifacts committed + MANIFEST.sha256-pinned;
@@ -547,9 +487,8 @@ nyc-real-estate-predictor/
 | Category | Technology |
 |---|---|
 | Language | Python 3.12 |
-| ML | scikit-learn, XGBoost, LightGBM, CatBoost |
-| DL | PyTorch 2.x (multi-task dense net, Focal Loss, entity embeddings) |
-| Tuning | none in the shipped path — fixed hyperparameters; Optuna is available in the optional extended path |
+| ML | scikit-learn, XGBoost, LightGBM |
+| Tuning | none — fixed hyperparameters, candidates compared on val |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
@@ -580,7 +519,7 @@ Exact pins — training + runtime are now identical:
 | numpy | `==1.26.4` | |
 | pandas | `==2.2.3` | |
 
-All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: Optuna, SHAP, imbalanced-learn). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
+All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: SHAP, MLflow). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
 
 ---
 
