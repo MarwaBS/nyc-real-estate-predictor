@@ -32,6 +32,7 @@ except ImportError:
     _HAS_MLFLOW = False
 
 from src.config import (
+    CLEANED_DATASET,
     MODELS_DIR,
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
@@ -40,12 +41,13 @@ from src.config import (
     TEST_SIZE,
     VAL_SIZE,
 )
+from src.data.cleaner import clean_pipeline
 from src.data.features import (
     add_numeric_features,
     add_target_variables,
     cap_categorical_cardinality,
 )
-from src.data.loader import load_cleaned
+from src.data.loader import load_raw
 from src.models.evaluate import (
     evaluate_classifier,
     evaluate_fairness_by_group,
@@ -70,30 +72,23 @@ REFERENCE_POINTS = {
 
 def prepare_data() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     """Load, clean, and feature-engineer the full dataset."""
-    logger.info("=" * 60)
-    logger.info("STEP 1: Loading data")
-    logger.info("=" * 60)
-    df = load_cleaned()
+    logger.info("Step 1: loading raw data and cleaning it")
 
-    # Normalize column names
-    df.columns = df.columns.str.upper().str.strip()
+    # Train from the RAW snapshot through the cleaning pipeline, rather than
+    # reading a pre-cleaned CSV. The cleaned file previously had no producer
+    # anywhere in the repo: it was a committed artefact whose contents no code
+    # could regenerate (it held a 2,147,483,647 sentinel PRICE that this
+    # pipeline's IQR cap makes impossible), so `python run_training.py` did not
+    # reproduce the shipped models. Cleaning here makes the artefact derived.
+    df = clean_pipeline(load_raw())
 
-    # Ensure BOROUGH exists
-    if "BOROUGH" not in df.columns:
-        logger.warning("BOROUGH column missing — creating from SUBLOCALITY")
-        df["BOROUGH"] = df.get("SUBLOCALITY", "unknown")
+    # Written for the benchmark trainer and the EDA notebook, which both read
+    # the cleaned CSV. It is an output of this script, never an input to it.
+    CLEANED_DATASET.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(CLEANED_DATASET, index=False)
+    logger.info("Wrote cleaned dataset to %s", CLEANED_DATASET)
 
-    # Ensure PROPERTY_CATEGORY exists
-    if "PROPERTY_CATEGORY" not in df.columns:
-        df["PROPERTY_CATEGORY"] = "residential"
-
-    # Ensure SUBLOCALITY exists
-    if "SUBLOCALITY" not in df.columns:
-        df["SUBLOCALITY"] = "unknown"
-
-    logger.info("=" * 60)
-    logger.info("STEP 2: Feature engineering")
-    logger.info("=" * 60)
+    logger.info("Step 2: feature engineering")
 
     # Numeric features
     df = add_numeric_features(df)
@@ -169,9 +164,7 @@ def train_classification(
     Returns the selected model's record (name, metrics, fairness) for the
     committed training-metrics artefact.
     """
-    logger.info("=" * 60)
     logger.info("STEP 3: Training classification models")
-    logger.info("=" * 60)
 
     from lightgbm import LGBMClassifier
     from xgboost import XGBClassifier
@@ -295,9 +288,7 @@ def train_regression(
     Returns the selected model's record (name, metrics) for the committed
     training-metrics artefact.
     """
-    logger.info("=" * 60)
     logger.info("STEP 4: Training regression models")
-    logger.info("=" * 60)
 
     from lightgbm import LGBMRegressor
     from sklearn.ensemble import RandomForestRegressor
@@ -424,10 +415,8 @@ PRICE_INTERVAL_TARGET = 0.80
 
 def calibrate_price_interval(
     regressor: Any,
-    X_val: pd.DataFrame,
-    y_price_val: pd.Series,
-    X_test: pd.DataFrame,
-    y_price_test: pd.Series,
+    splits: dict[str, tuple[pd.DataFrame, pd.Series]],
+    calibrate_on: str = "val",
     target: float = PRICE_INTERVAL_TARGET,
 ) -> dict[str, Any]:
     """Derive the served price interval from measured residuals.
@@ -441,7 +430,18 @@ def calibrate_price_interval(
     This replaces a hardcoded +/-15%, which was not derived from anything and
     contained the true price 32% of the time while being presented to users as
     a price range.
+
+    ``calibrate_on`` names a key of ``splits`` and both selects the data and
+    labels the artefact, so the two cannot disagree. The label used to be the
+    string literal "val" written next to a separate hardcoded ``X_val``
+    argument: calibrating on test while still recording "val" was a one-word
+    edit away, and the test guarding it asserted the literal against itself.
+    Passing the splits as a mapping makes that mislabel unrepresentable rather
+    than merely tested for.
     """
+    if calibrate_on not in splits:
+        raise KeyError(f"calibrate_on={calibrate_on!r} is not one of {sorted(splits)}")
+
     lo_q, hi_q = (1.0 - target) / 2.0, 1.0 - (1.0 - target) / 2.0
 
     def ratio(X: pd.DataFrame, y_log: pd.Series) -> np.ndarray:
@@ -449,8 +449,8 @@ def calibrate_price_interval(
         actual = np.expm1(np.asarray(y_log, dtype=float))
         return actual / predicted
 
-    r_val = ratio(X_val, y_price_val)
-    low, high = (float(q) for q in np.quantile(r_val, [lo_q, hi_q]))
+    ratios = {name: ratio(X, y) for name, (X, y) in splits.items()}
+    low, high = (float(q) for q in np.quantile(ratios[calibrate_on], [lo_q, hi_q]))
 
     def coverage(r: np.ndarray) -> float:
         return float(np.mean((r >= low) & (r <= high)))
@@ -459,9 +459,8 @@ def calibrate_price_interval(
         "target_coverage": target,
         "low_multiplier": round(low, 4),
         "high_multiplier": round(high, 4),
-        "calibrated_on": "val",
-        "coverage_val": round(coverage(r_val), 4),
-        "coverage_test": round(coverage(ratio(X_test, y_price_test)), 4),
+        "calibrated_on": calibrate_on,
+        **{f"coverage_{name}": round(coverage(r), 4) for name, r in ratios.items()},
     }
     logger.info("Price interval: %s", record)
     return record
@@ -553,9 +552,7 @@ def _write_training_metrics(
 
 def main() -> None:
     """Run the full training pipeline."""
-    logger.info("=" * 60)
     logger.info("NYC PRICE PREDICTION — TRAINING PIPELINE")
-    logger.info("=" * 60)
 
     # 1. Prepare data
     df, y_zone, y_log_price, borough = prepare_data()
@@ -646,15 +643,11 @@ def main() -> None:
     # Committed as a serving artefact rather than hardcoded so it cannot rot
     # away from the model it describes: a retrain that shifts the residuals
     # rewrites this file, and tests/test_price_interval.py reads the recorded
-    # coverage. Constants in source would have to be updated by hand, and the
-    # gate that would catch them going stale needs the raw dataset, which CI
-    # does not have.
+    # coverage. Constants in source would have to be updated by hand.
     interval = calibrate_price_interval(
         joblib.load(MODELS_DIR / "price_regressor_best.joblib"),
-        X_val,
-        y_price_val,
-        X_test,
-        y_price_test,
+        splits={"val": (X_val, y_price_val), "test": (X_test, y_price_test)},
+        calibrate_on="val",
     )
     (MODELS_DIR / "price_interval.json").write_text(
         json.dumps(interval, indent=2) + "\n", encoding="utf-8"
@@ -662,9 +655,7 @@ def main() -> None:
     reg_record["price_interval"] = interval
 
     # 6. Generate SHAP explanations
-    logger.info("=" * 60)
     logger.info("STEP 5: SHAP explainability")
-    logger.info("=" * 60)
     try:
         best_clf = joblib.load(MODELS_DIR / "price_zone_best.joblib")
         # Get preprocessed features for SHAP
@@ -705,9 +696,7 @@ def main() -> None:
     )
 
     # 8. Deep learning training
-    logger.info("=" * 60)
     logger.info("STEP 7: Deep learning (multi-task)")
-    logger.info("=" * 60)
     try:
         from src.dl.tabular_net import MultiTaskDenseNet, MultiTaskLoss
         from src.dl.train_dl import prepare_dl_data, train_multitask
@@ -812,9 +801,7 @@ def main() -> None:
         logger.warning("DL training failed (non-critical): %s", exc)
 
     # 9. Save drift baseline
-    logger.info("=" * 60)
     logger.info("STEP 8: Drift baseline")
-    logger.info("=" * 60)
     try:
         from src.models.drift import save_baseline
 
@@ -823,10 +810,8 @@ def main() -> None:
     except Exception as exc:
         logger.warning("Drift baseline failed (non-critical): %s", exc)
 
-    logger.info("=" * 60)
     logger.info("TRAINING COMPLETE")
     logger.info("Models saved to: %s", MODELS_DIR)
-    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

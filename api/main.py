@@ -188,7 +188,6 @@ def _build_features(prop: PropertyInput) -> pd.DataFrame:
         "DIST_NEAREST_SUBWAY": dist_manhattan,  # proxy — see MODEL_CARD.md
         "BOROUGH": prop.borough.lower(),
         "TYPE": prop.type.lower(),
-        "PROPERTY_CATEGORY": "residential",
         "ZIPCODE": prop.zipcode,
         "SUBLOCALITY": prop.sublocality.lower(),
     }
@@ -290,11 +289,20 @@ def health(response: Response) -> HealthResponse:
     names, so a loadable clf/reg with a missing or unloadable encoder would
     still serve mislabeled zones. ``models_loaded`` is therefore true only when
     all three load; ``label_encoder_loaded`` surfaces the encoder on its own.
+
+    The price interval is probed for the same reason. It became a REQUIRED
+    fourth artefact when the served range stopped being a hardcoded +/-15%:
+    ``get_price_interval`` raises FileNotFoundError rather than guessing, so a
+    deployment missing ``price_interval.json`` would otherwise report 200 with
+    ``models_loaded: true`` while every /predict returned 500.
     """
     clf_reg_ok = False
     try:
+        from src.models.predict import get_price_interval
+
         _get_classifier()
         _get_regressor()
+        get_price_interval()
         clf_reg_ok = True
     except Exception:
         # Logged, not swallowed: a silent probe failure is how an unhealthy

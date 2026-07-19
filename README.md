@@ -13,10 +13,10 @@ This repository contains **two separate evaluation surfaces** that should not be
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
-| Trained-model evaluation | Kaggle 2023 listings (4,504 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.800 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; models + data are local-only, so this artefact is the auditable record) |
-| External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.375 on 18,314 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
+| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
+| External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
 
-The external benchmark is the independently verifiable surface: `python -m benchmarks.run_benchmark` on any clone downloads the public data, verifies the schema lock, and recomputes the number. The flagship evaluation is honest but local — its data and models have no public remote (DVC without a remote), so its numbers are backed by the committed metrics artefact, not by stranger-reproducibility. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
+Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
 
 ---
 
@@ -34,13 +34,13 @@ once, after selection is fixed.
 
 | Task | Model | Metric | Val (selection) | **Test (reported)** |
 |---|---|---|---|---|
-| Price Zone (4-class) | **XGBoost** (selected) | Macro F1 | 0.713 | **0.698** |
-| Price Zone (4-class) | LightGBM | Macro F1 | 0.683 | not scored |
-| Price Regression | **LightGBM** (selected) | R2 | 0.790 | **0.800** |
-| Price Regression | Random Forest | R2 | 0.788 | not scored |
-| Price Regression | XGBoost | R2 | 0.782 | not scored |
+| Price Zone (4-class) | **XGBoost** (selected) | Macro F1 | 0.721 | **0.727** |
+| Price Zone (4-class) | LightGBM | Macro F1 | 0.715 | not scored |
+| Price Regression | **XGBoost** (selected) | R2 | 0.826 | **0.835** |
+| Price Regression | LightGBM | R2 | 0.822 | not scored |
+| Price Regression | Random Forest | R2 | 0.818 | not scored |
 
-Split: 2,882 train / 721 val / 901 test, stratified on price zone. Losing
+Split: 2,896 train / 724 val / 906 test, stratified on price zone. Losing
 candidates show "not scored" because they never touch test — scoring them
 there and then quoting the winner's number is how a selected maximum gets
 published as a hold-out estimate. Artifacts produced under the pinned
@@ -48,17 +48,22 @@ environment (Python 3.12.13, numpy 1.26.4, scikit-learn 1.8.0 — recorded in
 the artifact's provenance block together with `working_tree_clean` and the
 producing commit).
 
-**These numbers replace a previously published 0.724 macro F1, and the
-change is a correction, not a regression.** That figure came from per-class
-thresholds fitted against the *test* labels and then scored on those same
-labels, so the advertised "+0.014 gain" was the tuner reading its own answer
-sheet. Measured honestly — thresholds fitted on half the test set and scored
-on the other half, over 20 stratified splits — tuning was worth +0.0006 mean
-(std 0.0106), helping 12 splits and hurting 8. It is noise, so it has been
-removed rather than moved to val, and serving decodes with plain argmax. The
-remaining drop (0.711 argmax → 0.698) is the cost of carving a real
-validation split out of training data: the classifier now learns from 2,882
-rows instead of 3,603.
+**Serving decodes with plain argmax; per-class threshold tuning was removed.**
+An earlier revision published 0.724 macro F1 from per-class thresholds fitted
+against the *test* labels and then scored on those same labels, so the
+advertised "+0.014 gain" was the tuner reading its own answer sheet. Measured
+honestly — thresholds fitted on half the test set and scored on the other half,
+over 20 stratified splits — tuning was worth +0.0006 mean (std 0.0106), helping
+12 splits and hurting 8. It is noise, so it was removed rather than moved to
+val.
+
+**These numbers are not comparable to any published before 2026-07-18.** The
+dataset itself changed: `BOROUGH` and `ZIPCODE` are now derived by committed
+code from the raw export rather than inherited from a pre-cleaned CSV that
+nothing in this repo could regenerate, and a 2³¹−1 overflow sentinel is now
+dropped instead of being capped into a plausible-looking listing. Test macro F1
+sits slightly above val here (0.727 vs 0.721); on a 906-row test split that is
+ordinary split-to-split variance, not evidence of a better model.
 
 > The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
 > optional training stage when `requirements-train.txt` extras (torch) are
@@ -73,29 +78,36 @@ ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | DIST_MANHATTAN_CENTER | 1.245 |
-| 2 | BATH | 0.890 |
-| 3 | PROPERTYSQFT | 0.874 |
-| 4 | DIST_CENTRAL_PARK | 0.490 |
-| 5 | SUBLOCALITY (target-encoded) | 0.359 |
-| 6 | ROOMS_PER_SQFT | 0.310 |
-| 7 | TOTAL_ROOMS | 0.272 |
-| 8 | ZIPCODE (target-encoded) | 0.240 |
-| 9 | TYPE_condo (one-hot) | 0.208 |
-| 10 | BOROUGH_bronx (one-hot) | 0.125 |
+| 1 | DIST_MANHATTAN_CENTER | 1.167 |
+| 2 | BATH | 0.923 |
+| 3 | PROPERTYSQFT | 0.800 |
+| 4 | DIST_CENTRAL_PARK | 0.455 |
+| 5 | ROOMS_PER_SQFT | 0.314 |
+| 6 | ZIPCODE (target-encoded) | 0.277 |
+| 7 | TYPE_co-op (one-hot) | 0.271 |
+| 8 | TOTAL_ROOMS | 0.264 |
+| 9 | BED_BATH_RATIO | 0.190 |
+| 10 | SUBLOCALITY (target-encoded) | 0.187 |
 
 ### Fairness by borough
 
-From the artefact's `classification.fairness_by_borough` (a small group of
-rows with missing borough is also recorded in the artifact as `"nan"`):
+From the artefact's `classification.fairness_by_borough`. There is no `"nan"`
+group any more: rows whose borough cannot be derived are dropped during
+cleaning rather than carried into training as an unnamed category.
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.777 |
-| Brooklyn | 0.670 |
-| Manhattan | 0.634 |
-| Bronx | 0.612 |
-| Queens | 0.591 |
+| Staten Island | 0.887 |
+| Brooklyn | 0.688 |
+| Manhattan | 0.680 |
+| The Bronx | 0.640 |
+| Queens | 0.601 |
+
+The spread (0.887 Staten Island vs 0.601 Queens) is wide enough to matter and
+is reported unexplained: Staten Island has the most concentrated zone
+distribution of the five boroughs (55.9% Medium vs Queens' most-common 37.3%),
+but no experiment here establishes that as the cause, so it is recorded as an
+observation rather than an explanation.
 
 ---
 
@@ -121,10 +133,10 @@ predict, out of distribution?*
 
 | | Value |
 |---|---|
-| Raw rows downloaded (5 boroughs) | 79,929 |
-| Scored | **18,314** |
-| Dropped (per-reason accounting below) | 61,615 |
-| **R² in log-price space** | **0.375** |
+| Raw rows downloaded (5 boroughs) | 80,476 |
+| Scored | **18,321** |
+| Dropped (per-reason accounting below) | 62,155 |
+| **R² in log-price space** | **0.250** |
 | Leakage — name-based / semantic (Pearson + Spearman + MI) | not triggered |
 | Schema SHA vs registry | verified BEFORE the run (hard gate) |
 | Prediction health (NaN / Inf / collapse) | passed |
@@ -141,9 +153,9 @@ Drop reasons (sum reconciles to `n_dropped` — enforced at run time):
 | `missing_year_built` | 22 |
 | `missing_zip` | 1 |
 
-**Read the number honestly:** 0.375 R²(log) is what borough + sqft + ZIP
+**Read the number honestly:** 0.250 R²(log) is what borough + sqft + ZIP
 explain about 2024 family-dwelling sale prices, full stop. It is *supposed*
-to be far below the flagship's in-distribution 0.800 — the point of the
+to be far below the flagship's in-distribution 0.835 — the point of the
 benchmark is that this gap is measured and sealed, not hidden.
 
 **Reproduce it yourself** (no private data needed — the lean model is
@@ -178,7 +190,7 @@ One-shot orchestration: verify lock → download → map → enforce invariants 
 coordinate-derived distances, and SUBLOCALITY; NYC.gov Rolling Sales
 publishes none of these, and no amount of cleaning or retraining can
 recover information the data source does not contain. That is why the
-benchmark scores the lean shared-feature model — and why its 0.375 is a
+benchmark scores the lean shared-feature model — and why its 0.250 is a
 statement about the shared features, never about the flagship.
 
 Scope is restricted to 1–3 family dwellings: for condos/coops NYC.gov
@@ -236,7 +248,7 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 |---|---|---|
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
-| **ML models** | `src/models/` | sklearn Pipelines, Optuna tuning, stacking ensemble, SMOTE-ENN |
+| **ML models** | `src/models/` | sklearn Pipelines (shipped); Optuna tuning, stacking ensemble, SMOTE-ENN (extended path, not shipped) |
 | **Deep learning** | `src/dl/` | Multi-task dense net (PyTorch): entity embeddings + shared MLP trunk, classification + regression heads, Focal Loss |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
@@ -260,9 +272,21 @@ docker compose up --build     # starts API + Streamlit
 
 ### Manual setup
 
-**Data prerequisite (read first):** the training data and flagship model
-artefacts are managed with DVC **without a public remote** — a fresh clone
-contains neither. What works without them:
+**Data prerequisite (read first):** the raw Kaggle snapshot
+(`Resources/NY-House-Dataset.csv`, 1.3 MB) is committed, so a fresh clone can
+retrain everything:
+
+```bash
+python run_training.py    # cleans the raw CSV, trains, writes models/ + reports/
+```
+
+That regenerates `output/cleaned_house_dataset.csv` and every model artefact.
+The trained `.joblib` files are committed and pinned byte-for-byte by
+[`models/MANIFEST.sha256`](models/MANIFEST.sha256), so the artefacts a reviewer
+downloads are provably the ones the quoted metrics describe; the cleaned CSV is
+gitignored because `run_training.py` derives it on every run.
+
+Also available without training:
 
 - the full unit + firewall test suite (`pytest tests/`) — hermetic;
 - the **external benchmark**, end to end (`python -m benchmarks.run_benchmark`)
@@ -270,8 +294,8 @@ contains neither. What works without them:
 - `/health` and `/docs` on the API (model-dependent routes return 503 until
   artefacts exist).
 
-Training the flagship and serving real predictions require the local
-dataset (`output/cleaned_house_dataset.csv` via DVC):
+Serving real predictions requires the local
+dataset, which `python run_training.py` generates from the committed raw CSV:
 
 ```bash
 pip install -r requirements.txt
@@ -445,7 +469,7 @@ PRICE = PRICE_PER_SQFT * PROPERTYSQFT   # trivial algebra
 ```
 
 R2=0.997 was not a real prediction — it was circular computation. After removing this feature:
-- Honest R2 = **0.800** (LightGBM, selected on val) — a real result, not inflated
+- Honest R2 = **0.835** (XGBoost, selected on val) — a real result, not inflated
 - This is enforced by `test_no_leakage.py` in CI
 - Documented in [ADR-001](docs/decisions/001-remove-price-per-sqft.md)
 
@@ -496,8 +520,8 @@ nyc-real-estate-predictor/
 │   └── 003-multi-task-deep-learning.md
 │
 ├── notebooks/                    EDA + analysis (import from src/)
-├── models/                       Flagship artifacts gitignored (DVC-local);
-│                                 benchmark_regressor.joblib IS committed
+├── models/                       Flagship artifacts committed + MANIFEST.sha256-pinned;
+│                                 regenerate with run_training.py
 ├── reports/training_metrics.json Committed evidence artefact for §Results
 ├── .github/workflows/ci.yml      4-job CI: lint + test + security + docker-build
 ├── Dockerfile                    Non-root, health check
@@ -516,7 +540,7 @@ nyc-real-estate-predictor/
 | Language | Python 3.12 |
 | ML | scikit-learn, XGBoost, LightGBM, CatBoost |
 | DL | PyTorch 2.x (multi-task dense net, Focal Loss, entity embeddings) |
-| Tuning | Optuna (Bayesian optimization) |
+| Tuning | none in the shipped path — fixed hyperparameters; Optuna is available in the optional extended path |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |

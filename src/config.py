@@ -20,7 +20,6 @@ MODELS_DIR = PROJECT_ROOT / "models"
 
 RAW_DATASET = DATA_RAW_DIR / "NY-House-Dataset.csv"
 CLEANED_DATASET = PROJECT_ROOT / "output" / "cleaned_house_dataset.csv"
-GEOCODE_FILE = DATA_RAW_DIR / "housing_geocode_extraction.csv"
 
 # Ensure output dirs exist (best-effort — read-only runtimes like HF Spaces skip silently)
 for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
@@ -69,7 +68,11 @@ NUMERIC_FEATURES: list[str] = [
     "DIST_NEAREST_SUBWAY",
 ]
 
-ONEHOT_FEATURES: list[str] = ["BOROUGH", "TYPE", "PROPERTY_CATEGORY"]
+# PROPERTY_CATEGORY was removed: training, the API, and the dashboard all
+# hardcoded it to "residential", so the one-hot encoder only ever saw a single
+# level. A constant column carries no signal -- it cost a feature slot and
+# implied a distinction the data never made.
+ONEHOT_FEATURES: list[str] = ["BOROUGH", "TYPE"]
 
 TARGET_ENCODED_FEATURES: list[str] = ["ZIPCODE", "SUBLOCALITY"]
 

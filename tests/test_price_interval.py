@@ -6,9 +6,9 @@ being presented to users as a price range — a precise-looking number with no
 evidence behind it, which is the same defect as the threshold-tuned macro F1
 this repo already corrected.
 
-These tests read the committed artefact rather than recomputing from the raw
-dataset, because CI has the artefact and does not have the dataset. A gate
-that skips when data is absent is not a gate.
+The artefact-reading tests below assert the shipped numbers; the calibration
+tests drive ``calibrate_price_interval`` directly on synthetic residuals, so
+they check the mechanism rather than re-asserting the file against itself.
 """
 
 from __future__ import annotations
@@ -16,8 +16,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
+from run_training import calibrate_price_interval
 from src.models.predict import price_range
 
 ARTEFACT = Path(__file__).resolve().parents[1] / "models" / "price_interval.json"
@@ -31,6 +34,50 @@ def interval() -> dict:
 def test_interval_is_calibrated_on_val_not_test(interval: dict) -> None:
     """Choosing the multipliers on test would make coverage_test in-sample."""
     assert interval["calibrated_on"] == "val"
+
+
+def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
+    """The label must follow the data, not a literal written beside it.
+
+    Previously ``calibrated_on`` was the constant "val" regardless of which
+    frame was quantiled, so the artefact could claim val-calibration while
+    holding test-calibrated multipliers and every gate stayed green. Calibrating
+    on a deliberately different split here must change BOTH the label and the
+    multipliers; asserting only the label would restore the vacuous check.
+    """
+    rng = np.random.default_rng(0)
+
+    class _StubRegressor:
+        """Predicts a flat $1, so ratio == actual and the quantiles are the inputs.
+
+        log1p(1.0), not 0.0: the function un-logs predictions with expm1, and
+        expm1(0) is 0, which makes every actual/predicted ratio infinite.
+        """
+
+        def predict(self, X: pd.DataFrame) -> np.ndarray:
+            return np.full(len(X), np.log1p(1.0))
+
+    # Disjoint ranges, so val-quantiles and test-quantiles cannot coincide.
+    val = pd.Series(np.log1p(rng.uniform(1.0, 2.0, 500)))
+    test = pd.Series(np.log1p(rng.uniform(10.0, 20.0, 500)))
+    splits = {
+        "val": (pd.DataFrame({"f": np.zeros(500)}), val),
+        "test": (pd.DataFrame({"f": np.zeros(500)}), test),
+    }
+
+    on_val = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="val")
+    on_test = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="test")
+
+    assert on_val["calibrated_on"] == "val"
+    assert on_test["calibrated_on"] == "test"
+    assert on_test["high_multiplier"] > on_val["high_multiplier"] * 4
+
+
+def test_calibrate_price_interval_rejects_an_unknown_split() -> None:
+    with pytest.raises(KeyError):
+        calibrate_price_interval(
+            object(), {"val": (pd.DataFrame(), pd.Series())}, "holdout"
+        )
 
 
 def test_measured_coverage_is_close_to_the_target_it_advertises(

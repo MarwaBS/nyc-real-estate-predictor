@@ -1,6 +1,6 @@
 {
-  "run_date": "2026-07-18T21:15:56.562938+00:00",
-  "commit_sha": "955965675c9b50159f97f8a6323e9b7cbb668dd6",
+  "run_date": "2026-07-19T01:41:46.553906+00:00",
+  "commit_sha": "76a13286f2fdee20c2ce7cb834aadb15c9c5cfda",
   "working_tree_clean": false,
   "provenance": {
     "python": "3.12.13",
@@ -9,9 +9,9 @@
     "random_seed": 42,
     "test_size": 0.2,
     "val_size": 0.2,
-    "n_train": 2882,
-    "n_val": 721,
-    "n_test": 901,
+    "n_train": 2896,
+    "n_val": 724,
+    "n_test": 906,
     "selection_split": "val",
     "reported_split": "test",
     "features": [
@@ -27,7 +27,6 @@
       "DIST_NEAREST_SUBWAY",
       "BOROUGH",
       "TYPE",
-      "PROPERTY_CATEGORY",
       "ZIPCODE",
       "SUBLOCALITY"
     ]
@@ -35,10 +34,10 @@
   "classification": {
     "selected_model": "xgboost",
     "metrics": {
-      "accuracy": 0.7014428412874584,
-      "macro_f1": 0.6975506604266227,
-      "weighted_f1": 0.6999007490197718,
-      "cohen_kappa": 0.5887708546482133,
+      "accuracy": 0.7328918322295805,
+      "macro_f1": 0.727096347090622,
+      "weighted_f1": 0.7344709552384644,
+      "cohen_kappa": 0.634067084029448,
       "labels": [
         "High",
         "Low",
@@ -47,75 +46,75 @@
       ],
       "confusion_matrix": [
         [
-          93,
-          3,
-          63,
-          27
+          110,
+          4,
+          43,
+          29
         ],
         [
-          3,
-          179,
-          47,
+          4,
+          189,
+          42,
           2
         ],
         [
-          39,
-          44,
-          237,
-          3
+          46,
+          25,
+          245,
+          6
         ],
         [
-          30,
-          1,
-          7,
-          123
+          33,
+          0,
+          8,
+          120
         ]
       ],
       "classification_report": {
         "High": {
-          "precision": 0.5636363636363636,
-          "recall": 0.5,
-          "f1-score": 0.5299145299145299,
+          "precision": 0.5699481865284974,
+          "recall": 0.5913978494623656,
+          "f1-score": 0.5804749340369393,
           "support": 186.0
         },
         "Low": {
-          "precision": 0.788546255506608,
-          "recall": 0.7748917748917749,
-          "f1-score": 0.7816593886462883,
-          "support": 231.0
+          "precision": 0.8669724770642202,
+          "recall": 0.7974683544303798,
+          "f1-score": 0.8307692307692308,
+          "support": 237.0
         },
         "Medium": {
-          "precision": 0.6694915254237288,
-          "recall": 0.7337461300309598,
-          "f1-score": 0.7001477104874446,
-          "support": 323.0
+          "precision": 0.7248520710059172,
+          "recall": 0.7608695652173914,
+          "f1-score": 0.7424242424242424,
+          "support": 322.0
         },
         "Very High": {
-          "precision": 0.7935483870967742,
-          "recall": 0.7639751552795031,
-          "f1-score": 0.7784810126582279,
+          "precision": 0.7643312101910829,
+          "recall": 0.7453416149068323,
+          "f1-score": 0.7547169811320755,
           "support": 161.0
         },
-        "accuracy": 0.7014428412874584,
+        "accuracy": 0.7328918322295805,
         "macro avg": {
-          "precision": 0.7038056329158686,
-          "recall": 0.6931532650505594,
-          "f1-score": 0.6975506604266227,
-          "support": 901.0
+          "precision": 0.7315259861974295,
+          "recall": 0.7237693460042424,
+          "f1-score": 0.727096347090622,
+          "support": 906.0
         },
         "weighted avg": {
-          "precision": 0.7003303015458769,
-          "recall": 0.7014428412874584,
-          "f1-score": 0.6999007490197718,
-          "support": 901.0
+          "precision": 0.7372434122110268,
+          "recall": 0.7328918322295805,
+          "f1-score": 0.7344709552384644,
+          "support": 906.0
         }
       }
     },
     "selection_metrics_val": {
-      "accuracy": 0.7142857142857143,
-      "macro_f1": 0.7128310459357937,
-      "weighted_f1": 0.7156662487916028,
-      "cohen_kappa": 0.6061227249944973,
+      "accuracy": 0.7237569060773481,
+      "macro_f1": 0.7207421013812153,
+      "weighted_f1": 0.7236051617307601,
+      "cohen_kappa": 0.619227937309351,
       "labels": [
         "High",
         "Low",
@@ -124,175 +123,174 @@
       ],
       "confusion_matrix": [
         [
-          89,
+          81,
           2,
-          42,
-          16
-        ],
-        [
-          1,
-          140,
           43,
-          1
+          23
         ],
         [
-          32,
-          26,
-          195,
-          5
+          0,
+          142,
+          47,
+          0
         ],
         [
-          28,
+          33,
+          22,
+          200,
+          2
+        ],
+        [
+          22,
           1,
-          9,
-          91
+          5,
+          101
         ]
       ],
       "classification_report": {
         "High": {
-          "precision": 0.5933333333333334,
-          "recall": 0.5973154362416108,
-          "f1-score": 0.5953177257525084,
+          "precision": 0.5955882352941176,
+          "recall": 0.5436241610738255,
+          "f1-score": 0.5684210526315789,
           "support": 149.0
         },
         "Low": {
-          "precision": 0.8284023668639053,
-          "recall": 0.7567567567567568,
-          "f1-score": 0.7909604519774012,
-          "support": 185.0
+          "precision": 0.8502994011976048,
+          "recall": 0.7513227513227513,
+          "f1-score": 0.797752808988764,
+          "support": 189.0
         },
         "Medium": {
-          "precision": 0.6747404844290658,
-          "recall": 0.7558139534883721,
-          "f1-score": 0.7129798903107861,
-          "support": 258.0
+          "precision": 0.6779661016949152,
+          "recall": 0.7782101167315175,
+          "f1-score": 0.7246376811594203,
+          "support": 257.0
         },
         "Very High": {
-          "precision": 0.8053097345132744,
-          "recall": 0.7054263565891473,
-          "f1-score": 0.7520661157024794,
+          "precision": 0.8015873015873016,
+          "recall": 0.7829457364341085,
+          "f1-score": 0.792156862745098,
           "support": 129.0
         },
-        "accuracy": 0.7142857142857143,
+        "accuracy": 0.7237569060773481,
         "macro avg": {
-          "precision": 0.7254464797848947,
-          "recall": 0.7038281257689717,
-          "f1-score": 0.7128310459357937,
-          "support": 721.0
+          "precision": 0.7313602599434847,
+          "recall": 0.7140256913905507,
+          "f1-score": 0.7207421013812153,
+          "support": 724.0
         },
         "weighted avg": {
-          "precision": 0.7207061099464639,
-          "recall": 0.7142857142857143,
-          "f1-score": 0.7156662487916028,
-          "support": 721.0
+          "precision": 0.7280266352562513,
+          "recall": 0.7237569060773481,
+          "f1-score": 0.7236051617307601,
+          "support": 724.0
         }
       }
     },
     "candidates_val": {
       "xgboost": {
-        "accuracy": 0.7142857142857143,
-        "macro_f1": 0.7128310459357937,
-        "cohen_kappa": 0.6061227249944973
+        "accuracy": 0.7237569060773481,
+        "macro_f1": 0.7207421013812153,
+        "cohen_kappa": 0.619227937309351
       },
       "lightgbm": {
-        "accuracy": 0.6865464632454924,
-        "macro_f1": 0.6833876465116042,
-        "cohen_kappa": 0.5692563905998044
+        "accuracy": 0.7182320441988951,
+        "macro_f1": 0.7147273002722511,
+        "cohen_kappa": 0.6130005974153925
       }
     },
     "fairness_by_borough": {
-      "brooklyn": 0.6699750539096186,
-      "queens": 0.591281530011955,
-      "manhattan": 0.6335839550856263,
-      "bronx": 0.6124661246612466,
-      "staten island": 0.7774768594569976,
-      "nan": 0.7283081735346117
+      "manhattan": 0.6796120125198927,
+      "the bronx": 0.6403329506314581,
+      "staten island": 0.8866403538138953,
+      "queens": 0.6011385011385011,
+      "brooklyn": 0.6876810981834407
     },
     "shap_top10": [
       {
         "feature": "num__DIST_MANHATTAN_CENTER",
-        "mean_abs_shap": 1.2446573972702026
+        "mean_abs_shap": 1.1670563220977783
       },
       {
         "feature": "num__BATH",
-        "mean_abs_shap": 0.8896031975746155
+        "mean_abs_shap": 0.9231048822402954
       },
       {
         "feature": "num__PROPERTYSQFT",
-        "mean_abs_shap": 0.873515248298645
+        "mean_abs_shap": 0.8003836274147034
       },
       {
         "feature": "num__DIST_CENTRAL_PARK",
-        "mean_abs_shap": 0.4896690845489502
-      },
-      {
-        "feature": "cat_target__SUBLOCALITY",
-        "mean_abs_shap": 0.3585941195487976
+        "mean_abs_shap": 0.45525822043418884
       },
       {
         "feature": "num__ROOMS_PER_SQFT",
-        "mean_abs_shap": 0.3095560669898987
-      },
-      {
-        "feature": "num__TOTAL_ROOMS",
-        "mean_abs_shap": 0.2716616988182068
+        "mean_abs_shap": 0.31364279985427856
       },
       {
         "feature": "cat_target__ZIPCODE",
-        "mean_abs_shap": 0.23990380764007568
+        "mean_abs_shap": 0.27659109234809875
       },
       {
-        "feature": "cat_onehot__TYPE_condo",
-        "mean_abs_shap": 0.20823334157466888
+        "feature": "cat_onehot__TYPE_co-op",
+        "mean_abs_shap": 0.270782470703125
       },
       {
-        "feature": "cat_onehot__BOROUGH_bronx",
-        "mean_abs_shap": 0.12529312074184418
+        "feature": "num__TOTAL_ROOMS",
+        "mean_abs_shap": 0.2635844349861145
+      },
+      {
+        "feature": "num__BED_BATH_RATIO",
+        "mean_abs_shap": 0.1901540756225586
+      },
+      {
+        "feature": "cat_target__SUBLOCALITY",
+        "mean_abs_shap": 0.18745394051074982
       }
     ]
   },
   "regression": {
-    "selected_model": "lightgbm",
+    "selected_model": "xgboost",
     "metrics": {
-      "r2": 0.8004118222331548,
-      "rmse": 0.4502893711916673,
-      "mae": 0.3223196724716601,
-      "rmse_usd": 1817415.4011504755,
-      "mae_usd": 667613.0847418039,
-      "mape": 0.3672538590354735
+      "r2": 0.8348231789310414,
+      "rmse": 0.36429534755936366,
+      "mae": 0.25789089358189315,
+      "rmse_usd": 539403.4664723458,
+      "mae_usd": 308855.51380553254,
+      "mape": 0.29275379407797397
     },
     "selection_metrics_val": {
-      "r2": 0.7896430330686732,
-      "rmse": 0.47058820457543654,
-      "mae": 0.31347394274085344,
-      "rmse_usd": 3169842.483000511,
-      "mae_usd": 787414.8160742085,
-      "mape": 0.520054194053121
+      "r2": 0.8256698884502593,
+      "rmse": 0.3621340898117466,
+      "mae": 0.2436225636180956,
+      "rmse_usd": 468911.5857921309,
+      "mae_usd": 286735.42514189833,
+      "mape": 0.2604313927781247
     },
     "candidates_val": {
       "random_forest": {
-        "r2": 0.7875048269311564,
-        "rmse": 0.47297384114126784,
-        "mae_usd": 848687.9354487429
+        "r2": 0.81832187838565,
+        "rmse": 0.36968729111851206,
+        "mae_usd": 298436.4657535337
       },
       "xgboost": {
-        "r2": 0.7819038744119567,
-        "rmse": 0.47916662669616533,
-        "mae_usd": 826894.9489207701
+        "r2": 0.8256698884502593,
+        "rmse": 0.3621340898117466,
+        "mae_usd": 286735.42514189833
       },
       "lightgbm": {
-        "r2": 0.7896430330686732,
-        "rmse": 0.47058820457543654,
-        "mae_usd": 787414.8160742085
+        "r2": 0.8220863426091906,
+        "rmse": 0.3658371871778668,
+        "mae_usd": 297043.9752294672
       }
     },
     "price_interval": {
       "target_coverage": 0.8,
-      "low_multiplier": 0.6243,
-      "high_multiplier": 1.5983,
+      "low_multiplier": 0.6709,
+      "high_multiplier": 1.3896,
       "calibrated_on": "val",
-      "coverage_val": 0.8003,
-      "coverage_test": 0.7902
+      "coverage_val": 0.7983,
+      "coverage_test": 0.7627
     }
   },
   "note": "Training data and model artefacts are local-only (DVC, no public remote), so these numbers are not independently reproducible by a stranger; the independently reproducible evidence for this repo is benchmarks/results.json (committed model + public NYC.gov data)."
