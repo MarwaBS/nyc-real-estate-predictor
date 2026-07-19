@@ -177,7 +177,7 @@ project uses SemVer for tagged releases.
   threshold attributions corrected accordingly (values unchanged, names
   re-keyed).
 - README stack table: test-count claim corrected from "6 test files" to the
-  actual count (14 test files).
+  actual count (24 test files).
 - `api/main.py` `_get_classifier` and `_get_regressor` now have explicit
   `-> Any` return types; the `# type: ignore[no-untyped-def]` suppressions
   are removed.

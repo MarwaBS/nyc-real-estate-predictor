@@ -5,6 +5,7 @@ CRITICAL DESIGN RULE:
     It is derived from the target variable (PRICE) and causes data leakage.
     The R2=0.997 in previous experiments was fake because of this.
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,9 +42,13 @@ def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     result["TOTAL_ROOMS"] = result["BEDS"] + result["BATH"]
     result["BED_BATH_RATIO"] = result["BEDS"] / result["BATH"].clip(lower=1)
     result["LOG_SQFT"] = np.log1p(result["PROPERTYSQFT"])
-    result["ROOMS_PER_SQFT"] = result["TOTAL_ROOMS"] / result["PROPERTYSQFT"].clip(lower=1)
+    result["ROOMS_PER_SQFT"] = result["TOTAL_ROOMS"] / result["PROPERTYSQFT"].clip(
+        lower=1
+    )
 
-    logger.info("Added 4 numeric features: TOTAL_ROOMS, BED_BATH_RATIO, LOG_SQFT, ROOMS_PER_SQFT")
+    logger.info(
+        "Added 4 numeric features: TOTAL_ROOMS, BED_BATH_RATIO, LOG_SQFT, ROOMS_PER_SQFT"
+    )
     return result
 
 
@@ -95,7 +100,9 @@ def add_target_variables(df: pd.DataFrame) -> pd.DataFrame:
         include_lowest=True,
     )
 
-    logger.info("Added targets: PRICE_ZONE (4 classes), LOG_PRICE, SQFT_CATEGORY (3 classes)")
+    logger.info(
+        "Added targets: PRICE_ZONE (4 classes), LOG_PRICE, SQFT_CATEGORY (3 classes)"
+    )
     return result
 
 
@@ -113,7 +120,12 @@ def cap_categorical_cardinality(
         n_capped = (~result[col].isin(top)).sum()
         result[col] = result[col].where(result[col].isin(top), "other")
         if n_capped > 0:
-            logger.info("Capped %s: %d values -> 'other' (top %d kept)", col, n_capped, max_categories)
+            logger.info(
+                "Capped %s: %d values -> 'other' (top %d kept)",
+                col,
+                n_capped,
+                max_categories,
+            )
     return result
 
 
@@ -139,7 +151,12 @@ def learned_capped_categories(pipeline: object) -> dict[str, set]:
         # OneHotEncoder exposes per-column categories directly.
         cats_attr = getattr(trans, "categories_", None)
         if cats_attr is not None:
-            for col, cats in zip(cols, cats_attr):
+            # strict=True: cols and categories_ are the same encoder's columns
+            # and their fitted categories. A length mismatch means the encoder
+            # is not the one these columns came from, and silently zipping to
+            # the shorter of the two would drop a column's capped categories
+            # and let an unseen value through the serving cap unmapped.
+            for col, cats in zip(cols, cats_attr, strict=True):
                 if "other" in {str(c) for c in cats}:
                     known[col] = set(cats)
             continue
@@ -178,7 +195,8 @@ def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     # SAFETY CHECK: assert no leaky features
     feature_cols = [
-        c for c in df.columns
+        c
+        for c in df.columns
         if c not in {"PRICE", "LOG_PRICE", "PRICE_ZONE", "SQFT_CATEGORY"}
     ]
     assert_no_leakage(feature_cols)

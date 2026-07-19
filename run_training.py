@@ -1,6 +1,6 @@
 """End-to-end training orchestrator — load data, engineer features, train models, save artifacts.
 
-Besides the model artefacts (local-only; DVC without a remote), every run
+Besides the model artefacts (committed and MANIFEST-pinned), every run
 writes ``reports/training_metrics.json`` — the committed evidence artefact
 behind the README's headline numbers. It records the metrics of the
 selected models together with provenance (commit SHA, library versions,
@@ -432,12 +432,19 @@ def calibrate_price_interval(
     a price range.
 
     ``calibrate_on`` names a key of ``splits`` and both selects the data and
-    labels the artefact, so the two cannot disagree. The label used to be the
-    string literal "val" written next to a separate hardcoded ``X_val``
-    argument: calibrating on test while still recording "val" was a one-word
-    edit away, and the test guarding it asserted the literal against itself.
-    Passing the splits as a mapping makes that mislabel unrepresentable rather
-    than merely tested for.
+    labels the artefact, so the recorded label always names the key that was
+    quantiled. The label used to be the string literal "val" written next to a
+    separate hardcoded ``X_val`` argument: calibrating on test while still
+    recording "val" was a one-word edit away, and the test guarding it asserted
+    the literal against itself.
+
+    What this does NOT do is make a mislabel impossible. The guard below is
+    name-based: passing the test frame in under the key "val" is accepted and
+    records ``calibrated_on: "val"``, and so is naming the reporting split
+    anything other than "test". Nothing here inspects the data to tell the
+    splits apart. It closes the specific one-word edit at the call site, which
+    is the mistake that actually happened; a caller who reorganises the splits
+    dict can still produce an in-sample coverage number.
     """
     if calibrate_on not in splits:
         raise KeyError(f"calibrate_on={calibrate_on!r} is not one of {sorted(splits)}")

@@ -57,7 +57,7 @@ over 20 stratified splits — tuning was worth +0.0006 mean (std 0.0106), helpin
 12 splits and hurting 8. It is noise, so it was removed rather than moved to
 val.
 
-**These numbers are not comparable to any published before 2026-07-18.** The
+**These numbers are not comparable to any published before 2026-07-19.** The
 dataset itself changed: `BOROUGH` and `ZIPCODE` are now derived by committed
 code from the raw export rather than inherited from a pre-cleaned CSV that
 nothing in this repo could regenerate, and a 2³¹−1 overflow sentinel is now
@@ -105,7 +105,7 @@ cleaning rather than carried into training as an unnamed category.
 
 The spread (0.887 Staten Island vs 0.601 Queens) is wide enough to matter and
 is reported unexplained: Staten Island has the most concentrated zone
-distribution of the five boroughs (55.9% Medium vs Queens' most-common 37.3%),
+distribution of the five boroughs (55.9% Medium vs Queens' most-common 37.7%),
 but no experiment here establishes that as the cause, so it is recorded as an
 observation rather than an explanation.
 
@@ -228,7 +228,7 @@ These constraints are the point of the firewall. Loosening any of them converts 
 ## Architecture
 
 ```
-Raw CSV (4,800 rows)
+Raw CSV (4,801 rows)
     |
     v
 src/data/cleaner.py         Dedupe, impute (borough-aware), cap outliers, normalize

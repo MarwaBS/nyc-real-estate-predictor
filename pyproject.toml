@@ -6,7 +6,11 @@ requires-python = ">=3.12"
 
 [tool.ruff]
 target-version = "py312"
-exclude = [".git", ".venv", "__pycache__", "mlruns", "models", "data"]
+# Anchored to the repo root with a leading slash. Bare names match at ANY
+# depth, so "models" and "data" also excluded src/models/ and src/data/ --
+# eleven modules including cleaner.py, predict.py and pipelines.py were
+# invisible to `ruff check .`, hiding 17 errors behind a green lint job.
+exclude = ["/mlruns", "/models", "/data", "/output", "/Resources"]
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "N", "UP", "B", "SIM"]
@@ -20,6 +24,9 @@ ignore = ["E501"]
 # code LESS readable to its audience.
 "benchmarks/**" = ["N803", "N806"]
 "run_training.py" = ["N803", "N806"]
+# Same convention, same reason. These were never listed because the exclude
+# above hid src/models/ entirely, so their N803/N806 never surfaced.
+"src/models/**" = ["N803", "N806"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
