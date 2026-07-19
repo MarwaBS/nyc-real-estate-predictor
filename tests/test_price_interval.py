@@ -14,6 +14,7 @@ they check the mechanism rather than re-asserting the file against itself.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -57,19 +58,21 @@ def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
         def predict(self, X: pd.DataFrame) -> np.ndarray:
             return np.full(len(X), np.log1p(1.0))
 
-    # Disjoint ranges, so val-quantiles and test-quantiles cannot coincide.
+    # Disjoint ranges, so the two splits' quantiles cannot coincide. Named
+    # "val"/"holdout" rather than "val"/"test" because calibrating on a split
+    # named "test" is refused outright -- see the leak test below.
     val = pd.Series(np.log1p(rng.uniform(1.0, 2.0, 500)))
-    test = pd.Series(np.log1p(rng.uniform(10.0, 20.0, 500)))
+    holdout = pd.Series(np.log1p(rng.uniform(10.0, 20.0, 500)))
     splits = {
         "val": (pd.DataFrame({"f": np.zeros(500)}), val),
-        "test": (pd.DataFrame({"f": np.zeros(500)}), test),
+        "holdout": (pd.DataFrame({"f": np.zeros(500)}), holdout),
     }
 
     on_val = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="val")
-    on_test = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="test")
+    on_test = calibrate_price_interval(_StubRegressor(), splits, calibrate_on="holdout")
 
     assert on_val["calibrated_on"] == "val"
-    assert on_test["calibrated_on"] == "test"
+    assert on_test["calibrated_on"] == "holdout"
     # The stub predicts a flat $1, so each multiplier is a quantile of that
     # split's own actuals: val must land inside [1, 2] and test inside
     # [10, 20], the ranges the two splits were drawn from. Asserting the
@@ -77,6 +80,22 @@ def test_calibrate_price_interval_labels_the_split_it_actually_used() -> None:
     # slack factor picked to pass rather than a derived expectation.
     assert 1.0 <= on_val["high_multiplier"] <= 2.0
     assert 10.0 <= on_test["high_multiplier"] <= 20.0
+
+
+def test_calibrate_price_interval_refuses_to_calibrate_on_test() -> None:
+    """The leak must be refused at the call, not merely labelled afterwards.
+
+    Changing the call site to calibrate_on="test" previously left all 140
+    tests green: the artefact-reading gate above only inspects the committed
+    file, and CI never retrains, so the leak would ship and be detected only
+    once someone regenerated and committed the artefact.
+    """
+    splits = {
+        "val": (pd.DataFrame({"f": [0.0]}), pd.Series([1.0])),
+        "test": (pd.DataFrame({"f": [0.0]}), pd.Series([1.0])),
+    }
+    with pytest.raises(ValueError, match="out-of-sample"):
+        calibrate_price_interval(object(), splits, calibrate_on="test")
 
 
 def test_calibrate_price_interval_rejects_an_unknown_split() -> None:
@@ -92,11 +111,23 @@ def test_measured_coverage_is_close_to_the_target_it_advertises(
     """The interval's claim is its coverage, so that is what must hold.
 
     Fails on the pre-fix +/-15% band, whose coverage was 0.32 against any
-    sensible target. The tolerance is one-sided-ish by intent: badly
-    over-covering is also a broken claim, just a less harmful one.
+    sensible target.
+
+    The tolerance is 3 binomial standard errors of a proportion at the target,
+    not a round number: sqrt(0.8*0.2/906) = 0.0133 on the 906-row test split,
+    so 3 SE = 0.040. Anything inside that is indistinguishable from sampling
+    variation on a split this size; anything outside is a real miscalibration.
+    The previous 0.05 was picked by eye and happened to sit just above the
+    measured gap.
+
+    Note the shipped interval is at 0.0373 = 2.8 SE, so it is inside this
+    bound but NOT comfortably: the under-coverage is most likely a real
+    val-to-test generalisation gap rather than noise. MODEL_CARD records that.
     """
     target = interval["target_coverage"]
-    assert abs(interval["coverage_test"] - target) <= 0.05, (
+    n_test = 906
+    tolerance = 3 * math.sqrt(target * (1 - target) / n_test)
+    assert abs(interval["coverage_test"] - target) <= tolerance, (
         f"interval advertises {target:.0%} coverage but measured "
         f"{interval['coverage_test']:.1%} on the test split"
     )
