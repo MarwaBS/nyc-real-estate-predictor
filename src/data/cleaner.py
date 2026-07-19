@@ -110,7 +110,8 @@ def derive_borough(df: pd.DataFrame) -> pd.DataFrame:
     borough in a different field depending on how each listing resolved, so a
     single source column cannot recover it -- hence the fallback chain above.
 
-    Rows that no source resolves (37, 0.77%) are left null on purpose: their
+    Rows that no source resolves (37 of the raw 4,801; 36 survive dedup and
+    reach the drop in ``clean_pipeline``) are left null on purpose: their
     geocode columns are shifted, with LOCALITY reading "United States" and
     ADMINISTRATIVE_AREA_LEVEL_2 holding a ZIP code. Their fields are provably in
     the wrong columns, so ``clean_pipeline`` drops them rather than guessing a
