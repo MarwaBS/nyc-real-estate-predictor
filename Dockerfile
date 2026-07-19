@@ -47,13 +47,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Minimal runtime system deps + OS security patches.
 #
-# libgomp1 is the OpenMP runtime LightGBM dlopens at import (lightgbm/
-# libpath.py -> ctypes.cdll.LoadLibrary). It is NOT optional: the shipped
-# regressor is a LightGBM model, so without it `joblib.load` raises
-# `OSError: libgomp.so.1: cannot open shared object file` and the container
-# serves 503 for every prediction. It is listed here rather than left to the
-# builder stage because only /install is copied forward — system shared
-# libraries installed in the builder do not survive into the runtime image.
+# libgomp1 is the OpenMP runtime the gradient-boosting wheels link against.
+# It is NOT optional: the shipped classifier is an XGBoost model, so without it
+# `joblib.load` raises `OSError: libgomp.so.1: cannot open shared object file`
+# and the container serves 503 for every prediction. It is listed here rather
+# than left to the builder stage because only /install is copied forward —
+# system shared libraries installed in the builder do not survive into the
+# runtime image.
+#
+# The /health smoke test below is what actually verifies this: it loads both
+# models, so a missing libgomp1 turns the docker-build job red rather than
+# shipping a container that 503s.
 #
 # This was live in the published image and CI did not catch it: the smoke
 # test's `curl -fsS /health` passed against a /health that returned a

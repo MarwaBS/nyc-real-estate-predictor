@@ -22,7 +22,12 @@ from src.utils.validation import assert_no_leakage, validate_cleaned_data
 def integration_data() -> pd.DataFrame:
     """Larger synthetic dataset for integration testing."""
     rng = np.random.RandomState(42)
-    n = 200
+    # 600, not 200: the majority-baseline assertion below is measured on a 20%
+    # split, and 40 test rows put it within one or two predictions of the
+    # baseline. At that size the comparison tracked RandomForest's column
+    # sampling rather than whether the pipeline learned anything -- dropping a
+    # constant feature, which carries no information at all, flipped it.
+    n = 600
     boroughs = ["manhattan", "brooklyn", "queens", "the bronx", "staten island"]
     # PRICE carries REAL signal from sqft + borough (log-linear + noise).
     # It was originally uniform noise independent of every feature, which
