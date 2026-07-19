@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import CLEANED_DATASET, RAW_DATASET, GEOCODE_FILE
+from src.config import CLEANED_DATASET, RAW_DATASET
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +35,10 @@ def load_cleaned(path: Path | None = None) -> pd.DataFrame:
     logger.info("Loading cleaned dataset from %s", path)
     df = pd.read_csv(path)
     df.columns = df.columns.str.upper().str.strip()
-    # Ensure ZIPCODE is string
+    # ZIPCODE round-trips through CSV as a float ("10022.0"), so re-extract the
+    # 5 digits. No "00000" fill: the cleaner already dropped rows without a
+    # derivable ZIP, and a sentinel would reappear as a target-encoded category.
     if "ZIPCODE" in df.columns:
-        df["ZIPCODE"] = df["ZIPCODE"].astype(str).str.extract(r"(\d{5})")[0].fillna("00000")
+        df["ZIPCODE"] = df["ZIPCODE"].astype(str).str.extract(r"(\d{5})")[0]
     logger.info("Cleaned dataset: %d rows x %d cols", *df.shape)
-    return df
-
-
-def load_geocode(path: Path | None = None) -> pd.DataFrame:
-    """Load geocoding enrichment data."""
-    path = path or GEOCODE_FILE
-    logger.info("Loading geocode data from %s", path)
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.upper().str.strip()
     return df

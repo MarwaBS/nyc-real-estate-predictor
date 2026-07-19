@@ -10,6 +10,10 @@ from src.config import BOROUGH_MAP
 
 logger = logging.getLogger(__name__)
 
+# 2**31 - 1. A PRICE at exactly this value is an integer-overflow sentinel from
+# the upstream export, not a listing price.
+INT32_MAX = 2_147_483_647
+
 
 def deduplicate(df: pd.DataFrame) -> pd.DataFrame:
     """Remove exact duplicates and near-duplicates by lat/lon + price."""
@@ -81,25 +85,76 @@ def normalize_text_columns(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def normalize_borough(df: pd.DataFrame, col: str = "BOROUGH") -> pd.DataFrame:
-    """Map county names and variants to standard borough names."""
+# An existing BOROUGH is consulted first so that re-running on already-derived
+# output preserves it (and normalises a county-name spelling through the same
+# map). The raw Kaggle export has no such column, so it contributes nothing on
+# a first pass.
+#
+# The rest are ordered by measured hit rate on the 4,801-row raw snapshot:
+# SUBLOCALITY resolves 78.5% on its own, ADMINISTRATIVE_AREA_LEVEL_2 0.8%,
+# LOCALITY 47.0%; chained in this order they reach 99.2% together. SUBLOCALITY
+# leads because it is both the highest-coverage and the most specific field --
+# LOCALITY is frequently the literal string "United States".
+_BOROUGH_SOURCE_COLUMNS = (
+    "BOROUGH",
+    "SUBLOCALITY",
+    "ADMINISTRATIVE_AREA_LEVEL_2",
+    "LOCALITY",
+)
+
+
+def derive_borough(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive a canonical BOROUGH column from the raw geocode fields.
+
+    The Kaggle export ships no BOROUGH column at all. Google's geocoder put the
+    borough in a different field depending on how each listing resolved, so a
+    single source column cannot recover it -- hence the fallback chain above.
+
+    Rows that no source resolves (37, 0.77%) are left null on purpose: their
+    geocode columns are shifted, with LOCALITY reading "United States" and
+    ADMINISTRATIVE_AREA_LEVEL_2 holding a ZIP code. Their fields are provably in
+    the wrong columns, so ``clean_pipeline`` drops them rather than guessing a
+    borough from lat/lon, which would need a polygon lookup to rescue under 1%
+    of rows.
+
+    Re-running this on already-derived output preserves the existing BOROUGH:
+    it heads the source chain and BOROUGH_MAP maps each canonical borough name
+    to itself. Without that entry the chain would overwrite a valid borough with
+    a null whenever SUBLOCALITY held a neighbourhood name ("midtown east")
+    rather than a county, and the dropna below would then discard the row.
+    """
     result = df.copy()
-    if col in result.columns:
-        result[col] = result[col].str.lower().str.strip().map(BOROUGH_MAP).fillna(result[col])
+    borough = pd.Series(pd.NA, index=result.index, dtype="object")
+
+    for col in _BOROUGH_SOURCE_COLUMNS:
+        if col not in result.columns:
+            continue
+        borough = borough.fillna(
+            result[col].astype(str).str.lower().str.strip().map(BOROUGH_MAP)
+        )
+
+    result["BOROUGH"] = borough
+    logger.info("Derived BOROUGH for %d/%d rows", borough.notna().sum(), len(result))
     return result
 
 
-def normalize_zipcode(df: pd.DataFrame, col: str = "ZIPCODE") -> pd.DataFrame:
-    """Extract 5-digit ZIP and zero-pad."""
+def derive_zipcode(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive ZIPCODE, preferring an existing column over the raw STATE field.
+
+    The raw STATE field is not a state: it holds "Brooklyn, NY 11238"-style
+    strings, from which a 5-digit ZIP extracts for 100% of the raw snapshot.
+
+    A non-matching row is left null rather than filled with a "00000" sentinel.
+    The sentinel was worse than useless here: ZIPCODE is a target-encoded
+    feature, so every unparseable row would silently share one encoded category
+    and the model would learn a price for a ZIP that does not exist.
+    """
     result = df.copy()
-    if col in result.columns:
-        result[col] = (
-            result[col]
-            .astype(str)
-            .str.extract(r"(\d{5})")[0]
-            .fillna("00000")
-            .str.zfill(5)
-        )
+    source = "ZIPCODE" if "ZIPCODE" in result.columns else "STATE"
+    if source not in result.columns:
+        return result
+
+    result["ZIPCODE"] = result[source].astype(str).str.extract(r"(\d{5})")[0]
     return result
 
 
@@ -123,10 +178,31 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     df = deduplicate(df)
     df = normalize_text_columns(df)
-    df = normalize_borough(df)
-    df = normalize_zipcode(df)
+    # Both derivations run before impute_missing, which fills BEDS/BATH with a
+    # per-borough median and silently falls back to the global median when
+    # BOROUGH is absent.
+    df = derive_borough(df)
+    df = derive_zipcode(df)
     df = normalize_type(df)
+
+    # Drop rows whose borough or ZIP could not be derived. Both are model
+    # inputs -- BOROUGH is one-hot encoded and ZIPCODE target-encoded -- so a
+    # null here becomes a phantom category rather than a missing value.
+    before = len(df)
+    df = df.dropna(subset=["BOROUGH", "ZIPCODE"])
+    logger.info("Dropped %d rows with underivable BOROUGH/ZIPCODE", before - len(df))
+
     df = impute_missing(df)
+
+    # Drop 32-bit integer overflow sentinels before capping. The raw snapshot
+    # holds exactly one PRICE of 2,147,483,647 (2**31 - 1) where the next
+    # highest real listing is 195,000,000 -- it is a serialisation artefact,
+    # not a price. Capping would silently convert it into a plausible-looking
+    # listing at the IQR bound rather than removing it, so it has to go first.
+    before = len(df)
+    df = df[df["PRICE"] < INT32_MAX]
+    logger.info("Dropped %d rows with overflow-sentinel PRICE", before - len(df))
+
     df = cap_outliers(df)
 
     # Drop rows with non-positive price or sqft (invalid data)

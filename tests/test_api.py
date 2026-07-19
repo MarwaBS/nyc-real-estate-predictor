@@ -109,6 +109,32 @@ def test_health_reports_label_encoder_unloadable(
     assert data["models_loaded"] is False
 
 
+def test_health_reports_missing_price_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: the calibrated interval is a REQUIRED fourth artefact.
+
+    /predict calls get_price_interval, which raises rather than falling back to
+    a guess. A deployment shipped without price_interval.json therefore had a
+    loadable clf/reg/encoder and answered /health with 200 + models_loaded
+    true, while every prediction returned 500.
+    """
+    import api.main as m
+    import src.models.predict as predict_module
+
+    def _interval_missing() -> object:
+        raise FileNotFoundError("price_interval.json missing")
+
+    monkeypatch.setattr(m, "_get_classifier", lambda: object())
+    monkeypatch.setattr(m, "_get_regressor", lambda: object())
+    monkeypatch.setattr(m, "_get_label_encoder", lambda: object())
+    monkeypatch.setattr(predict_module, "get_price_interval", _interval_missing)
+
+    resp = TestClient(m.app).get("/health")
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["models_loaded"] is False
+
+
 def test_health_returns_503_when_no_models_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
