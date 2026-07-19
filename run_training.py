@@ -560,9 +560,7 @@ def _write_training_metrics(
             "Reproducible from a clean clone: the raw Kaggle CSV "
             "(Resources/NY-House-Dataset.csv) and every model artefact are "
             "committed, so `python run_training.py` regenerates this file and "
-            "the models it describes. A prior revision claimed these numbers "
-            "were not independently reproducible, which was true only while "
-            "the data sat behind a DVC remote that was never configured."
+            "the models it describes."
         ),
     }
     reports_dir = Path("reports")
