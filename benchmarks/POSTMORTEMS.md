@@ -138,3 +138,57 @@ Firewall validation: **success**. The benchmark's stated claim —
 auditable behaviour under real-world distribution shift"* — holds on
 the real 2024 NYC.gov data. The 🟡 structural weaknesses surfaced by
 this run are the benchmark doing its job, not the benchmark failing.
+
+---
+
+## 2026-07-19 — Run (SCHEMA_MAP v3) — score regression traced to training data
+
+### Observed metrics (raw)
+
+| | Value |
+|---|---|
+| Raw rows downloaded | 80,476 |
+| Dropped | 62,155 (reconciles to `drop_reasons`) |
+| Scored | 18,321 |
+| R²(log) | **0.2495** |
+| Previous published R²(log) | 0.375 on 18,314 rows |
+
+### Expected / actual gap
+
+Expected: roughly unchanged from 0.375, since neither `SCHEMA_MAP` nor the
+benchmark's three shared features (borough, gross sqft, ZIP) changed.
+
+Actual: **0.250, a 0.125 absolute / 33% relative fall.**
+
+### Cause
+
+Not a benchmark defect. `benchmarks/train_benchmark_model.py` trains from
+`output/cleaned_house_dataset.csv`, and that file previously had no producer
+anywhere in the repo — it could not be regenerated from committed code. It
+held a `PRICE` of 2,147,483,647 (an integer-overflow sentinel that this
+pipeline's IQR cap makes impossible) and `BOROUGH`/`ZIPCODE` columns
+`clean_pipeline` never created, because `normalize_borough`/`normalize_zipcode`
+were guarded by `if col in df.columns` against a raw export containing
+neither, making both unconditional no-ops.
+
+The 0.375 was therefore produced by a model trained on data no one could
+reproduce. Once the cleaner derived those columns for real and the benchmark
+model was retrained on the reproducible dataset, the honest score is 0.250.
+
+### Invariants
+
+Held: schema SHA gate verified before the run; drop-reason accounting
+reconciled exactly to `n_dropped`; leakage tripwire not triggered; prediction
+health passed.
+
+Stressed: none new.
+
+### What this taught about system limits
+
+The benchmark's sealed contract governs the *scoring* path end to end, and it
+did its job — every invariant held while the number moved. It does not, and
+cannot, attest to the provenance of the training data the scored model was fit
+on. A schema lock downstream of an unreproducible upstream artefact seals a
+pipeline whose inputs are unverified. The gap is now closed by
+`tests/test_cleaned_dataset_provenance.py`, which recomputes the cleaned
+dataset from raw rather than trusting the committed file.
