@@ -46,3 +46,32 @@ LightGBM (val R2 0.790) now wins over Random Forest (0.788) and XGBoost
 also bounded with `min_samples_leaf=10` — unbounded, its 500 fully-grown
 trees produced a 129 MB artifact that exceeds GitHub's file limit and could
 not be committed to the registry at all.
+
+## Status update (2026-07-19) — supersedes the 2026-07-18 regressor ruling
+
+The 2026-07-18 entry above is **no longer true of the shipped artifacts** and
+is retained only as the record of what was decided then. It ruled LightGBM the
+regressor on val R2 0.790, ahead of Random Forest 0.788 and XGBoost 0.782.
+
+Those numbers were measured on a cleaned dataset that no code in this repo
+could regenerate: `output/cleaned_house_dataset.csv` had no producer, carried
+a 2,147,483,647 overflow sentinel, and held `BOROUGH`/`ZIPCODE` columns the
+cleaner never created. Once the cleaner derived those columns for real and
+training ran from the committed raw CSV, the candidate ordering changed.
+
+Measured on the current data (`reports/training_metrics.json`,
+`regression.candidates_val`):
+
+| Regressor | val R2 |
+|---|---|
+| **XGBoost (selected)** | **0.8257** |
+| LightGBM | 0.8221 |
+| Random Forest | 0.8183 |
+
+So the regressor decision reverts to **XGBoost**, and both shipped models are
+now XGBoost. The classifier ruling is unchanged in direction but its numbers
+also moved: val macro F1 0.7207 (XGBoost) vs 0.7147 (LightGBM), not
+0.713/0.683.
+
+The `min_samples_leaf=10` bound on Random Forest stands — it is what keeps the
+artifact committable regardless of which model wins.

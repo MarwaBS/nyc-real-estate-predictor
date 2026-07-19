@@ -1,7 +1,7 @@
 {
-  "run_date": "2026-07-19T01:41:46.553906+00:00",
-  "commit_sha": "76a13286f2fdee20c2ce7cb834aadb15c9c5cfda",
-  "working_tree_clean": false,
+  "run_date": "2026-07-19T02:47:36.692177+00:00",
+  "commit_sha": "c72d7c768b0df52ed4ce40801669752ae4eb102c",
+  "working_tree_clean": true,
   "provenance": {
     "python": "3.12.13",
     "numpy": "1.26.4",
@@ -269,9 +269,9 @@
     },
     "candidates_val": {
       "random_forest": {
-        "r2": 0.81832187838565,
-        "rmse": 0.36968729111851206,
-        "mae_usd": 298436.4657535337
+        "r2": 0.8183218783856501,
+        "rmse": 0.369687291118512,
+        "mae_usd": 298436.4657535336
       },
       "xgboost": {
         "r2": 0.8256698884502593,
@@ -293,5 +293,5 @@
       "coverage_test": 0.7627
     }
   },
-  "note": "Training data and model artefacts are local-only (DVC, no public remote), so these numbers are not independently reproducible by a stranger; the independently reproducible evidence for this repo is benchmarks/results.json (committed model + public NYC.gov data)."
+  "note": "Reproducible from a clean clone: the raw Kaggle CSV (Resources/NY-House-Dataset.csv) and every model artefact are committed, so `python run_training.py` regenerates this file and the models it describes."
 }
