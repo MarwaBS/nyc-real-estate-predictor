@@ -1,7 +1,7 @@
 .PHONY: test lint typecheck ci train api streamlit
 
 test:
-	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=65
+	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
 
 # Mirrors CI's lint job exactly — a `make lint` that checks less than CI
 # just moves the failure to the slower feedback loop.

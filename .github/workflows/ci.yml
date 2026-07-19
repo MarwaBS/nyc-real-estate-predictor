@@ -56,19 +56,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 65 against a measured 69%. The previous floor of 88 was
-        # measured over a subset: pyproject omitted 8 modules that were ALL at
-        # 0%, and run_training.py — which produces every shipped artefact — was
-        # not in `source` at all, so the "94.7%" described neither the training
-        # pipeline nor the least-tested code. The omit list now holds only the
-        # network-bound benchmark modules, which the External Benchmark workflow
-        # exercises end-to-end against live NYC.gov data on every push.
+        # Floor 78 against a measured 80.96% over 982 statements. The 3-point
+        # gap is ~29 statements, so losing a module's worth of coverage fails
+        # the gate while ordinary churn does not.
         #
-        # src/dl/ and src/models/explain.py remain at 0% here: they run during
-        # a real training pass (the DL ablation and the SHAP step), not in the
-        # hermetic suite. They are counted rather than hidden, which is why the
-        # honest number is 69 and not 94.
-        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-report=xml --cov-fail-under=65
+        # The previous floor of 88 was measured over a subset: pyproject omitted
+        # 8 modules that were ALL at 0%, and run_training.py — which produces
+        # every shipped artefact — was not in `source` at all, so "94.7%"
+        # described neither the training pipeline nor the least-tested code. The
+        # omit list now holds only the network-bound benchmark modules, which
+        # the External Benchmark workflow exercises end-to-end on every push.
+        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-report=xml --cov-fail-under=78
 
   security:
     runs-on: ubuntu-latest

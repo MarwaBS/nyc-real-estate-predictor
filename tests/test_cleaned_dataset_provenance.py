@@ -44,28 +44,30 @@ def test_cleaner_yields_the_model_inputs_training_requires(
     assert cleaned["ZIPCODE"].notna().all()
 
 
-def test_the_borough_chain_resolves_almost_every_deduplicated_row(
+def test_the_derivation_drops_exactly_the_rows_it_cannot_resolve(
     cleaned: pd.DataFrame,
 ) -> None:
     """Retention, not null-freeness, is what detects a weakened derivation.
 
     Rows whose borough cannot be derived are DROPPED, so every surviving row
-    looks perfect no matter how weak the source chain is -- asserting only
-    "no nulls" passes even with the highest-coverage source removed. What
-    actually degrades is how many rows survive.
+    looks perfect no matter how weak the source chain is -- asserting "no
+    nulls" passes even with the highest-coverage source removed. What degrades
+    is how many rows survive.
 
-    Measured: the SUBLOCALITY -> ADMINISTRATIVE_AREA_LEVEL_2 -> LOCALITY chain
-    resolves 99.2% of the 4,563 deduplicated rows (36 unresolvable). Dropping
-    SUBLOCALITY alone, the highest-coverage source at 78.5%, collapses this.
+    The count is exact rather than a ratio floor. 37 of the 4,563 deduplicated
+    rows go: 36 have shifted geocode columns (LOCALITY reads "United States"
+    and ADMINISTRATIVE_AREA_LEVEL_2 holds a ZIP) and 1 is the 2**31-1 overflow
+    sentinel. A ratio threshold like ">= 0.99" cannot answer "why not 0.98?";
+    this count can name every row it expects to lose.
     """
     from src.data.cleaner import deduplicate, normalize_text_columns
 
     deduped = len(normalize_text_columns(deduplicate(load_raw())))
-    retained = len(cleaned) / deduped
 
-    assert retained >= 0.99, (
-        f"borough/ZIP derivation retained {retained:.1%} of {deduped} "
-        f"deduplicated rows; the measured chain retains 99.2%"
+    assert deduped == 4563, f"deduplication changed: {deduped} rows"
+    assert deduped - len(cleaned) == 37, (
+        f"expected to drop 36 underivable + 1 overflow sentinel = 37, "
+        f"dropped {deduped - len(cleaned)}"
     )
 
 
