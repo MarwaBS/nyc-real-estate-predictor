@@ -80,11 +80,29 @@ def test_every_borough_resolves_to_a_canonical_nyc_name(cleaned: pd.DataFrame) -
     }
 
 
-def test_no_overflow_sentinel_survives_cleaning(cleaned: pd.DataFrame) -> None:
-    """2**31-1 is an export artefact, not a price, and must not be capped into
-    a plausible-looking listing at the IQR bound."""
-    assert (cleaned["PRICE"] < INT32_MAX).all()
-    assert cleaned["PRICE"].max() < 10_000_000
+def test_the_overflow_sentinel_row_is_dropped_not_capped() -> None:
+    """The sentinel row must LEAVE the dataset, not survive at the cap.
+
+    Asserting a post-cap magnitude cannot detect this: cap_outliers clips the
+    sentinel to the IQR bound ($4,483,000) unconditionally, so `max < 10M`
+    holds whether or not the drop runs. Deleting the guarded line left that
+    version of this test green — it asserted a property cap_outliers
+    guarantees on its own.
+
+    Row count is what distinguishes the two: dropping removes the row,
+    capping keeps it.
+    """
+    raw = load_raw()
+    n_sentinel = int((raw["PRICE"] >= INT32_MAX).sum())
+    assert n_sentinel == 1, "raw snapshot should hold exactly one 2**31-1 PRICE"
+
+    with_sentinel = len(clean_pipeline(raw))
+    without_sentinel = len(clean_pipeline(raw[raw["PRICE"] < INT32_MAX]))
+
+    assert with_sentinel == without_sentinel, (
+        "cleaning the frame with and without the sentinel gives different row "
+        "counts, so the sentinel is being kept (capped) rather than dropped"
+    )
 
 
 def test_zipcodes_are_five_digit_strings(cleaned: pd.DataFrame) -> None:

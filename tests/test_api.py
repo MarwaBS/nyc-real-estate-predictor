@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -195,7 +196,32 @@ def test_predict_returns_200_with_valid_input() -> None:
     # ~$2.5k. `> 0` would have passed the historical bug that served a
     # Manhattan condo at single-digit dollars.
     assert body["price"]["predicted_price"] > 10_000, body["price"]
-    assert body["price"]["price_range"]["low"] <= body["price"]["price_range"]["high"]
+
+    # The SERVED band must be the calibrated artefact, not merely ordered.
+    # `low <= high` passes for any fabricated pair: replacing the endpoint's
+    # price_range() call with {"low": price*0.5, "high": price*2.0} left the
+    # whole suite green, because the artefact was pinned only in the library
+    # function and nothing tied the endpoint to it. MODEL_CARD publishes this
+    # band's measured coverage, so an unpinned endpoint can publish a number
+    # the served interval does not honour.
+    interval = json.loads(
+        (
+            Path(__file__).resolve().parents[1] / "models" / "price_interval.json"
+        ).read_text(encoding="utf-8")
+    )
+    # Compared as ratios, not equalities: the endpoint derives the band from
+    # the unrounded prediction while predicted_price is rounded to the nearest
+    # $100, so the two disagree by up to one rounding unit (~5e-5 relative on a
+    # $1.8M prediction). 1e-3 sits well above that and far below any real
+    # drift — the fabricated 0.5/2.0 band above misses by 200x.
+    predicted = body["price"]["predicted_price"]
+    band = body["price"]["price_range"]
+    assert band["low"] / predicted == pytest.approx(
+        interval["low_multiplier"], abs=1e-3
+    )
+    assert band["high"] / predicted == pytest.approx(
+        interval["high_multiplier"], abs=1e-3
+    )
 
 
 def test_predict_decodes_via_label_encoder_not_config_order(

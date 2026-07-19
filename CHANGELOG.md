@@ -6,6 +6,28 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Fixed — the coverage gate was measured over a subset
+
+- **The 88% floor described a hand-picked subset.** `pyproject.toml` omitted 8
+  modules, and every one of them was at 0% — the omit list was exactly the set
+  of files that lowered the number. `run_training.py`, which produces every
+  shipped artefact, was not in `source` at all. Real coverage was **69%**, not
+  the advertised 94.7%. The omit list now holds only the network-bound
+  benchmark modules, which the External Benchmark workflow exercises end-to-end
+  on live data, and the floor is 65 against a measured 69.
+- **Deleted `src/models/train_classification.py` and `train_regression.py`** —
+  152 statements with zero importers repo-wide. Both were omitted from
+  coverage, so both were invisible and unexecuted.
+- **The overflow-sentinel test could not fail.** It asserted a post-cap
+  magnitude (`max < 10M`) that `cap_outliers` guarantees unconditionally, so
+  deleting the sentinel drop left it green. It now compares row counts with and
+  without the sentinel, which distinguishes dropping from capping.
+- **The served price interval was pinned nowhere.** `/predict` was only checked
+  for `low <= high`, so replacing its band with `{price*0.5, price*2.0}` left
+  the whole suite green — the artefact was pinned in the library function and
+  nothing tied the endpoint to it. The response is now compared to the
+  artefact's multipliers.
+
 ### Fixed — the cleaned dataset had no producer (data provenance)
 
 - **`output/cleaned_house_dataset.csv` was not the output of
