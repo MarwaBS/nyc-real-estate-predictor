@@ -14,6 +14,7 @@ they check the mechanism rather than re-asserting the file against itself.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -110,11 +111,23 @@ def test_measured_coverage_is_close_to_the_target_it_advertises(
     """The interval's claim is its coverage, so that is what must hold.
 
     Fails on the pre-fix +/-15% band, whose coverage was 0.32 against any
-    sensible target. The tolerance is one-sided-ish by intent: badly
-    over-covering is also a broken claim, just a less harmful one.
+    sensible target.
+
+    The tolerance is 3 binomial standard errors of a proportion at the target,
+    not a round number: sqrt(0.8*0.2/906) = 0.0133 on the 906-row test split,
+    so 3 SE = 0.040. Anything inside that is indistinguishable from sampling
+    variation on a split this size; anything outside is a real miscalibration.
+    The previous 0.05 was picked by eye and happened to sit just above the
+    measured gap.
+
+    Note the shipped interval is at 0.0373 = 2.8 SE, so it is inside this
+    bound but NOT comfortably: the under-coverage is most likely a real
+    val-to-test generalisation gap rather than noise. MODEL_CARD records that.
     """
     target = interval["target_coverage"]
-    assert abs(interval["coverage_test"] - target) <= 0.05, (
+    n_test = 906
+    tolerance = 3 * math.sqrt(target * (1 - target) / n_test)
+    assert abs(interval["coverage_test"] - target) <= tolerance, (
         f"interval advertises {target:.0%} coverage but measured "
         f"{interval['coverage_test']:.1%} on the test split"
     )

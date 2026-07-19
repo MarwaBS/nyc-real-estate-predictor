@@ -15,20 +15,20 @@ short_description: NYC price-zone classification + regression with XGBoost
 [![XGBoost](https://img.shields.io/badge/ML-XGBoost-orange)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/MODEL_CARD.md)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/api/main.py)
 
-Live demo of an end-to-end ML service for NYC real estate. Pick a property profile in the sidebar and the dashboard returns a **price zone** (Low / Medium / High / Very High) plus an **estimated price** with a range calibrated to contain 80% of listings (measured 79.0% on held-out data).
+Live demo of an end-to-end ML service for NYC real estate. Pick a property profile in the sidebar and the dashboard returns a **price zone** (Low / Medium / High / Very High) plus an **estimated price** with a range calibrated to contain 80% of listings (measured 76.3% on the held-out test split).
 
 **Two processes, one container:**
 - **Streamlit** on `:7860` — the dashboard you see above. It runs the prediction **in-process**, importing the same `src/` serving code the API uses.
 - **FastAPI** on `localhost:8000` — `/predict`, `/health`. Started alongside the dashboard (the entrypoint waits for its `/health` before Streamlit comes up), but HF Spaces only exposes port 7860, so the API is **not reachable from outside this container**. To call the API yourself, run the repo's Docker image locally (see the GitHub README).
 
-> **This is a portfolio demo, not a deployable real-estate predictor.** The model is trained on a 4,504-row Kaggle snapshot of NYC listings; it will drift against current-market reality. See the `MODEL_CARD.md` in the GitHub repo for the full framing, fairness analysis (per-borough disparity), and the data-leakage story (R²=0.997 → 0.800 honest).
+> **This is a portfolio demo, not a deployable real-estate predictor.** The model is trained on a 4,526-row Kaggle snapshot of NYC listings; it will drift against current-market reality. See the `MODEL_CARD.md` in the GitHub repo for the full framing, fairness analysis (per-borough disparity), and the data-leakage story (R²=0.997 leaked → 0.835 honest).
 
 ## How the prediction works
 
 1. The sidebar collects property inputs (beds, bath, sqft, borough, type, zipcode, lat/long).
 2. `build_features` derives the model's feature frame (room ratios, log-sqft, distances to Manhattan Center / Central Park), then the train-time frequency cap is mirrored via `apply_serving_cap` (train/serve parity).
 3. The XGBoost zone classifier produces per-class probabilities; the served zone is decoded by `served_zone` (argmax) through the **shipped label encoder's** class order.
-4. The LightGBM regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows the calibrated interval from `models/price_interval.json` (0.624x-1.598x the point estimate), labelled with the coverage it was measured to achieve.
+4. The XGBoost regressor (trained on `LOG_PRICE`) produces the price estimate; the dashboard shows the calibrated interval from `models/price_interval.json` (0.671x-1.390x the point estimate), labelled with the coverage it was measured to achieve.
 
 Both the dashboard and the API decode through the same `served_zone` function, so what you see here is the same decision rule the API serves.
 
@@ -39,7 +39,7 @@ Both the dashboard and the API decode through the same `served_zone` function, s
 | End-to-end ML pipeline (clean → feature-engineer → model → serve → UI) | Predict 2026 NYC prices accurately (data is a snapshot) |
 | Multi-model comparison (XGBoost / LightGBM / Random Forest) | Beat Zillow Zestimate at scale |
 | Data-leakage detection + ADR-001 documentation | Provide loan-grade pricing |
-| Fairness-by-borough analysis (Queens F1=0.591 → Staten Island 0.777) | Mitigate the documented disparity |
+| Fairness-by-borough analysis (Queens F1=0.601 → Staten Island 0.887) | Mitigate the documented disparity |
 | Val/test separation — selection on val, test scored once | Online learning |
 
 ## Links
@@ -53,4 +53,4 @@ Both the dashboard and the API decode through the same `served_zone` function, s
 - **This Space is deployed automatically from `main`** by the repo's Deploy workflow; a weekly drift guard fails CI if the Space ever stops matching `main`. (It was previously hand-deployed — and served a 3-month-stale revision. Never again.)
 - First load may take ~30s while uvicorn + Streamlit + XGBoost model files come up.
 - HF Spaces free tier — no persistent state, no Redis, no rate-limit backend (slowapi falls back to in-memory).
-- **Served model provenance:** the artifacts in `models/` are the canonical 2026-07-04 training run (`run_date` in the repo's `reports/training_metrics.json`), committed to the GitHub repo and pinned byte-for-byte by `models/MANIFEST.sha256` — the deploy workflow syncs them here and the weekly drift guard fails if this Space's code **or models** ever diverge from `main`. The metrics quoted above describe exactly these artifacts.
+- **Served model provenance:** the artifacts in `models/` are the canonical 2026-07-19 training run (`run_date` in the repo's `reports/training_metrics.json` is authoritative; if it disagrees with this line, believe it), committed to the GitHub repo and pinned byte-for-byte by `models/MANIFEST.sha256` — the deploy workflow syncs them here and the weekly drift guard fails if this Space's code **or models** ever diverge from `main`. The metrics quoted above describe exactly these artifacts.

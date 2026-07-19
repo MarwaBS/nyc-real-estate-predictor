@@ -28,11 +28,13 @@ jobs:
       - name: Install lint tools
         run: pip install ruff mypy bandit pydantic fastapi pydantic-settings
       - name: ruff check
-        # benchmarks/ is the repo's most-marketed code — it gets every gate
-        # the rest of the tree gets, not fewer.
-        run: ruff check src/ api/ tests/ benchmarks/ run_training.py
+        # Whole tree, not a path list. The list omitted notebooks/ and
+        # streamlit_app/ while pyproject.toml configured per-file ignores for
+        # notebooks — so the config said they were linted, the gate did not
+        # lint them, and `ruff check .` failed with 15 errors on a green CI.
+        run: ruff check .
       - name: ruff format --check
-        run: ruff format --check src/ api/ tests/ benchmarks/ run_training.py
+        run: ruff format --check .
       - name: mypy type check
         # Run against src/ + api/ + benchmarks/ so the benchmark pipeline is
         # type-checked too; `--ignore-missing-imports` prevents failures from

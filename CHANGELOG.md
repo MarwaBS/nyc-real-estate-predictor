@@ -6,14 +6,56 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Fixed — the cleaned dataset had no producer (data provenance)
+
+- **`output/cleaned_house_dataset.csv` was not the output of
+  `src/data/cleaner.py`, and no code in the repo produced it.** It held a
+  `PRICE` of 2,147,483,647, which this pipeline's IQR cap makes impossible,
+  and `BOROUGH`/`ZIPCODE` columns `clean_pipeline` never created. Root cause:
+  `normalize_borough`/`normalize_zipcode` were guarded by
+  `if col in df.columns` against a raw export containing neither, so both were
+  unconditional no-ops — and the same guard silently skipped the
+  borough-aware imputation this project documents. `python run_training.py`
+  therefore did not reproduce the shipped models.
+- **Added the missing derivation.** `derive_borough` resolves through a
+  measured fallback chain (`SUBLOCALITY` 78.5%, `ADMINISTRATIVE_AREA_LEVEL_2`
+  0.8%, `LOCALITY` 47.0%; 99.2% chained); `derive_zipcode` extracts 5 digits
+  from the misnamed `STATE` field (100%). The 36 rows nothing resolves have
+  shifted geocode columns and are dropped rather than guessed at.
+- **The raw Kaggle CSV is committed and the DVC layer is deleted.**
+  `.dvc/config` had no remote, so every pointer was unresolvable for any
+  clone. A fresh clone can now retrain.
+- **The external benchmark FELL from R²(log) 0.375 to 0.250** (−33% relative).
+  The 0.375 came from a benchmark model trained on the unreproducible dataset;
+  it is not a baseline this regressed against, it is a number that should not
+  have been published. Postmortem in `benchmarks/POSTMORTEMS.md`.
+- **`PROPERTY_CATEGORY` removed** — training, the API and the dashboard all
+  hardcoded it to `"residential"`, so the one-hot encoder saw a single level.
+
+### Fixed — provenance fields that could not report the truth
+
+- **`working_tree_clean` could never be `true`.** It was sampled inside the
+  metrics writer, after the run had written `models/`, the cleaned dataset and
+  `price_interval.json`, so a run from a pristine checkout still recorded
+  `false`. Now sampled before any write.
+- **The emitted provenance note asserted the numbers were "not independently
+  reproducible by a stranger"** because data and models were "local-only (DVC,
+  no public remote)". It regenerated that falsehood on every run after the raw
+  CSV and models were committed.
+- **`calibrate_on="test"` is refused.** Labelling was already honest, but the
+  call site was one word from fitting the served interval on the split its
+  coverage is advertised against, and the full suite stayed green — the
+  artefact-reading gate only inspects the committed file and CI never
+  retrains.
+
 ### Changed — undefended constants replaced with measured ones (A5 defense drill)
 
 - **The served price interval is calibrated, not asserted.** `±15%` was
   hardcoded in three files and derived from nothing; measured against the test
   split it contained the true price **32%** of the time while being presented
   to users as a price range. It is replaced by the 10th-90th percentile of
-  `actual / predicted` measured on the **validation** split (0.624x / 1.598x),
-  which covers **79.0%** of test against an 80% target. The multipliers ship as
+  `actual / predicted` measured on the **validation** split (0.671x / 1.390x),
+  which covers **76.3%** of test against an 80% target. The multipliers ship as
   `models/price_interval.json`, pinned by the manifest, so a retrain that moves
   the residuals rewrites them — constants in source would have gone stale
   silently. The dashboard now labels the range with its coverage.
@@ -49,7 +91,7 @@ project uses SemVer for tagged releases.
   all three regressors) previously compared candidates on the *test* split
   and then published the winner's score from that same split — a selected
   maximum reported as a hold-out estimate. Candidates are now compared on a
-  new val split (2,882 / 721 / 901) and test is scored exactly once, by the
+  new val split (2,896 / 724 / 906) and test is scored exactly once, by the
   already-selected model.
 - **Deep-learning early stopping no longer watches test.** `patience=15` was
   evaluated against the test labels, which selects the stopping epoch on test.
@@ -62,12 +104,11 @@ project uses SemVer for tagged releases.
   hurting 8 — noise. Removed rather than moved to val. `src/models/threshold.py`
   is replaced by `src/models/decode.py` (argmax only, one shared decode for
   API + dashboard); `models/optimal_thresholds.joblib` is deleted.
-- **Reported metrics (test split, this retrain):** classification macro F1
-  **0.698** (XGBoost; 0.713 on val), regression R² **0.800** (LightGBM;
-  0.790 on val). The drop from the old 0.711 argmax figure is the cost of
-  carving a real validation split out of training data — 2,882 training rows
-  instead of 3,603 — and the drop from 0.724 is the removal of the
-  contamination itself.
+- **Reported metrics (test split, current artefacts):** classification macro
+  F1 **0.727** (XGBoost; 0.721 on val), regression R² **0.835** (XGBoost;
+  0.826 on val). These are not comparable to any figure published before
+  2026-07-19 — see the data-provenance entry below, which changed the dataset
+  itself.
 - **`assert_no_leakage` rejects any price-derived name.** It enumerated five
   spellings, so `["BEDS", "PRICE"]` — the raw target — passed the leakage
   guard. It now rejects any feature name containing "price"; no legitimate
