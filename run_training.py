@@ -37,6 +37,7 @@ from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
+    PRICE_ZONE_BINS,
     PRICE_ZONE_LABELS,
     RANDOM_SEED,
     TARGET_ENCODED_FEATURES,
@@ -634,6 +635,13 @@ def _write_training_metrics(
             "selection_split": "val",
             "reported_split": "test",
             "features": features,
+            # The cut-points the zone labels were built from. Recorded because
+            # changing them in config silently invalidates every zone number in
+            # this file: the model was fitted against labels cut one way while
+            # serving buckets the other, and the published macro-F1 then
+            # describes an answer the service no longer gives. Measured: with
+            # the bins shifted and nothing retrained, all 153 tests passed.
+            "price_zone_bins": [b for b in PRICE_ZONE_BINS if b != float("inf")],
         },
         "classification": clf_record,
         "regression": reg_record,
