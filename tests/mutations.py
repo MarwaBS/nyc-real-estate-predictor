@@ -69,7 +69,7 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         name="price-zone-bins-shifted",
         path="src/config.py",
-        old="PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_495_000,",
+        old="PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000,",
         new="PRICE_ZONE_BINS: list[float] = [0, 400_000, 800_000, 1_200_000,",
         gate="tests/test_config_artefact_agreement.py",
     ),

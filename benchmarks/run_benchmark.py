@@ -262,13 +262,9 @@ def run_benchmark() -> dict[str, Any]:
     )
     medians = baseline_spec["borough_median_log_price"]
     fallback = float(baseline_spec["global_median_log_price"])
-    baseline_pred = (
-        X["borough"].map(medians).fillna(fallback).to_numpy(dtype=float)
-    )
+    baseline_pred = X["borough"].map(medians).fillna(fallback).to_numpy(dtype=float)
     b_res = target_arr - baseline_pred
-    baseline_r2 = (
-        None if ss_tot == 0 else 1.0 - float(np.sum(b_res**2)) / ss_tot
-    )
+    baseline_r2 = None if ss_tot == 0 else 1.0 - float(np.sum(b_res**2)) / ss_tot
     performance: dict[str, Any] = {
         "status": "computed",
         "r2_log_space": r2,

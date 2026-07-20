@@ -1,6 +1,6 @@
 {
-  "run_date": "2026-07-20T03:02:58.519009+00:00",
-  "commit_sha": "ea6c42893aace5499a370be87f470319a1701773",
+  "run_date": "2026-07-20T23:14:02.824214+00:00",
+  "commit_sha": "41c49181a4dcd9edc230eed84a3fa2d4573225d6",
   "working_tree_clean": true,
   "provenance": {
     "python": "3.12.13",
@@ -29,19 +29,24 @@
       "SUBLOCALITY"
     ],
     "price_zone_bins": [
-      0,
-      499000,
-      825000,
-      1495000
+      0.0,
+      499000.0,
+      825000.0,
+      1496000.0
     ]
+  },
+  "baseline": {
+    "predictor": "per-borough median train price",
+    "test_r2": 0.1774,
+    "test_zones_macro_f1": 0.3012
   },
   "classification": {
     "derived_from": "regressor predictions bucketed by PRICE_ZONE_BINS",
     "metrics": {
-      "accuracy": 0.6964679911699779,
-      "macro_f1": 0.6990917220951712,
-      "weighted_f1": 0.700387784507552,
-      "cohen_kappa": 0.5954247187946043,
+      "accuracy": 0.7119205298013245,
+      "macro_f1": 0.7121064496892292,
+      "weighted_f1": 0.7135192776030401,
+      "cohen_kappa": 0.615916499773415,
       "labels": [
         "Low",
         "Medium",
@@ -50,194 +55,194 @@
       ],
       "confusion_matrix": [
         [
-          140,
-          3,
-          50,
-          30
+          137,
+          4,
+          51,
+          31
         ],
         [
-          9,
-          174,
-          49,
+          6,
+          186,
+          40,
           1
         ],
         [
-          58,
-          31,
-          133,
+          55,
+          33,
+          134,
           2
         ],
         [
-          38,
-          0,
+          33,
+          1,
           4,
-          184
+          188
         ]
       ],
       "classification_report": {
         "Low": {
-          "precision": 0.5714285714285714,
-          "recall": 0.6278026905829597,
-          "f1-score": 0.5982905982905983,
+          "precision": 0.5930735930735931,
+          "recall": 0.6143497757847534,
+          "f1-score": 0.6035242290748899,
           "support": 223.0
         },
         "Medium": {
-          "precision": 0.8365384615384616,
-          "recall": 0.7467811158798283,
-          "f1-score": 0.7891156462585034,
+          "precision": 0.8303571428571429,
+          "recall": 0.7982832618025751,
+          "f1-score": 0.8140043763676149,
           "support": 233.0
         },
         "High": {
-          "precision": 0.5635593220338984,
-          "recall": 0.59375,
-          "f1-score": 0.5782608695652174,
+          "precision": 0.5851528384279476,
+          "recall": 0.5982142857142857,
+          "f1-score": 0.5916114790286976,
           "support": 224.0
         },
         "Very High": {
-          "precision": 0.847926267281106,
-          "recall": 0.8141592920353983,
-          "f1-score": 0.8306997742663657,
+          "precision": 0.8468468468468469,
+          "recall": 0.831858407079646,
+          "f1-score": 0.8392857142857143,
           "support": 226.0
         },
-        "accuracy": 0.6964679911699779,
+        "accuracy": 0.7119205298013245,
         "macro avg": {
-          "precision": 0.7048631555705093,
-          "recall": 0.6956232746245465,
-          "f1-score": 0.6990917220951712,
+          "precision": 0.7138576053013828,
+          "recall": 0.710676432595315,
+          "f1-score": 0.7121064496892292,
           "support": 906.0
         },
         "weighted avg": {
-          "precision": 0.7066342798103269,
-          "recall": 0.6964679911699779,
-          "f1-score": 0.700387784507552,
+          "precision": 0.715441775647211,
+          "recall": 0.7119205298013245,
+          "f1-score": 0.7135192776030401,
           "support": 906.0
         }
       }
     },
     "fairness_by_borough": {
-      "manhattan": 0.6315934065934066,
-      "staten island": 0.7409047919293821,
-      "the bronx": 0.6939566524284132,
-      "brooklyn": 0.6204812678233034,
-      "queens": 0.6847557790125056
+      "the bronx": 0.6882594760312151,
+      "queens": 0.6789391954715656,
+      "brooklyn": 0.6911236200363807,
+      "manhattan": 0.6964365655518105,
+      "staten island": 0.529307079414838
     },
     "borough_floor": {
       "brooklyn": {
-        "macro_f1": 0.6205,
-        "majority_baseline": 0.1154,
-        "margin": 0.5051,
-        "n": 220
+        "macro_f1": 0.6911,
+        "majority_baseline": 0.1135,
+        "margin": 0.5776,
+        "n": 235
       },
       "manhattan": {
-        "macro_f1": 0.6316,
-        "majority_baseline": 0.1715,
-        "margin": 0.4601,
-        "n": 249
+        "macro_f1": 0.6964,
+        "majority_baseline": 0.1685,
+        "margin": 0.528,
+        "n": 244
       },
       "queens": {
-        "macro_f1": 0.6848,
-        "majority_baseline": 0.139,
-        "margin": 0.5458,
-        "n": 239
+        "macro_f1": 0.6789,
+        "majority_baseline": 0.1354,
+        "margin": 0.5436,
+        "n": 229
       },
       "staten island": {
-        "macro_f1": 0.7409,
-        "majority_baseline": 0.1487,
-        "margin": 0.5922,
-        "n": 111
+        "macro_f1": 0.5293,
+        "majority_baseline": 0.14,
+        "margin": 0.3893,
+        "n": 108
       },
       "the bronx": {
-        "macro_f1": 0.694,
-        "majority_baseline": 0.1492,
-        "margin": 0.5448,
-        "n": 87
+        "macro_f1": 0.6883,
+        "majority_baseline": 0.1591,
+        "margin": 0.5292,
+        "n": 90
       }
     },
     "shap_top10": [
       {
         "feature": "num__BATH",
-        "mean_abs_shap": 0.446368122469674
+        "mean_abs_shap": 0.368824303150177
       },
       {
         "feature": "num__DIST_MANHATTAN_CENTER",
-        "mean_abs_shap": 0.3426992648375146
-      },
-      {
-        "feature": "num__TOTAL_ROOMS",
-        "mean_abs_shap": 0.12486685349442048
+        "mean_abs_shap": 0.36199700832366943
       },
       {
         "feature": "num__PROPERTYSQFT",
-        "mean_abs_shap": 0.10193310991697173
-      },
-      {
-        "feature": "cat_target__SUBLOCALITY",
-        "mean_abs_shap": 0.06554047444091926
-      },
-      {
-        "feature": "cat_onehot__TYPE_co-op",
-        "mean_abs_shap": 0.05993022901236809
-      },
-      {
-        "feature": "cat_target__ZIPCODE",
-        "mean_abs_shap": 0.03616740178842688
+        "mean_abs_shap": 0.14378201961517334
       },
       {
         "feature": "num__DIST_CENTRAL_PARK",
-        "mean_abs_shap": 0.03508848299350805
+        "mean_abs_shap": 0.1157006248831749
       },
       {
-        "feature": "cat_onehot__BOROUGH_brooklyn",
-        "mean_abs_shap": 0.014860099119398638
+        "feature": "num__TOTAL_ROOMS",
+        "mean_abs_shap": 0.10833797603845596
+      },
+      {
+        "feature": "cat_target__ZIPCODE",
+        "mean_abs_shap": 0.09714043885469437
+      },
+      {
+        "feature": "cat_onehot__TYPE_co-op",
+        "mean_abs_shap": 0.0790395438671112
+      },
+      {
+        "feature": "cat_target__SUBLOCALITY",
+        "mean_abs_shap": 0.0714368149638176
       },
       {
         "feature": "num__ROOMS_PER_SQFT",
-        "mean_abs_shap": 0.012353639874727783
+        "mean_abs_shap": 0.03409390524029732
+      },
+      {
+        "feature": "cat_onehot__BOROUGH_the bronx",
+        "mean_abs_shap": 0.02681557647883892
       }
     ]
   },
   "regression": {
-    "selected_model": "random_forest",
+    "selected_model": "xgboost",
     "metrics": {
-      "r2": 0.8116866399856913,
-      "rmse": 0.37199818857006345,
-      "mae": 0.2693114110537387,
-      "rmse_usd": 553679.3465600226,
-      "mae_usd": 316065.0387850339,
-      "mape": 0.28728219350741924
+      "r2": 0.8351015689260947,
+      "rmse": 0.36245062195319017,
+      "mae": 0.2562799861271875,
+      "rmse_usd": 541595.8694804073,
+      "mae_usd": 307109.2118774144,
+      "mape": 0.2827191112817385
     },
     "selection_metrics_val": {
-      "r2": 0.7836719710787752,
-      "rmse": 0.3948714128686629,
-      "mae": 0.28321250431325407,
-      "rmse_usd": 555219.4404215525,
-      "mae_usd": 327878.66105255566,
-      "mape": 0.3130765290095455
+      "r2": 0.7739558595398476,
+      "rmse": 0.436334989677865,
+      "mae": 0.2635617945016253,
+      "rmse_usd": 566534.3030896492,
+      "mae_usd": 314721.23394337005,
+      "mape": 0.7217319093933974
     },
     "candidates_val": {
       "random_forest": {
-        "r2": 0.7836719710787752,
-        "rmse": 0.3948714128686629,
-        "mae_usd": 327878.66105255566
+        "r2": 0.7681659041366927,
+        "rmse": 0.4418878572298989,
+        "mae_usd": 319657.2034890928
       },
       "xgboost": {
-        "r2": 0.77267045892211,
-        "rmse": 0.40478763217777547,
-        "mae_usd": 319514.27323247585
+        "r2": 0.7739558595398476,
+        "rmse": 0.436334989677865,
+        "mae_usd": 314721.23394337005
       },
       "lightgbm": {
-        "r2": 0.7799092421829923,
-        "rmse": 0.39829073127869397,
-        "mae_usd": 324466.6923019825
+        "r2": 0.7710882837819923,
+        "rmse": 0.43909392070089226,
+        "mae_usd": 327796.6208970093
       }
     },
     "price_interval": {
       "target_coverage": 0.8,
-      "low_multiplier": 0.6108,
-      "high_multiplier": 1.5368,
+      "low_multiplier": 0.6774,
+      "high_multiplier": 1.4573,
       "calibrated_on": "val",
       "coverage_val": 0.8039,
-      "coverage_test": 0.8179
+      "coverage_test": 0.7792
     }
   },
   "note": "Reproducible from a clean clone: the raw Kaggle CSV (Resources/NY-House-Dataset.csv) and every model artefact are committed, so `python run_training.py` regenerates this file and the models it describes."

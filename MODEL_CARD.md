@@ -10,9 +10,9 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model date:** 2026-07-20 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
 - **Model version:** v1.0.0.
 - **Model type:** ONE artifact.
-  - **Regressor** - `Random Forest` on `LOG_PRICE`. Predictions converted back via `expm1()`.
+  - **Regressor** - `XGBoost` on `LOG_PRICE`. Predictions converted back via `expm1()`.
   - The 4-class price zone is **derived by bucketing that prediction**, not predicted by a second model. `PRICE_ZONE` is a deterministic function of price, so a classifier was fitting the same features to the same signal - and could disagree with the served price on the same listing. Training scores zones through the same decode serving uses.
-- **Additional models compared (not shipped):** XGBoost, LightGBM - compared on val, never scored on test.
+- **Additional models compared (not shipped):** Random Forest, LightGBM - compared on val, never scored on test.
 - **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the **val** split, with **test** scored exactly once by the already-selected model. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
   - **Provenance-SHA caveat:** the `commit_sha` recorded in `reports/training_metrics.json` (and in `benchmarks/results.json`) is the PR-branch commit that produced the artifact. This repo squash-merges, which orphans branch commits, so those SHAs are **not ancestors of `main`** — the artifact's chain of custody is instead enforced continuously: the External Benchmark workflow re-derives the sealed metrics weekly from the committed model on live NYC.gov data, so an artifact/code mismatch surfaces as a red scheduled run rather than relying on SHA ancestry.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
@@ -23,24 +23,24 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Primary intended uses:**
   - Portfolio demonstration of end-to-end ML engineering (data cleaning → feature engineering → modelling → tuning → explainability → API → UI → deployment).
-  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² (0.812) vs. the near-perfect R² a leaked `PRICE_PER_SQFT` produces (0.997, measured on the earlier dataset revision in ADR-001 and not re-measured since).
+  - Educational: illustrate a data-leakage guard (`assert_no_leakage`) and honest R² (0.835) vs. the near-perfect R² a leaked `PRICE_PER_SQFT` produces (0.997, measured on the earlier dataset revision in ADR-001 and not re-measured since).
 - **Primary intended users:** hiring managers / reviewers evaluating the author's ML engineering signal; engineers looking at how to structure a tabular-ML project with DL as an ablation.
 - **Out-of-scope uses:** the model is **NOT suitable for real pricing decisions**. It is trained on a ~4,500-row public Kaggle snapshot of NYC listings; it will drift against current-market reality, has no per-user auth / SLA, and is not fairness-audited beyond borough-level F1 disparity.
 
 ## Factors
 
-- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies (0.741 → 0.620).
+- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies (0.696 → 0.529).
 - **Evaluation factors:** price zone (4 classes, stratified), sublocality (target-encoded with smoothing), property type (one-hot).
 - **Factors NOT evaluated:** seller/buyer demographics (not in the dataset); temporal drift across listing date (dataset is a single snapshot); accessibility amenities (not in features).
 
 ## Metrics
 
 - **Model performance measures:**
-  - Zones: macro F1 = **0.699** on the test split, derived by bucketing the regressor's predictions. There is no classifier.
-  - Regression: R² = **0.812** (Random Forest) on test; 0.784 on val. Honest, no leakage (see ADR-001).
+  - Zones: macro F1 = **0.712** on the test split, derived by bucketing the regressor's predictions (naive borough-median baseline: 0.301). There is no classifier.
+  - Regression: R² = **0.835** (XGBoost) on test; 0.774 on val (naive borough-median baseline: 0.177). Honest, no leakage (see ADR-001).
   - Split: 2,896 train / 724 val / 906 test, stratified on price zone.
 - **Decision rule:** the zone is the predicted price bucketed through `PRICE_ZONE_BINS` (`src/models/decode.py`), the same function that labels the training data. There is no classifier, no label encoder and no argmax. Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those were fitted on the test labels and scored on the same labels, so the number was in-sample. Measured out-of-sample over 20 stratified splits, tuning was worth +0.0006 (std 0.0106) — noise — and is gone.
-- **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
+- **Variation approaches:** the full protocol (split, train-only fitting, candidate selection) re-run over 20 seeds — test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**; XGBoost selected in 16/20 runs. Recorded in `reports/seed_variance.json`; the headline numbers above are the shipped `RANDOM_SEED=42` artefact, which sits inside 1 SD of the seed mean.
 
 ## Evaluation data
 
@@ -58,22 +58,19 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Quantitative analyses
 
-- **Unitary results:** top SHAP features (mean |SHAP|, averaged across the four classes; from `reports/training_metrics.json → classification.shap_top10`): `BATH` (0.446), `DIST_MANHATTAN_CENTER` (0.343), `TOTAL_ROOMS` (0.125), `PROPERTYSQFT` (0.102). Full top-10 in README.
+- **Unitary results:** top SHAP features (mean |SHAP| over the regressor's test predictions; from `reports/training_metrics.json → classification.shap_top10`): `BATH` (0.369), `DIST_MANHATTAN_CENTER` (0.362), `PROPERTYSQFT` (0.144), `DIST_CENTRAL_PARK` (0.116). Full top-10 in README.
 - **Intersectional results:** borough-level macro F1 (from the artifact's
   `fairness_by_borough`). There is no `nan` group: rows whose borough cannot
   be derived are dropped during cleaning rather than carried as an unnamed
   category.
-  - Staten Island 0.741
-  - The Bronx 0.694
-  - Queens 0.685
-  - Manhattan 0.632
-  - Brooklyn 0.620
+  - Manhattan 0.696
+  - Brooklyn 0.691
+  - The Bronx 0.688
+  - Queens 0.679
+  - Staten Island 0.529
 
-  Reported without a causal explanation, because none was measured. Staten
-  Island does have the most concentrated zone distribution (55.9% Medium vs
-  Queens' most-common 37.7%), but no experiment here establishes that as the
-  cause. Not currently mitigated (would need per-borough calibration or
-  reweighting).
+  Reported without a causal explanation, because none was measured. Not
+  currently mitigated (would need per-borough calibration or reweighting).
 
 ## Ethical considerations
 
@@ -84,13 +81,13 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Caveats and recommendations
 
 - **Caveats:**
-  - **Uncertainty is an empirical interval, not a distribution.** The served price range is the 10th-90th percentile of `actual / predicted` measured on the validation split (multipliers 0.611x / 1.537x, recorded in `models/price_interval.json`), and it covers **81.8%** of the test split against an 80% target.
+  - **Uncertainty is an empirical interval, not a distribution.** The served price range is the conformal 10th-90th band of `actual / predicted` measured on the validation split (multipliers 0.677x / 1.457x, recorded in `models/price_interval.json`), and it covers **77.9%** of the test split against an 80% target.
 
-  That is **1.8 points ABOVE the target, not below it**: the binomial standard error of a proportion at p=0.8 on the 906-row test split is 1.33 points, so the gap is 1.35 SE — within sampling noise. The interval covers slightly more often than it advertises, which is the conservative direction for split conformal's finite-sample correction. It is reported rather than trimmed to hit 80% exactly, which would make the target a fitted quantity. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
-  - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only.
+  That is 2.1 points below the target: the binomial standard error of a proportion at p=0.8 on the 906-row test split is 1.33 points, so the gap is 1.6 SE — within sampling noise. It is reported rather than widened to hit 80% exactly, which would make the target a fitted quantity. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
+  - **Cross-row statistics are train-fitted:** IQR cap bounds, zone cut-points and the category vocabulary are fitted on the train split only and applied to val/test (`run_training.build_splits`), enforced by `tests/test_train_only_fitting.py` and three pooled-fitting mutations in the CI harness.
   - **The IQR cap factor (3.0) is measured, and it bites harder than "tails".** It clips PRICE at Q3 + 3·IQR = $4,483,000 on this snapshot. **351 of 4,526 rows (7.76%) sit at exactly that value** — every listing from $4,483,000 up (373 in the raw export) is collapsed onto one price, not just the $56M-$195M outliers. So the model cannot distinguish any property above ~$4.5M, and the top of the price distribution is a spike rather than a tail. Scored on a common evaluation set (listings under $2,989,000, so every variant faces the same target distribution), val MAE is 0.2682 at factor 1.5, 0.2772 at 3.0, 0.2796 at 5.0 and 0.2810 uncapped -- capping beats not capping, and tighter is better on the metric. **1.5 measured better than the shipped 3.0** and is not used because it collapses 11.73% of listings onto one price against 7.76%: the gain is 0.009 MAE (3.3% relative), the cost is 180 more listings the model cannot tell apart. Note that scored across ALL rows the uncapped variant looks best (R2 0.7854) -- that ranking is variance inflation from a single $195M listing and reverses entirely on a like-for-like target. The lower clip bound never fires (it computes to −$2,489,000 for PRICE, so zero rows).
   - **One overflow sentinel is dropped, not capped.** The raw export contains a single `PRICE` of 2,147,483,647 (2³¹−1) where the next-highest real listing is $195M. It is removed before capping, because capping would convert it into a plausible-looking listing at the IQR bound instead of eliminating it.
-  - **No naive-baseline column next to the headline metrics:** R²=0.812 (Kaggle split) and R²(log)=0.250 (external benchmark) are reported without a same-split naive baseline (e.g. borough-median price). The external benchmark's value is defensible on its own terms (sealed contract, weekly re-derivation on live data), but absolute skill vs. a trivial predictor is not quantified here.
+  - **No naive-baseline column next to the headline metrics:** R²=0.835 (Kaggle split, baseline 0.177) and R²(log)=0.250 (external benchmark, baseline -0.016) are each reported beside the per-borough-median naive predictor scored on the same rows, recorded in the artefacts.
 - **Recommendations:**
   - Treat predictions as directional, not dollar-accurate.
   - Do not use for decisions that would materially affect a specific person (loan, rent, appraisal).

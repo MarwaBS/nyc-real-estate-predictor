@@ -6,6 +6,29 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — every cross-row statistic now fits on the train split only
+
+- **The two disclosed leakage residuals are fixed.** IQR cap bounds, zone
+  cut-points and the category vocabulary were fitted on pooled data; all
+  three now fit on the train rows only and apply everywhere
+  (`run_training.build_splits`), and the split stratifies on price quartiles
+  as a balancing key instead of the pooled-derived zone label. Enforced by
+  `tests/test_train_only_fitting.py` plus three pooled-fitting mutations in
+  the CI harness.
+- **Selection returned to XGBoost under the corrected protocol** (val R2
+  0.7740 vs LightGBM 0.7711 vs Random Forest 0.7682); test R2 **0.835**,
+  zones macro F1 **0.712**. Coverage: 77.9% against the 80% target (1.6 SE).
+- **Headline numbers now carry error bars and a naive baseline.** 20-seed
+  re-run of the full protocol: test R2 0.814 +/- 0.028, zones F1
+  0.717 +/- 0.020 (`reports/seed_variance.json`); per-borough-median
+  baseline recorded in the training artefact (R2 0.177 / F1 0.301 at seed
+  42) and on the external benchmark's own rows (-0.016 vs the model's
+  0.250, `benchmarks/results.json`).
+- **The borough fairness picture changed with the corrected bins:** Staten
+  Island is now the weakest borough (0.529) and Manhattan the strongest
+  (0.696). Every borough still clears its majority-class floor.
+
+
 ### Changed — one model, derived zones, conformal interval, borough floor
 
 - **The classifier is deleted; the zone is the predicted price bucketed.**

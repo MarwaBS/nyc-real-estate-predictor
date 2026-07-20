@@ -100,9 +100,7 @@ def _borough_median_baseline(
     median train price, bucketed through the same zone decode."""
     medians = train_frame.groupby("BOROUGH")["LOG_PRICE"].median()
     fallback = float(train_frame["LOG_PRICE"].median())
-    pred_log = (
-        test_frame["BOROUGH"].map(medians).fillna(fallback).to_numpy(dtype=float)
-    )
+    pred_log = test_frame["BOROUGH"].map(medians).fillna(fallback).to_numpy(dtype=float)
     reg = evaluate_regressor(
         test_frame["LOG_PRICE"].to_numpy(dtype=float), pred_log, log_target=True
     )

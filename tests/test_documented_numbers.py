@@ -183,6 +183,29 @@ def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
     assert not offenders, "live docs name deleted components:\n" + "\n".join(offenders)
 
 
+def _study_values() -> set[float]:
+    """Seed-study and baseline quantities quoted beside the point estimates.
+    They are different quantities with their own gates, so the contradiction
+    scans must not flag them — the claim window can straddle a compound
+    sentence like "test R2 0.814 ± 0.028, zones macro F1 0.717 ± 0.020"."""
+    values = {
+        round(SEED_VARIANCE[k][s], 3)
+        for k in (
+            "test_r2",
+            "zones_macro_f1",
+            "baseline_test_r2",
+            "baseline_zones_macro_f1",
+        )
+        for s in ("mean", "std")
+    }
+    values |= {
+        round(METRICS["baseline"]["test_r2"], 3),
+        round(METRICS["baseline"]["test_zones_macro_f1"], 3),
+        round(abs(BENCH["performance"]["baseline_r2_log_space"]), 3),
+    }
+    return values
+
+
 def _claimed_values(text: str, keyword: str) -> list[tuple[int, float]]:
     """Every number stated within 60 characters after `keyword`, with its line."""
     found = []
@@ -205,7 +228,7 @@ def test_every_live_macro_f1_claim_matches_the_artefact(doc: str) -> None:
     wrong = [
         f"{doc}:{line}: macro F1 {value} (artefact: {shipped})"
         for line, value in _claimed_values(_read(doc), r"macro[- ]?F1")
-        if value != shipped
+        if value != shipped and value not in _study_values()
     ]
     assert not wrong, "contradicted macro F1 claims:\n" + "\n".join(wrong)
 
@@ -220,7 +243,8 @@ def test_every_live_test_r2_claim_matches_the_artefact(doc: str) -> None:
     # 0.997 is the leaked PRICE_PER_SQFT figure ADR-001 exists to document. It
     # is named deliberately and repeatedly, so it is allowed by value rather
     # than by loosening the historical-phrasing filter every line must pass.
-    allowed = {shipped, val, bench, 0.997}
+    # The seed study's mean/std/baseline values are gated separately.
+    allowed = {shipped, val, bench, 0.997} | _study_values()
     wrong = [
         f"{doc}:{line}: R2 {value} (artefact test {shipped} / val {val})"
         for line, value in _claimed_values(_read(doc), r"R[²2]")
@@ -378,6 +402,44 @@ def test_the_stated_feature_count_matches_the_fitted_model() -> None:
     assert int(stated.group(2)) == len(features) - n_categorical, (
         f"MODEL_CARD says {stated.group(2)} numeric; the artefact implies "
         f"{len(features) - n_categorical}"
+    )
+
+
+SEED_VARIANCE = json.loads((ROOT / "reports" / "seed_variance.json").read_text("utf-8"))
+
+
+def test_seed_variance_claims_match_the_recorded_study() -> None:
+    """The mean ± std quoted in README/MODEL_CARD must be the recorded ones."""
+    r2 = SEED_VARIANCE["test_r2"]
+    f1 = SEED_VARIANCE["zones_macro_f1"]
+    r2_claim = f"{r2['mean']:.3f} ± {r2['std']:.3f}"
+    f1_claim = f"{f1['mean']:.3f} ± {f1['std']:.3f}"
+    for doc in ("README.md", "MODEL_CARD.md"):
+        text = _read(doc)
+        assert r2_claim in text, f"{doc} does not quote test R² {r2_claim}"
+        assert f1_claim in text, f"{doc} does not quote zones F1 {f1_claim}"
+    # The selection-count claim must match too.
+    counts = SEED_VARIANCE["selected_model_counts"]
+    winner = max(counts, key=lambda k: counts[k])
+    n = SEED_VARIANCE["n_seeds"]
+    assert f"{counts[winner]}/{n}" in _read("README.md")
+
+
+def test_the_shipped_seed_metrics_sit_inside_the_recorded_spread() -> None:
+    """The headline artefact must be a draw from the distribution the study
+    describes — a stale study file would let the two drift apart."""
+    r2 = METRICS["regression"]["metrics"]["r2"]
+    spread = SEED_VARIANCE["test_r2"]
+    assert spread["min"] - 1e-9 <= r2 <= spread["max"] + 1e-9
+
+
+def test_benchmark_baseline_is_recorded_and_quoted() -> None:
+    """README's benchmark table must quote the baseline scored on the same
+    rows, from the artefact."""
+    baseline = BENCH["performance"]["baseline_r2_log_space"]
+    assert baseline is not None
+    assert f"{baseline:.3f}" in _read("README.md"), (
+        f"README does not quote the benchmark baseline {baseline:.3f}"
     )
 
 

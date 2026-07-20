@@ -3,7 +3,7 @@
 [![CI](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20Demo-on%20Hugging%20Face-yellow)](https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor)
 
-**Predict NYC residential prices and derive their price zones with one Random Forest regressor over 4,500+ listings with geospatial features.**
+**Predict NYC residential prices and derive their price zones with one XGBoost regressor over 4,500+ listings with geospatial features.**
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
@@ -13,7 +13,7 @@ This repository contains **two separate evaluation surfaces** that should not be
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
-| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.812 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
+| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177) | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
 | External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
 
 Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
@@ -34,8 +34,17 @@ once, after selection is fixed.
 
 | Task | Model | Metric | Val (selection) | **Test (reported)** |
 |---|---|---|---|---|
-| Price Regression | **Random Forest** (selected) | R2 | 0.784 | **0.812** |
-| Price Zone (bucketed from the above) | — | Macro F1 | — | **0.699** |
+| Price Regression | **XGBoost** (selected on val) | R2 | 0.774 | **0.835** |
+| Price Zone (bucketed from the above) | — | Macro F1 | — | **0.712** |
+
+Across **20 seeds** of the full protocol (split, train-only fitting and
+candidate selection re-run each time — `scripts/measure_seed_variance.py`,
+recorded in [`reports/seed_variance.json`](reports/seed_variance.json)):
+test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**, against a
+per-borough-median baseline of 0.170 ± 0.017 R² and 0.242 ± 0.058 F1.
+XGBoost wins selection in 16/20 runs (candidates Random Forest 3, LightGBM 1) — at 4,526
+rows the candidate ranking is seed-sensitive, which is exactly why the
+spread is published next to the point estimates.
 
 Split: 2,896 train / 724 val / 906 test, stratified on price zone. Losing
 candidates show "not scored" because they never touch test — scoring them
@@ -90,16 +99,16 @@ cleaning rather than carried into training as an unnamed category.
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.741 |
-| The Bronx | 0.694 |
-| Queens | 0.685 |
-| Manhattan | 0.632 |
-| Brooklyn | 0.620 |
+| Manhattan | 0.696 |
+| Brooklyn | 0.691 |
+| The Bronx | 0.688 |
+| Queens | 0.679 |
+| Staten Island | 0.529 |
 
-The spread (0.741 Staten Island vs 0.620 Brooklyn) is wide enough to matter
+The spread (0.696 Manhattan vs 0.529 Staten Island) is wide enough to matter
 and is reported unexplained: no experiment here establishes a cause, so it is
 recorded as an observation. Every borough clears its own majority-class
-baseline by at least 0.46 macro F1 — the floor `check_borough_floor` enforces
+baseline by at least 0.39 macro F1 — the floor `check_borough_floor` enforces
 at train time, which fails the run rather than publishing a breach.
 
 ---
@@ -130,6 +139,7 @@ predict, out of distribution?*
 | Scored | **18,321** |
 | Dropped (per-reason accounting below) | 62,155 |
 | **R² in log-price space** | **0.250** |
+| Naive baseline (borough-median train price, same rows) | **-0.016** |
 | Leakage — name-based / semantic (Pearson + Spearman + MI) | not triggered |
 | Schema SHA vs registry | verified BEFORE the run (hard gate) |
 | Prediction health (NaN / Inf / collapse) | passed |
@@ -160,7 +170,7 @@ have been published. Recorded here rather than quietly overwritten.
 
 **Read the number honestly:** 0.250 R²(log) is what borough + sqft + ZIP
 explain about 2024 family-dwelling sale prices, full stop. It is *supposed*
-to be far below the flagship's in-distribution 0.812 — the point of the
+to be far below the flagship's in-distribution 0.835 — the point of the
 benchmark is that this gap is measured and sealed, not hidden.
 
 **Reproduce it yourself** (no private data needed — the lean model is
@@ -247,7 +257,7 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 |---|---|---|
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
-| **ML models** | `src/models/` | sklearn Pipelines; one Random Forest regressor |
+| **ML models** | `src/models/` | sklearn Pipelines; one XGBoost regressor |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
 | **UI** | `streamlit_app/` | Interactive NYC map, prediction form, calibrated price range |
@@ -423,7 +433,7 @@ PRICE = PRICE_PER_SQFT * PROPERTYSQFT   # trivial algebra
 ```
 
 R2=0.997 was not a real prediction — it was circular computation. After removing this feature:
-- Honest R2 = **0.812** (Random Forest, selected on val) — a real result, not inflated
+- Honest R2 = **0.835** (XGBoost, selected on val) — a real result, not inflated
 - This is enforced by `test_no_leakage.py` in CI
 - Documented in [ADR-001](docs/decisions/001-remove-price-per-sqft.md)
 

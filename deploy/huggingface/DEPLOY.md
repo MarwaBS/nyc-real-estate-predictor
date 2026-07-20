@@ -36,7 +36,7 @@ You need a **write-scope** token to push to the Space repo.
 3. Space name: `nyc-real-estate-predictor` (matches the GitHub repo name exactly).
 4. License: `mit`.
 5. Space SDK: **Docker**.
-6. Hardware: **CPU basic (free)** — more than enough for Random Forest inference.
+6. Hardware: **CPU basic (free)** — more than enough for XGBoost inference.
 7. Visibility: **Public**.
 8. Click **Create Space**.
 

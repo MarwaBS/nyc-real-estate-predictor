@@ -44,10 +44,11 @@ VAL_SIZE: float = 0.2
 CV_FOLDS: int = 5
 OPTUNA_TRIALS: int = 50
 
-# Price zone thresholds (USD): equal-frequency quartiles of the cleaned
-# training prices, so the four zones carry ~1,130 listings each.
+# Price zone thresholds (USD): equal-frequency quartiles of the TRAIN split's
+# capped prices from the shipped run (run_training.build_splits), so serving
+# buckets exactly the way training labelled.
 # test_config_artefact_agreement.py fails if these drift from the fitted model.
-PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_495_000, float("inf")]
+PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000, float("inf")]
 PRICE_ZONE_LABELS: list[str] = ["Low", "Medium", "High", "Very High"]
 
 # Feature lists — CRITICAL: no PRICE_PER_SQFT (data leakage)

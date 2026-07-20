@@ -183,5 +183,5 @@ with col2:
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.caption(
-    "Model: one Random Forest regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
+    "Model: one XGBoost regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
 )

@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run_training import REFERENCE_POINTS, prepare_data  # noqa: E402
+from run_training import REFERENCE_POINTS, get_feature_df, prepare_data  # noqa: E402
 from src.config import RANDOM_SEED, TEST_SIZE, VAL_SIZE  # noqa: E402
 from src.data.cleaner import apply_cap, fit_cap_bounds  # noqa: E402
 from src.data.features import (  # noqa: E402
@@ -73,9 +73,7 @@ def main() -> int:
         for col in ("BOROUGH", "TYPE", "ZIPCODE", "SUBLOCALITY"):
             df[col] = df[col].astype(str).str.lower().str.strip()
 
-        from run_training import get_feature_df
-
-        X = get_feature_df(df)
+        features = get_feature_df(df)
         model = build_regression_pipeline(
             RandomForestRegressor(
                 n_estimators=500,
@@ -84,18 +82,16 @@ def main() -> int:
                 n_jobs=-1,
             )
         )
-        model.fit(X.loc[idx_train], df.loc[idx_train, "LOG_PRICE"])
+        model.fit(features.loc[idx_train], df.loc[idx_train, "LOG_PRICE"])
 
         common = [i for i in idx_val if df_clean.loc[i, "PRICE"] < tight_hi]
         y_true = df.loc[common, "LOG_PRICE"]
-        y_pred = model.predict(X.loc[common])
+        y_pred = model.predict(features.loc[common])
         rows.append(
             {
                 "factor": factor if factor is not None else "none",
                 "val_r2_common": round(float(r2_score(y_true, y_pred)), 4),
-                "val_mae_common": round(
-                    float(mean_absolute_error(y_true, y_pred)), 4
-                ),
+                "val_mae_common": round(float(mean_absolute_error(y_true, y_pred)), 4),
                 "train_rows_at_cap": at_cap,
                 "pct_at_cap": round(100 * at_cap / len(idx_train), 2),
             }
