@@ -11,7 +11,7 @@
 -r requirements.txt
 
 # Deep Learning
-torch==2.12.1  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
+torch==2.13.0  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
 
 # Gradient Boosting (training-only)
 catboost==1.2.10
@@ -20,10 +20,10 @@ catboost==1.2.10
 optuna==3.6.2
 
 # Explainability (training + evaluation)
-shap==0.45.1
+shap==0.52.0
 
 # Imbalanced Learning
-imbalanced-learn==0.12.4
+imbalanced-learn==0.14.2
 
 # Experiment Tracking
-mlflow==3.11.1  # training-only experiment tracking (v3 line; older comment referenced a v2-era bump)
+mlflow==3.14.0  # training-only experiment tracking (v3 line; older comment referenced a v2-era bump)
