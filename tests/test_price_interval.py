@@ -105,6 +105,58 @@ def test_calibrate_price_interval_rejects_an_unknown_split() -> None:
         )
 
 
+class _FlatDollarRegressor:
+    """Predicts a flat $1 so each ratio is just the actual. log1p(1.0), not
+    0.0 — expm1(0) is 0 and every ratio would be infinite."""
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return np.full(len(X), np.log1p(1.0))
+
+
+def test_the_interval_uses_the_conformal_level_not_the_plain_quantile() -> None:
+    """The finite-sample correction is what the 2 SE coverage bound rests on.
+
+    The expected level is found by search, not by re-evaluating ceil((n+1)q) —
+    that would put the same expression on both sides of the assertion.
+    """
+    rng = np.random.default_rng(0)
+    n = 500
+    ratios = np.sort(rng.uniform(1.0, 3.0, n))
+    splits = {"val": (pd.DataFrame({"f": np.zeros(n)}), pd.Series(np.log1p(ratios)))}
+
+    # Written out, not imported, so this test does not move with the constant.
+    hi_q = 0.9
+    k = next(i for i in range(1, n + 2) if i / (n + 1) >= hi_q)
+    expected_level = min(k / n, 1.0)
+
+    result = calibrate_price_interval(
+        _FlatDollarRegressor(), splits, calibrate_on="val", target=0.80
+    )
+
+    assert result["high_multiplier"] == pytest.approx(
+        round(float(np.quantile(ratios, expected_level)), 4), abs=1e-9
+    )
+    # If the corrected level coincided with the plain one, the assertion above
+    # would pass on the mutation it exists to catch.
+    assert float(np.quantile(ratios, expected_level)) != pytest.approx(
+        float(np.quantile(ratios, hi_q)), abs=1e-9
+    )
+
+
+def test_the_shipped_interval_targets_the_coverage_the_code_asks_for(
+    interval: dict,
+) -> None:
+    """CI never retrains, so the constant must be compared to the artefact."""
+    from run_training import PRICE_INTERVAL_TARGET
+
+    assert PRICE_INTERVAL_TARGET == 0.80
+    assert interval["target_coverage"] == PRICE_INTERVAL_TARGET, (
+        "run_training.PRICE_INTERVAL_TARGET differs from the target recorded "
+        "in models/price_interval.json — the shipped interval was calibrated "
+        "to a different coverage than the code now asks for. Retrain."
+    )
+
+
 def test_measured_coverage_is_close_to_the_target_it_advertises(
     interval: dict,
 ) -> None:

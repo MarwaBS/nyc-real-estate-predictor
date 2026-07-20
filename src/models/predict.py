@@ -75,9 +75,7 @@ def get_price_interval() -> dict[str, Any]:
     """The calibrated price-interval multipliers (cached after first call).
 
     Load-bearing, so a missing artefact raises rather than falling back to a
-    guess: the previous behaviour was a hardcoded +/-15% that contained the
-    true price 32% of the time, and silently substituting any default here
-    would reintroduce an interval nothing measured.
+    guess that would serve an interval nothing measured.
     """
     global _price_interval
     if _price_interval is None:
@@ -94,8 +92,8 @@ def get_price_interval() -> dict[str, Any]:
 def price_range(price: float) -> dict[str, float]:
     """The interval served alongside ``price``, from the calibrated artefact.
 
-    One implementation for every surface (API, predict module, dashboard) so
-    the three cannot drift — they previously each hardcoded the same literal.
+    One implementation for the API, predict module and dashboard, so the three
+    cannot drift.
     """
     interval = get_price_interval()
     return {
@@ -130,10 +128,10 @@ def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
     reg = get_regressor()
     prices = np.expm1(np.asarray(reg.predict(features), dtype=float))
 
-    return [
-        {
-            "predicted_price": round(price, -2),  # Round to nearest $100
-            "price_range": price_range(price),
-        }
-        for price in prices.tolist()
-    ]
+    # Derive the band from the rounded price, so low/high reproduce from the
+    # figure shown beside them. They were multiplied from the unrounded price.
+    out = []
+    for price in prices.tolist():
+        rounded = round(price, -2)
+        out.append({"predicted_price": rounded, "price_range": price_range(rounded)})
+    return out

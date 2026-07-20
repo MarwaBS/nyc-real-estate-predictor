@@ -7,7 +7,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Model details
 
 - **Persons or organisations developing the model:** Marwa Ben Salem (solo).
-- **Model date:** 2026-07-19 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
+- **Model date:** 2026-07-20 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
 - **Model version:** v1.0.0.
 - **Model type:** ONE artifact.
   - **Regressor** - `Random Forest` on `LOG_PRICE`. Predictions converted back via `expm1()`.
@@ -29,7 +29,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Factors
 
-- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies (0.741 → 0.621).
+- **Relevant groupings:** NYC borough (Staten Island, Bronx, Brooklyn, Queens, Manhattan) — F1 varies (0.741 → 0.620).
 - **Evaluation factors:** price zone (4 classes, stratified), sublocality (target-encoded with smoothing), property type (one-hot).
 - **Factors NOT evaluated:** seller/buyer demographics (not in the dataset); temporal drift across listing date (dataset is a single snapshot); accessibility amenities (not in features).
 
@@ -39,7 +39,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
   - Zones: macro F1 = **0.699** on the test split, derived by bucketing the regressor's predictions. There is no classifier.
   - Regression: R² = **0.812** (Random Forest) on test; 0.784 on val. Honest, no leakage (see ADR-001).
   - Split: 2,896 train / 724 val / 906 test, stratified on price zone.
-- **Decision rule:** argmax over the classifier's per-class probabilities, decoded through the label encoder's class order (recorded in the artefact's `classification.metrics.labels`). Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those thresholds were fitted on the test labels and scored on the same labels, so the number was in-sample. Fitted on one half of the test set and scored on the other over 20 stratified splits, tuning is worth +0.0006 (std 0.0106) — noise — and has been removed.
+- **Decision rule:** the zone is the predicted price bucketed through `PRICE_ZONE_BINS` (`src/models/decode.py`), the same function that labels the training data. There is no classifier, no label encoder and no argmax. Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those were fitted on the test labels and scored on the same labels, so the number was in-sample. Measured out-of-sample over 20 stratified splits, tuning was worth +0.0006 (std 0.0106) — noise — and is gone.
 - **Variation approaches:** none repeated across random seeds in the reported numbers. A single seed (`RANDOM_SEED=42`) is used. **Honest limitation:** a Staff-level submission would report mean ± std over N seeds; this project does not.
 
 ## Evaluation data
@@ -54,7 +54,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 - **Same as evaluation:** a stratified three-way 64/16/20 train/val/test split of the same cleaned dataset (20% test held out first, then 20% of the remainder as val). No separate external corpus.
 - **Split strategy:** stratified on `PRICE_ZONE` to preserve class balance across train/test.
-- **Feature set:** 14 total — 10 numeric + 4 categorical (2 one-hot: `BOROUGH`, `TYPE`; 2 target-encoded: `ZIPCODE`, `SUBLOCALITY`). `PROPERTY_CATEGORY` was removed: training, the API and the dashboard all hardcoded it to "residential", so the encoder only ever saw one level. Full list in README "Feature engineering" section. Features deliberately **exclude** `PRICE_PER_SQFT` (target-derived; causes R² = 0.997 artefact — see ADR-001).
+- **Feature set:** 12 total — 8 numeric + 4 categorical (2 one-hot: `BOROUGH`, `TYPE`; 2 target-encoded: `ZIPCODE`, `SUBLOCALITY`). `PROPERTY_CATEGORY` was removed: training, the API and the dashboard all hardcoded it to "residential", so the encoder only ever saw one level. Full list in README "Feature engineering" section. Features deliberately **exclude** `PRICE_PER_SQFT` (target-derived; causes R² = 0.997 artefact — see ADR-001).
 
 ## Quantitative analyses
 
@@ -67,7 +67,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
   - The Bronx 0.694
   - Queens 0.685
   - Manhattan 0.632
-  - Brooklyn 0.621
+  - Brooklyn 0.620
 
   Reported without a causal explanation, because none was measured. Staten
   Island does have the most concentrated zone distribution (55.9% Medium vs
@@ -84,10 +84,9 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Caveats and recommendations
 
 - **Caveats:**
-  - `DIST_NEAREST_SUBWAY` is a proxy (equal to `DIST_MANHATTAN_CENTER`) **by design**: station-level data is not bundled with the repo, and training + serving must use identical feature semantics, so both sides compute the same proxy (`run_training.py` and `api/main.py`). Its marginal information value is zero; it remains in the schema for forward compatibility.
   - **Uncertainty is an empirical interval, not a distribution.** The served price range is the 10th-90th percentile of `actual / predicted` measured on the validation split (multipliers 0.611x / 1.537x, recorded in `models/price_interval.json`), and it covers **81.8%** of the test split against an 80% target.
 
-  That 3.7-point shortfall is **probably real, not sampling noise**: the binomial standard error of a proportion at p=0.8 on the 906-row test split is 1.33 points, so the gap is 2.8 SE. The honest reading is that multipliers fitted on val generalise slightly optimistically to test — the served range contains the true price a little less often than it advertises. It is reported rather than papered over by widening the band after the fact, which would make the "80% target" meaningless. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
+  That is **1.8 points ABOVE the target, not below it**: the binomial standard error of a proportion at p=0.8 on the 906-row test split is 1.33 points, so the gap is 1.35 SE — within sampling noise. The interval covers slightly more often than it advertises, which is the conservative direction for split conformal's finite-sample correction. It is reported rather than trimmed to hit 80% exactly, which would make the target a fitted quantity. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would. It previously was a fixed ±15% derived from nothing, which covered 32% of listings.
   - **Pre-split outlier capping (methodological leakage, small but real):** `src/data/cleaner.py` IQR-caps `PRICE` on the FULL dataset before the train/test split, so the cap bounds carry information about test rows into training preprocessing. The effect is bounded (the cap touches only distribution tails and the same bounds are applied to every row), but a strictly clean pipeline would fit the capper on the training fold only.
   - **The IQR cap factor (3.0) is measured, and it bites harder than "tails".** It clips PRICE at Q3 + 3·IQR = $4,483,000 on this snapshot. **351 of 4,526 rows (7.76%) sit at exactly that value** — every listing from $4,483,000 up (373 in the raw export) is collapsed onto one price, not just the $56M-$195M outliers. So the model cannot distinguish any property above ~$4.5M, and the top of the price distribution is a spike rather than a tail. Scored on a common evaluation set (listings under $2,989,000, so every variant faces the same target distribution), val MAE is 0.2682 at factor 1.5, 0.2772 at 3.0, 0.2796 at 5.0 and 0.2810 uncapped -- capping beats not capping, and tighter is better on the metric. **1.5 measured better than the shipped 3.0** and is not used because it collapses 11.73% of listings onto one price against 7.76%: the gain is 0.009 MAE (3.3% relative), the cost is 180 more listings the model cannot tell apart. Note that scored across ALL rows the uncapped variant looks best (R2 0.7854) -- that ranking is variance inflation from a single $195M listing and reverses entirely on a like-for-like target. The lower clip bound never fires (it computes to −$2,489,000 for PRICE, so zero rows).
   - **One overflow sentinel is dropped, not capped.** The raw export contains a single `PRICE` of 2,147,483,647 (2³¹−1) where the next-highest real listing is $195M. It is removed before capping, because capping would convert it into a plausible-looking listing at the IQR bound instead of eliminating it.

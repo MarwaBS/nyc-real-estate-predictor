@@ -70,6 +70,24 @@ def test_detect_drift_catches_shift(sample_df: pd.DataFrame) -> None:
     assert drifted["BEDS"]["shift_ratio"] > 0.15
 
 
+def test_default_drift_threshold_brackets_the_shift_it_claims_to_catch(
+    sample_df: pd.DataFrame,
+) -> None:
+    """Every other drift test passes threshold= explicitly. Bracketing pins the
+    default: caught-above alone passes under any lower value, ignored-below
+    alone under any higher one. Together they admit 0.10–0.20 SD."""
+    baseline = compute_feature_stats(sample_df)
+    sd = float(sample_df["BEDS"].std())
+
+    just_over = sample_df.copy()
+    just_over["BEDS"] = just_over["BEDS"] + 0.20 * sd
+    assert "BEDS" in detect_drift(just_over, baseline)
+
+    just_under = sample_df.copy()
+    just_under["BEDS"] = just_under["BEDS"] + 0.10 * sd
+    assert "BEDS" not in detect_drift(just_under, baseline)
+
+
 def test_check_drift_raises_on_fail(sample_df: pd.DataFrame, tmp_path: Path) -> None:
     path = tmp_path / "baseline.json"
     save_baseline(sample_df, path)

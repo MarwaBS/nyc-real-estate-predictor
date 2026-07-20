@@ -29,6 +29,7 @@ Target: ``log1p(PRICE)`` (the benchmark compares in log space).
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -41,8 +42,20 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from src.config import CLEANED_DATASET, MODELS_DIR, RANDOM_SEED
+from src.data.cleaner import cap_outliers
 
 logger = logging.getLogger(__name__)
+
+# Kaggle borough spelling -> the Census names apply_schema_map emits, so the
+# committed baseline can be looked up directly against benchmark rows.
+_CENSUS_BOROUGH: dict[str, str] = {
+    "manhattan": "Manhattan",
+    "the bronx": "Bronx",
+    "brooklyn": "Brooklyn",
+    "queens": "Queens",
+    "staten island": "Staten Island",
+}
+BENCHMARK_BASELINE_PATH: Path = MODELS_DIR / "benchmark_baseline.json"
 
 #: The three features shared between Kaggle training data and NYC.gov sales.
 BENCHMARK_FEATURES: list[str] = ["borough", "property_sqft", "zip_code"]
@@ -57,6 +70,10 @@ def build_benchmark_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     non-positive price are dropped — the model only learns from complete,
     valid examples.
     """
+    # The cleaned CSV is uncapped; cap here, fitted on this whole frame. The
+    # benchmark's evaluation rows are EXTERNAL (NYC.gov), so pooled fitting
+    # over its own training set leaks nothing.
+    df = cap_outliers(df)
     work = df[["BOROUGH", "PROPERTYSQFT", "ZIPCODE", "PRICE"]].copy()
     work = work[(work["PRICE"] > 0) & (work["PROPERTYSQFT"] > 0)].dropna()
 
@@ -120,6 +137,24 @@ def train_benchmark_model(cleaned_path: Path = CLEANED_DATASET) -> Pipeline:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipeline, BENCHMARK_MODEL_PATH)
     logger.info("Saved benchmark regressor to %s", BENCHMARK_MODEL_PATH)
+
+    # The committed naive baseline the benchmark score is compared against:
+    # per-borough median log-price from the same training frame, keyed by
+    # the Census borough names the benchmark schema emits.
+    medians = {
+        _CENSUS_BOROUGH[k]: round(float(v), 6)
+        for k, v in y.groupby(x["borough"]).median().items()
+        if k in _CENSUS_BOROUGH
+    }
+    baseline = {
+        "predictor": "per-borough median log1p(PRICE) of the benchmark training frame",
+        "borough_median_log_price": medians,
+        "global_median_log_price": round(float(y.median()), 6),
+    }
+    BENCHMARK_BASELINE_PATH.write_text(
+        json.dumps(baseline, indent=2) + "\n", encoding="utf-8"
+    )
+    logger.info("Saved benchmark baseline to %s", BENCHMARK_BASELINE_PATH)
     return pipeline
 
 

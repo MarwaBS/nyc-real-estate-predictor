@@ -8,28 +8,14 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
 
-from src.config import MODELS_DIR, PRICE_ZONE_LABELS
-from src.models.pipelines import (
-    build_classification_pipeline,
-    build_regression_pipeline,
-)
+from src.models.pipelines import build_regression_pipeline
 
 
 @pytest.fixture
 def mock_models(tmp_path: Path) -> Path:
-    """Create and save minimal mock models for testing prediction.
-
-    The mock label encoder is fitted on the zone STRINGS, so its class
-    order is ALPHABETICAL ('High', 'Low', 'Medium', 'Very High') — exactly
-    like the shipped artefact and deliberately DIFFERENT from the semantic
-    ``PRICE_ZONE_LABELS`` config order. Any decode path that falls back to
-    the config order mislabels 3 of the 4 classes and fails these tests;
-    a mock whose orders coincide would leave the suite structurally blind
-    to that bug (which is how it shipped the first time).
-    """
+    """The one model that ships: a regressor over the shipped feature frame."""
     n = 50
     rng = np.random.RandomState(42)
     features = pd.DataFrame(
@@ -48,22 +34,7 @@ def mock_models(tmp_path: Path) -> Path:
             "SUBLOCALITY": rng.choice(["midtown", "fort greene", "chelsea"], n),
         }
     )
-    le = LabelEncoder()
-    le.fit(PRICE_ZONE_LABELS)  # classes_ sorts alphabetically != config order
-    assert list(le.classes_) != PRICE_ZONE_LABELS
-    joblib.dump(le, tmp_path / "label_encoder.joblib")
-
-    y_cls = rng.randint(0, 4, n)
     y_reg = rng.uniform(11, 15, n)
-
-    clf = build_classification_pipeline(
-        RandomForestClassifier(n_estimators=10, random_state=42)
-    )
-    clf.fit(features, y_cls)
-    joblib.dump(clf, tmp_path / "price_zone_best.joblib")
-    # The training frame doubles as a multi-class prediction batch in the
-    # decode-order regression test below.
-    joblib.dump(features, tmp_path / "train_features.joblib")
 
     reg = build_regression_pipeline(
         RandomForestRegressor(n_estimators=10, random_state=42)
@@ -131,6 +102,46 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     # a scaling bug, not a listing.
     assert 250 < result["predicted_price"] < 45_000_000
     assert result["price_range"]["low"] < result["price_range"]["high"]
+
+
+def test_served_band_reproduces_from_the_rounded_price(
+    _test_row: pd.DataFrame, monkeypatch
+) -> None:
+    """low/high must be the displayed price times the multipliers, not the
+    unrounded prediction.
+
+    The prediction is pinned so the difference crosses a $100 boundary: an
+    unrounded price near $1,000,049 (log1p) rounds to $1,000,000, and at the
+    high multiplier the two bases round to endpoints $100 apart. A test whose
+    price happens not to straddle a boundary passes on the bug — the exact
+    knife-edge this file has been burned by before."""
+    import src.models.predict as pred_mod
+
+    unrounded = 1_000_049.0
+    interval = {
+        "low_multiplier": 0.6108,
+        "high_multiplier": 1.5368,
+        "target_coverage": 0.8,
+    }
+
+    class _Stub:
+        def predict(self, X: pd.DataFrame) -> np.ndarray:
+            return np.full(len(X), np.log1p(unrounded))
+
+    monkeypatch.setattr(pred_mod, "_regressor_cache", _Stub())
+    monkeypatch.setattr(pred_mod, "_price_interval", interval)
+
+    result = pred_mod.predict_price(_test_row)[0]
+    shown = result["predicted_price"]
+    assert shown == 1_000_000  # rounded to $100
+
+    assert result["price_range"]["high"] == round(
+        shown * interval["high_multiplier"], -2
+    )
+    # And this is provably NOT the unrounded band — the defect being pinned.
+    assert result["price_range"]["high"] != round(
+        unrounded * interval["high_multiplier"], -2
+    )
 
 
 def test_predict_returns_one_entry_per_row(

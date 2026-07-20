@@ -43,7 +43,7 @@ project uses SemVer for tagged releases.
 - **Reported metrics (test split):** regression R2 **0.812** (Random Forest),
   zones macro F1 **0.699**. Not comparable to earlier figures — the quartile
   bins changed the classification target and the stratification, so the splits
-  differ. Coverage rose 69% -> 81% by deleting untested code.
+  differ. Coverage rose 69% -> 87.67% (untested code deleted, gates added).
 
 ### Fixed — rate limiting did not apply to rejected API keys
 
@@ -62,7 +62,7 @@ project uses SemVer for tagged releases.
   shipped artefact, was not in `source` at all. Real coverage was **69%**, not
   the advertised 94.7%. The omit list now holds only the network-bound
   benchmark modules, which the External Benchmark workflow exercises end-to-end
-  on live data, and the floor is 65 against a measured 69.
+  on live data, and the floor is 78 against a measured 87.67.
 - **Deleted `src/models/train_classification.py` and `train_regression.py`** —
   152 statements with zero importers repo-wide. Both were omitted from
   coverage, so both were invisible and unexecuted.
@@ -174,11 +174,10 @@ project uses SemVer for tagged releases.
   hurting 8 — noise. Removed rather than moved to val. `src/models/threshold.py`
   is replaced by `src/models/decode.py` (argmax only, one shared decode for
   API + dashboard); `models/optimal_thresholds.joblib` is deleted.
-- **Reported metrics (test split, current artefacts):** classification macro
-  F1 **0.727** (XGBoost; 0.721 on val), regression R² **0.835** (XGBoost;
-  0.826 on val). These are not comparable to any figure published before
-  2026-07-19 — see the data-provenance entry below, which changed the dataset
-  itself.
+- **Reported metrics (test split):** zones macro F1 **0.699**, regression R²
+  **0.812** (Random Forest; 0.784 on val). These are not comparable to any
+  figure published before 2026-07-19 — see the data-provenance entry below,
+  which changed the dataset itself.
 - **`assert_no_leakage` rejects any price-derived name.** It enumerated five
   spellings, so `["BEDS", "PRICE"]` — the raw target — passed the leakage
   guard. It now rejects any feature name containing "price"; no legitimate
@@ -254,8 +253,8 @@ project uses SemVer for tagged releases.
 
 ### Security
 - CORS wildcard in production is now rejected at startup via a Pydantic
-  `model_validator(mode="after")` on the settings, matching ResumeForge's M3
-  pattern. The guard is now covered by `tests/test_settings.py` (prod +
+  `model_validator(mode="after")` on the settings. The guard is covered by
+  `tests/test_settings.py` (prod +
   wildcard/empty/wildcard-in-list refuse startup; prod + explicit origins
   and dev + wildcard start clean).
 - Trivy container scan now runs on every CI build and fails on HIGH/CRITICAL

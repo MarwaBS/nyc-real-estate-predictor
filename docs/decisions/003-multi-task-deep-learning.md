@@ -1,7 +1,7 @@
 # ADR-003: Multi-task deep learning with shared trunk
 
 ## Status
-Accepted
+Reversed (2026-07-19) — see the status update below; the code is deleted.
 
 ## Context
 Most tabular ML projects use only tree-based models. For a senior portfolio, demonstrating DL competence on tabular data is a differentiator.

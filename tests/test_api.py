@@ -251,6 +251,44 @@ def test_predict_rejects_invalid_zipcode() -> None:
     assert response.status_code == 422
 
 
+def test_predict_rejects_out_of_range_beds() -> None:
+    """The le=20 bound must hold — an unbounded count feeds the model a value
+    far outside anything it trained on."""
+    response = client.post(
+        "/predict",
+        json={
+            "beds": 21,  # over the bound
+            "bath": 2.0,
+            "propertysqft": 1200.0,
+            "borough": "manhattan",
+            "type": "condo",
+            "zipcode": "10022",
+            "latitude": 40.758,
+            "longitude": -73.985,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_predict_rejects_an_unknown_borough() -> None:
+    """The contract is the five boroughs. An unknown one would one-hot encode
+    to all zeros and still return a confident price."""
+    response = client.post(
+        "/predict",
+        json={
+            "beds": 2,
+            "bath": 2.0,
+            "propertysqft": 1200.0,
+            "borough": "chicago",
+            "type": "condo",
+            "zipcode": "10022",
+            "latitude": 40.758,
+            "longitude": -73.985,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_predict_rejects_negative_sqft() -> None:
     response = client.post(
         "/predict",

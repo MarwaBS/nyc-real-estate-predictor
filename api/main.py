@@ -46,12 +46,8 @@ app.add_middleware(
     allow_headers=["*", "X-API-Key"],
 )
 
-# Rate limiting — slowapi is a hard dependency, and the limit is actually
-# WIRED to the prediction route below (a Limiter with no decorated routes
-# enforces nothing). The limit comes from settings (PREDICT_RATE_LIMIT env), not a
-# hardcoded literal — previously `settings.predict_rate_limit` was dead config while
-# this constant silently overrode it. /health stays unlimited: k8s/uptime probes
-# must never be throttled into flapping.
+# Rate limit from settings (PREDICT_RATE_LIMIT env), wired to /predict below.
+# /health stays unlimited so uptime probes are never throttled into flapping.
 PREDICT_RATE_LIMIT = _settings.predict_rate_limit
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -166,14 +162,9 @@ def predict(
     number would misdescribe every deployment that overrides the default.
     The ``request`` parameter is required by slowapi's decorator contract.
 
-    The API key is checked HERE rather than through ``dependencies=[...]`` on
-    the route. FastAPI resolves route dependencies before calling the endpoint,
-    and the limiter decorates the endpoint -- so a rejected key returned 403
-    without ever reaching the counter. Measured: 15 wrong-key requests produced
-    15x 403 and zero 429, leaving key brute-force unbounded while SECURITY.md
-    scoped DoS out *because* this endpoint is rate-limited. Checking inside the
-    handler puts the limiter first, so bad keys are counted like any other
-    request.
+    The API key is checked HERE, not via ``dependencies=[...]``: FastAPI
+    resolves route dependencies before the limiter that decorates the endpoint,
+    which would leave rejected keys uncounted and key brute-force unbounded.
     """
     _verify_api_key(x_api_key)
     try:
@@ -190,6 +181,9 @@ def predict(
 
         log_price = float(_get_regressor().predict(features)[0])
         price = math.expm1(log_price)
+        # Band from the rounded figure, so low/high reproduce from the
+        # predicted_price shown beside them (see predict_price).
+        rounded = round(price, -2)
 
         # The zone is the price, bucketed -- one model, and the same decode
         # training scored its macro-F1 through, so the published number
@@ -197,10 +191,10 @@ def predict(
         return PredictionResponse(
             zone=ZonePrediction(price_zone=zone_for_price(price)),
             price=PricePrediction(
-                predicted_price=round(price, -2),
+                predicted_price=rounded,
                 # Same calibrated interval the predict module and dashboard
                 # serve — one implementation, so the three cannot disagree.
-                price_range=price_range(price),
+                price_range=price_range(rounded),
             ),
         )
 
@@ -211,12 +205,9 @@ def predict(
         ) from exc
     except Exception:
         # Do NOT leak the exception message — it can disclose internal paths,
-        # model-file names, or SQL fragments. logger.exception below records
-        # the full trace server-side (there is no request-id pipeline in
-        # this service — an earlier revision of this comment claimed one),
-        # and the client gets a generic message. `from None` suppresses the
-        # "During handling of the above exception" chain for clean
-        # serialization (the original is captured by logger.exception).
+        # model-file names, or SQL fragments. logger.exception records the full
+        # trace server-side; the client gets a generic message. `from None`
+        # suppresses the exception chain for clean serialization.
         logger.exception("Prediction failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -229,19 +220,12 @@ def health(response: Response) -> HealthResponse:
     """Health check — reports serving-stack availability. Not auth-gated.
 
     A failed probe returns **503**, not 200 with a false flag in the body.
-    Every consumer of this endpoint checks the HTTP status and none reads the
-    body: the Dockerfile HEALTHCHECK (``curl -fsS``), docker-compose's
-    ``service_healthy`` gate for the dashboard, the HF Space start script, and
-    the CI smoke test, which pipes the body to /dev/null. While this returned
-    a hardcoded "ok", a container with zero models loaded passed all four.
-
-    The price interval is probed alongside the model, not treated as optional:
-    ``get_price_interval`` raises rather than guessing a band, so a deployment
-    missing ``price_interval.json`` would otherwise answer 200 with
-    ``models_loaded: true`` while every /predict returned 500.
-
-    There is no label-encoder probe any more -- the classifier it decoded for
-    is gone, and the zone now comes from bucketing the predicted price.
+    The status code must track whether the service can actually predict:
+    every consumer (Dockerfile HEALTHCHECK, docker-compose, the Space start
+    script, CI smoke test) checks the status and none reads the body. The
+    price interval is probed alongside the model because a deployment missing
+    ``price_interval.json`` would otherwise report healthy while every
+    /predict returned 500.
     """
     models_loaded = False
     try:

@@ -9,7 +9,9 @@ seed, split sizes) so the README quotes a file, not a memory.
 
 from __future__ import annotations
 
+import bisect
 import datetime as _dt
+import hashlib
 import json
 import logging
 import math
@@ -37,28 +39,26 @@ from src.config import (
     MODELS_DIR,
     NUMERIC_FEATURES,
     ONEHOT_FEATURES,
-    PRICE_ZONE_BINS,
     PRICE_ZONE_LABELS,
     RANDOM_SEED,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
     VAL_SIZE,
 )
-from src.data.cleaner import clean_pipeline
+from src.data.cleaner import apply_cap, clean_pipeline, fit_cap_bounds
 from src.data.features import (
     add_numeric_features,
     add_target_variables,
-    cap_categorical_cardinality,
+    apply_top_categories,
+    fit_top_categories,
 )
 from src.data.loader import load_raw
-from src.models.decode import zone_for_price
 from src.models.evaluate import (
     evaluate_classifier,
     evaluate_fairness_by_group,
     evaluate_regressor,
 )
 from src.models.pipelines import (
-    build_classification_pipeline,
     build_regression_pipeline,
 )
 from src.utils.geo import add_distance_features
@@ -74,16 +74,13 @@ REFERENCE_POINTS = {
 }
 
 
-def prepare_data() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
-    """Load, clean, and feature-engineer the full dataset."""
-    logger.info("Step 1: loading raw data and cleaning it")
+def prepare_data() -> pd.DataFrame:
+    """Load and clean the raw snapshot; write the cleaned (uncapped) CSV.
 
-    # Train from the RAW snapshot through the cleaning pipeline, rather than
-    # reading a pre-cleaned CSV. The cleaned file previously had no producer
-    # anywhere in the repo: it was a committed artefact whose contents no code
-    # could regenerate (it held a 2,147,483,647 sentinel PRICE that this
-    # pipeline's IQR cap makes impossible), so `python run_training.py` did not
-    # reproduce the shipped models. Cleaning here makes the artefact derived.
+    Everything cross-row — cap bounds, zone cut-points, category vocabulary —
+    is fitted later, on the train split only, inside :func:`run_protocol`.
+    """
+    logger.info("Step 1: loading raw data and cleaning it")
     df = clean_pipeline(load_raw())
 
     # Written for the benchmark trainer and the EDA notebook, which both read
@@ -91,37 +88,181 @@ def prepare_data() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     CLEANED_DATASET.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(CLEANED_DATASET, index=False)
     logger.info("Wrote cleaned dataset to %s", CLEANED_DATASET)
+    return df
 
-    logger.info("Step 2: feature engineering")
 
-    # Numeric features
+def _borough_median_baseline(
+    train_frame: pd.DataFrame,
+    test_frame: pd.DataFrame,
+    zone_bins: list[float],
+) -> dict[str, Any]:
+    """The naive predictor every headline number must beat: each borough's
+    median train price, bucketed through the same zone decode."""
+    medians = train_frame.groupby("BOROUGH")["LOG_PRICE"].median()
+    fallback = float(train_frame["LOG_PRICE"].median())
+    pred_log = (
+        test_frame["BOROUGH"].map(medians).fillna(fallback).to_numpy(dtype=float)
+    )
+    reg = evaluate_regressor(
+        test_frame["LOG_PRICE"].to_numpy(dtype=float), pred_log, log_target=True
+    )
+    zone_pred = pd.cut(
+        np.expm1(pred_log),
+        bins=zone_bins,
+        labels=PRICE_ZONE_LABELS,
+        include_lowest=True,
+    ).astype(str)
+    zones = evaluate_classifier(
+        test_frame["PRICE_ZONE"].astype(str).to_numpy(), np.asarray(zone_pred)
+    )
+    return {
+        "predictor": "per-borough median train price",
+        "test_r2": round(float(reg["r2"]), 4),
+        "test_zones_macro_f1": round(float(zones["macro_f1"]), 4),
+    }
+
+
+def build_splits(df_clean: pd.DataFrame, seed: int) -> dict[str, Any]:
+    """Deterministic data preparation for one seed, train-split-fitted.
+
+    Split FIRST, then fit every cross-row statistic (cap bounds, zone
+    cut-points, category vocabulary) on the train rows only and apply it
+    everywhere. The split stratifies on pooled price quartiles purely as a
+    balancing key — the served zone labels come from train-derived cut-points.
+    """
+    df = df_clean.reset_index(drop=True)
+
+    strat_key = pd.qcut(df["PRICE"], 4, labels=False, duplicates="drop")
+    idx_trainval, idx_test = train_test_split(
+        df.index.to_numpy(),
+        test_size=TEST_SIZE,
+        random_state=seed,
+        stratify=strat_key,
+    )
+    idx_train, idx_val = train_test_split(
+        idx_trainval,
+        test_size=VAL_SIZE,
+        random_state=seed,
+        stratify=strat_key[idx_trainval],
+    )
+
+    bounds = fit_cap_bounds(df.loc[idx_train])
+    df = apply_cap(df, bounds)
+
     df = add_numeric_features(df)
-
-    # Geospatial features
     df = add_distance_features(df, REFERENCE_POINTS)
 
-    # Target variables
-    df = add_target_variables(df)
+    # Zone cut-points: quartiles of the TRAIN prices (post-cap), so labels for
+    # every split derive from a statistic the held-out rows never touched.
+    train_prices = df.loc[idx_train, "PRICE"]
+    zone_bins = [
+        0.0,
+        float(train_prices.quantile(0.25)),
+        float(train_prices.quantile(0.50)),
+        float(train_prices.quantile(0.75)),
+        float("inf"),
+    ]
+    df = add_target_variables(df, bins=zone_bins)
 
-    # Cap high-cardinality categoricals
-    df = cap_categorical_cardinality(df, columns=["SUBLOCALITY", "TYPE", "ZIPCODE"])
+    top = fit_top_categories(
+        df.loc[idx_train], columns=["SUBLOCALITY", "TYPE", "ZIPCODE"]
+    )
+    df = apply_top_categories(df, top)
 
-    # Ensure all needed columns are lowercase string for categoricals
     for col in ONEHOT_FEATURES + TARGET_ENCODED_FEATURES:
         if col in df.columns:
             df[col] = df[col].astype(str).str.lower().str.strip()
 
-    # Drop rows with NaN in target
-    df = df.dropna(subset=["PRICE_ZONE", "LOG_PRICE"])
+    X = get_feature_df(df)
+    y_zone = df["PRICE_ZONE"].astype(str).to_numpy()
+    y_log = df["LOG_PRICE"]
 
-    logger.info("Engineered dataset: %d rows x %d cols", *df.shape)
+    return {
+        "df": df,
+        "idx": {"train": idx_train, "val": idx_val, "test": idx_test},
+        "splits": {
+            "train": (X.loc[idx_train], y_log.loc[idx_train]),
+            "val": (X.loc[idx_val], y_log.loc[idx_val]),
+            "test": (X.loc[idx_test], y_log.loc[idx_test]),
+        },
+        "y_zone": y_zone,
+        "zone_bins": zone_bins,
+        "cap_bounds": {k: list(v) for k, v in bounds.items()},
+        "category_vocabulary": {k: sorted(v) for k, v in top.items()},
+        "features": list(X.columns),
+    }
 
-    # Extract targets
-    y_zone = df["PRICE_ZONE"]
-    y_log_price = df["LOG_PRICE"]
-    borough_col = df["BOROUGH"].copy()
 
-    return df, y_zone, y_log_price, borough_col
+def run_protocol(
+    df_clean: pd.DataFrame,
+    seed: int,
+    save_path: Path | None = None,
+) -> dict[str, Any]:
+    """The full training protocol for one seed: build_splits, then candidate
+    selection on val and a single test read."""
+    prep = build_splits(df_clean, seed)
+    df = prep["df"]
+    idx_train = prep["idx"]["train"]
+    idx_val = prep["idx"]["val"]
+    idx_test = prep["idx"]["test"]
+    splits = prep["splits"]
+    y_zone = prep["y_zone"]
+    zone_bins = prep["zone_bins"]
+    logger.info(
+        "Train: %d, Val: %d, Test: %d", len(idx_train), len(idx_val), len(idx_test)
+    )
+
+    reg_record, best_pipeline = train_regression(
+        splits["train"][0],
+        splits["train"][1].to_numpy(),
+        splits["val"][0],
+        splits["val"][1].to_numpy(),
+        splits["test"][0],
+        splits["test"][1].to_numpy(),
+        seed=seed,
+        save_path=save_path,
+    )
+
+    # Zones the service will return: the regressor's test predictions bucketed
+    # through the same cut-points that labelled the training data.
+    predicted_prices = np.expm1(
+        np.asarray(best_pipeline.predict(splits["test"][0]), dtype=float)
+    )
+    interior = zone_bins[1:-1]
+    zone_pred = np.array(
+        [PRICE_ZONE_LABELS[bisect.bisect_left(interior, p)] for p in predicted_prices]
+    )
+    y_zone_test = y_zone[idx_test]
+    borough_test = df.loc[idx_test, "BOROUGH"]
+
+    clf_record: dict[str, Any] = {
+        "derived_from": "regressor predictions bucketed by PRICE_ZONE_BINS",
+        "metrics": evaluate_classifier(y_zone_test, zone_pred, PRICE_ZONE_LABELS),
+        "fairness_by_borough": evaluate_fairness_by_group(
+            y_zone_test, zone_pred, borough_test
+        ),
+        "borough_floor": check_borough_floor(y_zone_test, zone_pred, borough_test),
+    }
+
+    baseline = _borough_median_baseline(
+        df.loc[idx_train, ["BOROUGH", "LOG_PRICE"]],
+        df.loc[idx_test, ["BOROUGH", "LOG_PRICE", "PRICE_ZONE"]],
+        zone_bins,
+    )
+
+    return {
+        "reg_record": reg_record,
+        "clf_record": clf_record,
+        "baseline": baseline,
+        "zone_bins": zone_bins,
+        "cap_bounds": prep["cap_bounds"],
+        "splits": splits,
+        "best_pipeline": best_pipeline,
+        "n_train": len(idx_train),
+        "n_val": len(idx_val),
+        "n_test": len(idx_test),
+        "features": prep["features"],
+    }
 
 
 def get_feature_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -137,139 +278,6 @@ def get_feature_df(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
-def train_classification(
-    X_train: pd.DataFrame,
-    y_train: np.ndarray,
-    X_val: pd.DataFrame,
-    y_val: np.ndarray,
-    X_test: pd.DataFrame,
-    y_test: np.ndarray,
-    borough_test: pd.Series,
-    class_labels: list[str],
-) -> dict[str, Any]:
-    """Train candidates, pick the winner on VAL, score it once on TEST.
-
-    The val/test separation is the point of this function's shape: candidate
-    macro-F1 is compared on ``X_val`` only, and ``X_test`` is touched exactly
-    once, after ``best_pipeline`` is already fixed. Comparing candidates on
-    test makes the winner's test score optimistic by construction — it is the
-    max of several draws on the same sample.
-
-    ``class_labels`` MUST be the label encoder's ``classes_`` (the names in
-    encoded-index order), not the semantic config order — the two disagree,
-    and naming report rows with the config order misattributes 3 of the 4
-    per-class rows.
-
-    Returns the selected model's record (name, metrics, fairness) for the
-    committed training-metrics artefact.
-    """
-    logger.info("STEP 3: Training classification models")
-
-    from lightgbm import LGBMClassifier
-    from xgboost import XGBClassifier
-
-    models = {
-        "xgboost": XGBClassifier(
-            max_depth=6,
-            n_estimators=500,
-            learning_rate=0.1,
-            eval_metric="mlogloss",
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-        ),
-        "lightgbm": LGBMClassifier(
-            num_leaves=63,
-            n_estimators=500,
-            learning_rate=0.1,
-            class_weight="balanced",
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            verbose=-1,
-        ),
-    }
-
-    best_f1 = -1.0
-    best_name = ""
-    best_pipeline = None
-    best_val_metrics: dict[str, Any] = {}
-    candidates: dict[str, Any] = {}
-
-    for name, model in models.items():
-        logger.info("--- Training %s ---", name)
-        pipeline = build_classification_pipeline(model)
-        pipeline.fit(X_train, y_train)
-        y_pred = pipeline.predict(X_val)
-        metrics = evaluate_classifier(y_val, y_pred, class_labels)
-        candidates[name] = {
-            "accuracy": metrics["accuracy"],
-            "macro_f1": metrics["macro_f1"],
-            "cohen_kappa": metrics["cohen_kappa"],
-        }
-
-        logger.info(
-            "%s (val): accuracy=%.4f, macro_f1=%.4f, kappa=%.4f",
-            name,
-            metrics["accuracy"],
-            metrics["macro_f1"],
-            metrics["cohen_kappa"],
-        )
-
-        # MLflow experiment tracking
-        if _HAS_MLFLOW:
-            mlflow.set_experiment("price_zone_classification")
-            with mlflow.start_run(run_name=f"clf_{name}"):
-                mlflow.log_params(
-                    {
-                        "model": name,
-                        "n_features": len(X_train.columns),
-                        "train_size": len(X_train),
-                        "val_size": len(X_val),
-                    }
-                )
-                mlflow.log_metrics(
-                    {
-                        "accuracy": metrics["accuracy"],
-                        "macro_f1": metrics["macro_f1"],
-                        "cohen_kappa": metrics["cohen_kappa"],
-                    }
-                )
-                mlflow.sklearn.log_model(pipeline, f"model_{name}")
-
-        if metrics["macro_f1"] > best_f1:
-            best_f1 = metrics["macro_f1"]
-            best_name = name
-            best_pipeline = pipeline
-            best_val_metrics = metrics
-
-    # The single test-set read. `best_pipeline` is already decided above, so
-    # this number is a genuine hold-out estimate rather than a selected max.
-    fairness: dict[str, Any] = {}
-    best_metrics: dict[str, Any] = {}
-    if best_pipeline is not None:
-        y_best_pred = best_pipeline.predict(X_test)
-        best_metrics = evaluate_classifier(y_test, y_best_pred, class_labels)
-        logger.info(
-            "SELECTED %s — val macro_f1=%.4f, test macro_f1=%.4f",
-            best_name,
-            best_f1,
-            best_metrics["macro_f1"],
-        )
-        fairness = evaluate_fairness_by_group(y_test, y_best_pred, borough_test)
-        logger.info("Fairness by borough: %s", fairness)
-
-        path = MODELS_DIR / "price_zone_best.joblib"
-        joblib.dump(best_pipeline, path)
-        logger.info("Saved best classifier (%s) to %s", best_name, path)
-
-    return {
-        "selected_model": best_name,
-        "metrics": best_metrics,
-        "selection_metrics_val": best_val_metrics,
-        "candidates_val": candidates,
-        "fairness_by_borough": fairness,
-    }
-
-
 def train_regression(
     X_train: pd.DataFrame,
     y_train: np.ndarray,
@@ -277,12 +285,13 @@ def train_regression(
     y_val: np.ndarray,
     X_test: pd.DataFrame,
     y_test: np.ndarray,
-) -> dict[str, Any]:
+    seed: int = RANDOM_SEED,
+    save_path: Path | None = None,
+) -> tuple[dict[str, Any], Any]:
     """Train candidates, pick the winner on VAL, score it once on TEST.
 
-    Same discipline as ``train_classification``: three candidates compared on
-    R2 is three draws, and picking the max of those on test would report the
-    luckiest draw as if it were a hold-out estimate.
+    Three candidates compared on R2 is three draws; picking the max of those
+    on test would report the luckiest draw as a hold-out estimate.
 
     Returns the selected model's record (name, metrics) for the committed
     training-metrics artefact.
@@ -294,33 +303,27 @@ def train_regression(
     from xgboost import XGBRegressor
 
     models = {
-        # min_samples_leaf bounds a forest that was previously unbounded:
-        # 500 fully-grown trees on 2,882 rows averaged 3,583 nodes each —
-        # about one leaf per training sample — for a 129 MB artifact that
-        # exceeds GitHub's 100 MB file limit and so could not be committed to
-        # the model registry at all. Ten is a floor with a meaning: a leaf's
-        # prediction is the mean log-price of the sales in it, and a mean over
-        # fewer than ten comparable sales is not an estimate worth serving.
-        # This went unnoticed while candidate selection read the test split,
-        # where XGBoost won and the forest was never saved.
+        # min_samples_leaf=10 both bounds the artifact under GitHub's 100 MB
+        # limit and gives each leaf a mean over >=10 comparable sales; unbounded,
+        # the 500 trees average one leaf per sample and produce a 129 MB file.
         "random_forest": RandomForestRegressor(
             n_estimators=500,
             min_samples_leaf=10,
-            random_state=RANDOM_SEED,
+            random_state=seed,
             n_jobs=-1,
         ),
         "xgboost": XGBRegressor(
             max_depth=6,
             n_estimators=500,
             learning_rate=0.1,
-            random_state=RANDOM_SEED,
+            random_state=seed,
             n_jobs=-1,
         ),
         "lightgbm": LGBMRegressor(
             num_leaves=63,
             n_estimators=500,
             learning_rate=0.1,
-            random_state=RANDOM_SEED,
+            random_state=seed,
             n_jobs=-1,
             verbose=-1,
         ),
@@ -392,16 +395,16 @@ def train_regression(
             best_r2,
             best_metrics["r2"],
         )
-        path = MODELS_DIR / "price_regressor_best.joblib"
-        joblib.dump(best_pipeline, path)
-        logger.info("Saved best regressor (%s) to %s", best_name, path)
+        if save_path is not None:
+            joblib.dump(best_pipeline, save_path)
+            logger.info("Saved best regressor (%s) to %s", best_name, save_path)
 
     return {
         "selected_model": best_name,
         "metrics": best_metrics,
         "selection_metrics_val": best_val_metrics,
         "candidates_val": candidates,
-    }
+    }, best_pipeline
 
 
 # Fraction of listings the served price interval is calibrated to contain.
@@ -483,41 +486,16 @@ def calibrate_price_interval(
 ) -> dict[str, Any]:
     """Derive the served price interval from measured residuals.
 
-    The multipliers are the empirical quantiles of ``actual / predicted`` on
-    VAL — the split that exists for choosing serving-time quantities — and the
-    coverage they achieve is then reported once on TEST. Choosing them on test
-    would make the reported coverage the same in-sample number the old
-    threshold tuning produced.
-
-    This replaces a hardcoded +/-15%, which was not derived from anything and
-    contained the true price 32% of the time while being presented to users as
-    a price range.
-
-    ``calibrate_on`` names a key of ``splits`` and both selects the data and
-    labels the artefact, so the recorded label always names the key that was
-    quantiled. The label used to be the string literal "val" written next to a
-    separate hardcoded ``X_val`` argument: calibrating on test while still
-    recording "val" was a one-word edit away, and the test guarding it asserted
-    the literal against itself.
-
-    What this does NOT do is make a mislabel impossible. The guard below is
-    name-based: passing the test frame in under the key "val" is accepted and
-    records ``calibrated_on: "val"``, and so is naming the reporting split
-    anything other than "test". Nothing here inspects the data to tell the
-    splits apart. It closes the specific one-word edit at the call site, which
-    is the mistake that actually happened; a caller who reorganises the splits
-    dict can still produce an in-sample coverage number.
+    The multipliers are the empirical quantiles of ``actual / predicted`` on the
+    ``calibrate_on`` split; coverage is reported once on every split. That key
+    both selects the data and labels the artefact, so the label cannot disagree
+    with the data quantiled. The guard is name-based — it does not inspect the
+    data to tell splits apart.
     """
     if calibrate_on not in splits:
         raise KeyError(f"calibrate_on={calibrate_on!r} is not one of {sorted(splits)}")
 
-    # Refuse to fit the served interval on the split its coverage is reported
-    # against. Labelling is now honest either way, but honesty about a leak is
-    # not a substitute for not shipping one: `coverage_test` is advertised as
-    # an out-of-sample number, and calibrating here would make it in-sample by
-    # construction. The call site was one word away from that, and no test
-    # could catch it -- CI never retrains, so the artefact-reading gate only
-    # notices after someone regenerates the file and commits it.
+    # coverage_test is reported as out-of-sample, so refuse to calibrate on it.
     if calibrate_on == "test":
         raise ValueError(
             "refusing to calibrate the served interval on the test split: "
@@ -532,13 +510,9 @@ def calibrate_price_interval(
         return actual / predicted
 
     ratios = {name: ratio(X, y) for name, (X, y) in splits.items()}
-    # Split-conformal quantiles with the finite-sample correction: the
-    # ceil((n+1)(1-alpha))-th order statistic, not the plain empirical quantile.
-    # np.quantile(r, 0.9) targets the 90th percentile OF THE CALIBRATION SAMPLE,
-    # which under-covers a fresh draw by construction -- with n=724 and
-    # alpha=0.2 the correct level is ceil(725*0.9)/724 = 90.19%. Uncorrected,
-    # the shipped interval measured 76.3% against an 80% target and the gap was
-    # then blamed entirely on generalisation.
+    # Split-conformal finite-sample correction: the ceil((n+1)(1-alpha))-th
+    # order statistic, which covers a fresh draw where the plain empirical
+    # quantile under-covers by construction.
     n_cal = len(ratios[calibrate_on])
     corrected_hi = min(math.ceil((n_cal + 1) * hi_q) / n_cal, 1.0)
     corrected_lo = max(1.0 - corrected_hi, 0.0)
@@ -608,6 +582,8 @@ def _write_training_metrics(
     n_val: int,
     n_test: int,
     features: list[str],
+    zone_bins: list[float],
+    baseline: dict[str, Any],
 ) -> None:
     """Write ``reports/training_metrics.json`` — the committed artefact the
     README's headline numbers must quote.
@@ -635,14 +611,12 @@ def _write_training_metrics(
             "selection_split": "val",
             "reported_split": "test",
             "features": features,
-            # The cut-points the zone labels were built from. Recorded because
-            # changing them in config silently invalidates every zone number in
-            # this file: the model was fitted against labels cut one way while
-            # serving buckets the other, and the published macro-F1 then
-            # describes an answer the service no longer gives. Measured: with
-            # the bins shifted and nothing retrained, all 153 tests passed.
-            "price_zone_bins": [b for b in PRICE_ZONE_BINS if b != float("inf")],
+            # The cut-points the zone labels were built from — derived from
+            # the TRAIN prices of this run. test_config_artefact_agreement
+            # fails the build if config drifts from these.
+            "price_zone_bins": [b for b in zone_bins if b != float("inf")],
         },
+        "baseline": baseline,
         "classification": clf_record,
         "regression": reg_record,
         "note": (
@@ -669,81 +643,28 @@ def main() -> None:
     # after this point sees a tree this script dirtied.
     tree_clean_at_start = _git_working_tree_clean()
 
-    # 1. Prepare data
-    df, y_zone, y_log_price, borough = prepare_data()
-    X = get_feature_df(df)
-
-    # 2. Zones stay plain strings. There is no LabelEncoder because there is no
-    # classifier to encode targets for: the zone is derived from the predicted
-    # price (src/models/decode.py), so nothing needs class indices -- and the
-    # class-index-vs-config-order mislabelling hazard that encoder created goes
-    # with it.
-    y_zone_encoded = y_zone.astype(str).to_numpy()
-
-    # 3. Train/val/test split (stratified for classification).
-    #
-    # Two splits, not one. TEST is cut first and then not read again until the
-    # final scoring call; VAL is cut from what remains and absorbs every
-    # decision the pipeline makes (which candidate wins, when DL stops). A
-    # single train/test split forced selection to read the test labels, which
-    # is what made the previously published 0.724 an in-sample figure.
-    (
-        X_trainval,
-        X_test,
-        y_zone_trainval,
-        y_zone_test,
-        y_price_trainval,
-        y_price_test,
-        borough_trainval,
-        borough_test,
-    ) = train_test_split(
-        X,
-        y_zone_encoded,
-        y_log_price,
-        borough,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_SEED,
-        stratify=y_zone_encoded,
+    # 1-4. Clean, then run the train-split-fitted protocol once with the
+    # shipped seed. A dedicated classifier was measured ~1.3 SE above the
+    # bucketed zones and is not shipped: two models can disagree on one
+    # response with nothing to catch it.
+    df_clean = prepare_data()
+    result = run_protocol(
+        df_clean,
+        seed=RANDOM_SEED,
+        save_path=MODELS_DIR / "price_regressor_best.joblib",
     )
-    (
-        X_train,
-        X_val,
-        y_zone_train,
-        y_zone_val,
-        y_price_train,
-        y_price_val,
-        borough_train,
-        borough_val,
-    ) = train_test_split(
-        X_trainval,
-        y_zone_trainval,
-        y_price_trainval,
-        borough_trainval,
-        test_size=VAL_SIZE,
-        random_state=RANDOM_SEED,
-        stratify=y_zone_trainval,
-    )
-
-    logger.info(
-        "Train: %d samples, Val: %d samples, Test: %d samples",
-        len(X_train),
-        len(X_val),
-        len(X_test),
-    )
-    logger.info("Features: %s", list(X_train.columns))
-
-    # 4. Train the single model
-    reg_record = train_regression(
-        X_train, y_price_train, X_val, y_price_val, X_test, y_price_test
-    )
+    reg_record = result["reg_record"]
+    clf_record = result["clf_record"]
+    best_reg = result["best_pipeline"]
+    X_val, y_price_val = result["splits"]["val"]
+    X_test, y_price_test = result["splits"]["test"]
+    X_train = result["splits"]["train"][0]
 
     # 5b. Calibrate the served price interval on val, report coverage on test.
-    # Committed as a serving artefact rather than hardcoded so it cannot rot
-    # away from the model it describes: a retrain that shifts the residuals
-    # rewrites this file, and tests/test_price_interval.py reads the recorded
-    # coverage. Constants in source would have to be updated by hand.
+    # Committed as an artefact rather than hardcoded so a retrain that shifts
+    # the residuals rewrites it in step with the model.
     interval = calibrate_price_interval(
-        joblib.load(MODELS_DIR / "price_regressor_best.joblib"),
+        best_reg,
         splits={"val": (X_val, y_price_val), "test": (X_test, y_price_test)},
         calibrate_on="val",
     )
@@ -752,33 +673,11 @@ def main() -> None:
     )
     reg_record["price_interval"] = interval
 
-    # 5c. Score the zones the service will actually return.
-    # Bucketing the regressor's own test predictions through the same decode
-    # serving uses, so this macro-F1 describes exactly what a caller receives.
-    # A dedicated classifier scores 0.7181 against this 0.6987 -- measured, and
-    # about 1.3 SE on a 906-row split, so not an established difference. It is
-    # not shipped because two models can disagree on one response: a "High"
-    # zone beside a price that buckets to "Medium", with nothing to catch it.
-    best_reg = joblib.load(MODELS_DIR / "price_regressor_best.joblib")
-    predicted_prices = np.expm1(np.asarray(best_reg.predict(X_test), dtype=float))
-    zone_pred = np.array([zone_for_price(p) for p in predicted_prices])
-    clf_record: dict[str, Any] = {
-        "derived_from": "regressor predictions bucketed by PRICE_ZONE_BINS",
-        "metrics": evaluate_classifier(y_zone_test, zone_pred, PRICE_ZONE_LABELS),
-        "fairness_by_borough": evaluate_fairness_by_group(
-            y_zone_test, zone_pred, borough_test
-        ),
-    }
     logger.info(
-        "Zones (test, bucketed): accuracy=%.4f macro_f1=%.4f",
+        "Zones (test, bucketed): accuracy=%.4f macro_f1=%.4f | baseline: %s",
         clf_record["metrics"]["accuracy"],
         clf_record["metrics"]["macro_f1"],
-    )
-
-    # 5d. The borough floor -- raises and fails the build if any borough is at
-    # or below its own majority-class baseline.
-    clf_record["borough_floor"] = check_borough_floor(
-        y_zone_test, zone_pred, borough_test
+        result["baseline"],
     )
 
     # 6. SHAP over the single model.
@@ -802,22 +701,16 @@ def main() -> None:
         logger.warning("SHAP analysis failed (non-critical): %s", exc)
 
     # 7. Persist the committed evidence artefact behind the README numbers.
-    #
-    # There is no threshold-tuning step here any more. It used to fit
-    # per-class thresholds against the TEST labels and publish the resulting
-    # macro-F1 as a hold-out result — the +0.014 "gain" was the tuner reading
-    # its own answer sheet. Measured honestly (thresholds fitted on one half
-    # of the test set, scored on the other, 20 stratified splits) the effect
-    # is +0.0006 mean with std 0.0106, helping 12 splits and hurting 8: noise.
-    # Serving decodes with argmax.
     _write_training_metrics(
         tree_clean_at_start,
         clf_record,
         reg_record,
-        n_train=len(X_train),
-        n_val=len(X_val),
-        n_test=len(X_test),
-        features=list(X_train.columns),
+        n_train=result["n_train"],
+        n_val=result["n_val"],
+        n_test=result["n_test"],
+        features=result["features"],
+        zone_bins=result["zone_bins"],
+        baseline=result["baseline"],
     )
 
     # 9. Save drift baseline
@@ -829,6 +722,28 @@ def main() -> None:
         logger.info("Drift baseline saved")
     except Exception as exc:
         logger.warning("Drift baseline failed (non-critical): %s", exc)
+
+    # 10. Regenerate the artefact manifest LAST, over the files this run just
+    # wrote, so the committed hashes always have a producer. JSON is hashed
+    # LF-normalised, matching tests/test_artifact_manifest.py.
+    logger.info("STEP 9: Artefact manifest")
+    manifest_lines = []
+    for name in sorted(
+        (
+            "benchmark_regressor.joblib",
+            "price_regressor_best.joblib",
+            "drift_baseline.json",
+            "price_interval.json",
+        )
+    ):
+        data = (MODELS_DIR / name).read_bytes()
+        if name.endswith(".json"):
+            data = data.replace(b"\r\n", b"\n")
+        manifest_lines.append(f"{hashlib.sha256(data).hexdigest()}  {name}")
+    (MODELS_DIR / "MANIFEST.sha256").write_bytes(
+        ("\n".join(manifest_lines) + "\n").encode("ascii")
+    )
+    logger.info("Manifest written for %d artefacts", len(manifest_lines))
 
     logger.info("TRAINING COMPLETE")
     logger.info("Models saved to: %s", MODELS_DIR)

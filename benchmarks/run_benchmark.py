@@ -166,9 +166,7 @@ def _run_inference(X: pd.DataFrame) -> tuple[np.ndarray, dict[str, Any]]:
     Inference is load-bearing (the artefact ships with the repo), so every
     failure mode raises :class:`InferenceError` and fails the run — a
     missing or unpicklable model behind a green CI badge is exactly the
-    silent-failure class this pipeline exists to prevent. (v1's honest
-    "inference failed, recorded as data" behaviour predated the committed
-    model; it is no longer a valid outcome.)
+    silent-failure class this pipeline exists to prevent.
     """
     if not MODEL_PATH.exists():
         raise InferenceError(
@@ -255,9 +253,29 @@ def run_benchmark() -> dict[str, Any]:
     if r2 is not None and not np.isfinite(r2):
         # A NaN/inf R² is a pipeline defect, never a finding.
         raise DropLogError(f"non-finite R² computed: {r2!r}")
+    # The committed naive baseline, scored on the SAME rows: per-borough
+    # median log-price of the benchmark training frame. Load-bearing — a
+    # missing baseline artefact fails the run rather than skipping the
+    # comparison the README advertises.
+    baseline_spec = json.loads(
+        (REPO_ROOT / "models" / "benchmark_baseline.json").read_text("utf-8")
+    )
+    medians = baseline_spec["borough_median_log_price"]
+    fallback = float(baseline_spec["global_median_log_price"])
+    baseline_pred = (
+        X["borough"].map(medians).fillna(fallback).to_numpy(dtype=float)
+    )
+    b_res = target_arr - baseline_pred
+    baseline_r2 = (
+        None if ss_tot == 0 else 1.0 - float(np.sum(b_res**2)) / ss_tot
+    )
     performance: dict[str, Any] = {
         "status": "computed",
         "r2_log_space": r2,
+        "baseline_r2_log_space": (
+            None if baseline_r2 is None else round(baseline_r2, 4)
+        ),
+        "baseline_predictor": baseline_spec["predictor"],
         "n_scored": int(len(predictions)),
     }
 
@@ -288,11 +306,7 @@ def run_benchmark() -> dict[str, Any]:
             "triggered": bool(leakage_tripwire),
         },
         "reproducibility": {
-            # No tolerance is asserted here. This field previously recorded
-            # "±1e-6 on metrics" as a string that nothing in the repo ever
-            # compared anything against — a reproducibility guarantee with no
-            # mechanism behind it. What IS enforced: pinned deps, a fixed
-            # seed, and the SHA-sealed schema contract verified before the run.
+            # Enforced by mechanism, not an asserted tolerance string.
             "enforced_by": "pinned deps + fixed seed + schema SHA gate",
             "no_cross_arch_claim": True,
         },
@@ -313,10 +327,7 @@ if __name__ == "__main__":
     )
 
     # Fail the run on a detected leak — AFTER results.json and the summary are
-    # written, so the evidence survives the failure. A confirmed leak used to
-    # be recorded as "triggered": true and exit 0, which made the benchmark's
-    # headline control the one gate that could never turn CI red, while
-    # prediction-health (a lesser check) did raise.
+    # written, so the evidence survives the failure.
     tripped = [
         name
         for name, outcome in result["leakage"].items()

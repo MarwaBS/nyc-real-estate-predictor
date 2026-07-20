@@ -14,10 +14,8 @@ typecheck:
 
 ci: lint typecheck test
 
-# The one real training entrypoint. (The old target invoked
-# `python -m src.models.train_classification` / `train_regression`,
-# whose __main__ blocks trained nothing — runbook theater.) Requires the
-# committed raw dataset at Resources/NY-House-Dataset.csv; artifacts land
+# The one training entrypoint. Requires the committed raw dataset at
+# Resources/NY-House-Dataset.csv; artifacts land
 # in models/ with provenance in reports/training_metrics.json.
 train:
 	python run_training.py

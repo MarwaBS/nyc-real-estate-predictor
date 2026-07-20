@@ -1,13 +1,8 @@
 """Geospatial utilities — haversine distances to fixed reference points.
 
-Scope is deliberately exactly what the models consume. Earlier revisions
-also carried H3 hex indexing, KMeans neighborhood clustering, and a
-KDTree nearest-subway-station lookup; none of those ever reached a model
-feature list (the ColumnTransformer dropped their outputs, station data
-was never bundled, and the KMeans transform was dataset-stateful — unusable
-for single-row inference). They were removed rather than left as
-README-decorating dead compute; the EDA notebooks remain the record of
-that exploration.
+Scope is deliberately exactly what the model consumes: the two landmark
+distances. No clustering or station lookup, which would need bundled data or
+dataset-stateful transforms unusable for single-row inference.
 """
 
 from __future__ import annotations

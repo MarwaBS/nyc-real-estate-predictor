@@ -159,13 +159,16 @@ with col2:
             # a classifier output, so there is no posterior to report.
             # Uncertainty is shown where it was calibrated -- the range below.
             st.metric("Price Zone", zone_for_price(price))
-            st.metric("Estimated Price", f"${price:,.0f}")
+            # Round to $100 and band from the rounded figure, matching the API
+            # so the displayed range reproduces from the displayed price.
+            rounded = round(price, -2)
+            st.metric("Estimated Price", f"${rounded:,.0f}")
             # Same calibrated interval the API serves, and labelled with the
             # coverage it was measured to achieve — a range without its
             # coverage invites the reader to assume a precision it lacks.
             from src.models.predict import get_price_interval, price_range
 
-            band = price_range(price)
+            band = price_range(rounded)
             target = get_price_interval()["target_coverage"]
             st.caption(
                 f"{target:.0%} of listings fall in ${band['low']:,.0f} - "
@@ -180,5 +183,5 @@ with col2:
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.caption(
-    "Model: one gradient-boosted regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
+    "Model: one Random Forest regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
 )

@@ -26,12 +26,15 @@ jobs:
           python-version: "3.12"
           cache: "pip"
       - name: Install lint tools
-        run: pip install ruff mypy bandit pydantic fastapi pydantic-settings
+        # The full dev toolchain, not a hand-picked subset. mypy's result
+        # depends on which typed packages are importable, so a partial install
+        # made CI's type check disagree with the one run locally against
+        # requirements-dev.txt — a gate that passes in one place and fails in
+        # the other proves nothing. ruff/bandit are pinned in that file too.
+        run: pip install -r requirements-dev.txt
       - name: ruff check
-        # Whole tree, not a path list. The list omitted notebooks/ and
-        # streamlit_app/ while pyproject.toml configured per-file ignores for
-        # notebooks — so the config said they were linted, the gate did not
-        # lint them, and `ruff check .` failed with 15 errors on a green CI.
+        # Whole tree, not a path list — a list drifts from the directories
+        # that actually exist and quietly exempts them.
         run: ruff check .
       - name: ruff format --check
         run: ruff format --check .
@@ -56,17 +59,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 78 against a measured 80.96% over 982 statements. The 3-point
-        # gap is ~29 statements, so losing a module's worth of coverage fails
-        # the gate while ordinary churn does not.
-        #
-        # The previous floor of 88 was measured over a subset: pyproject omitted
-        # 8 modules that were ALL at 0%, and run_training.py — which produces
-        # every shipped artefact — was not in `source` at all, so "94.7%"
-        # described neither the training pipeline nor the least-tested code. The
-        # omit list now holds only the network-bound benchmark modules, which
-        # the External Benchmark workflow exercises end-to-end on every push.
+        # Floor 78 against a measured 87.67% over the full source set
+        # (src/ + api/ + benchmarks/ + run_training.py). The gap gives churn
+        # headroom while losing a module's worth of coverage still fails. The
+        # omit list holds only the network-bound benchmark modules, which the
+        # External Benchmark workflow exercises end-to-end on every push.
         run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-report=xml --cov-fail-under=78
+      - name: Verify the gates can fail
+        # The step above proves the code passes its tests; this one proves the
+        # tests can fail. Without it, a gate that reads a committed artefact CI
+        # never regenerates stays green on broken code.
+        run: python scripts/verify_gates.py
 
   security:
     runs-on: ubuntu-latest
@@ -87,7 +90,7 @@ jobs:
         run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277
       - name: Generate SBOM (CycloneDX JSON)
         # Software Bill of Materials — standard supply-chain artifact.
-        # Mirrors the ResumeForge pattern. Stored as a 90-day CI artifact.
+        # Stored as a 90-day CI artifact.
         run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277 --format=cyclonedx-json --output=sbom.cyclonedx.json
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
@@ -141,8 +144,8 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Trivy — scan built image for HIGH/CRITICAL CVEs
         # Container-layer vulnerability scan complementary to pip-audit.
-        # `.trivyignore` at repo root holds managed-risk CVE IDs (starter
-        # file is empty; mirrors ResumeForge pattern).
+        # `.trivyignore` at repo root holds managed-risk CVE IDs (currently
+        # empty).
         # SHA-pinned, not tag-pinned: a tag is a mutable ref the upstream owner
         # can repoint at any commit, so `@v0.36.0` grants this third party
         # push-time control over a job that reads the repo and its token.

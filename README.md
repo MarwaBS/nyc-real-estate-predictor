@@ -3,11 +3,11 @@
 [![CI](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20Demo-on%20Hugging%20Face-yellow)](https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor)
 
-**Classify NYC properties into price zones and predict actual values using gradient boosting on 4,500+ listings with geospatial features.**
+**Predict NYC residential prices and derive their price zones with one Random Forest regressor over 4,500+ listings with geospatial features.**
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
-> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** v0.1.0 on PyPI](https://pypi.org/project/schema-firewall/0.1.0/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.0` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
+> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
 
 This repository contains **two separate evaluation surfaces** that should not be conflated:
 
@@ -58,9 +58,10 @@ val.
 dataset itself changed: `BOROUGH` and `ZIPCODE` are now derived by committed
 code from the raw export rather than inherited from a pre-cleaned CSV that
 nothing in this repo could regenerate, and a 2³¹−1 overflow sentinel is now
-dropped instead of being capped into a plausible-looking listing. Test macro F1
-sits slightly above val here (0.727 vs 0.721); on a 906-row test split that is
-ordinary split-to-split variance, not evidence of a better model.
+dropped instead of being capped into a plausible-looking listing. Zones are
+scored on test only: they are bucketed from the regressor's predictions, so
+there is no separate zone model to select on val and no val macro F1 to
+compare against.
 
 ### SHAP feature importance (top 10)
 
@@ -93,13 +94,13 @@ cleaning rather than carried into training as an unnamed category.
 | The Bronx | 0.694 |
 | Queens | 0.685 |
 | Manhattan | 0.632 |
-| Brooklyn | 0.621 |
+| Brooklyn | 0.620 |
 
-The spread (0.887 Staten Island vs 0.601 Queens) is wide enough to matter and
-is reported unexplained: Staten Island has the most concentrated zone
-distribution of the five boroughs (55.9% Medium vs Queens' most-common 37.7%),
-but no experiment here establishes that as the cause, so it is recorded as an
-observation rather than an explanation.
+The spread (0.741 Staten Island vs 0.620 Brooklyn) is wide enough to matter
+and is reported unexplained: no experiment here establishes a cause, so it is
+recorded as an observation. Every borough clears its own majority-class
+baseline by at least 0.46 macro F1 — the floor `check_borough_floor` enforces
+at train time, which fails the run rather than publishing a breach.
 
 ---
 
@@ -231,7 +232,7 @@ src/data/features.py        Geospatial (haversine distances), numeric, target en
     v
 src/models/pipelines.py     sklearn Pipeline + ColumnTransformer (reproducible preprocessing)
     |
-    +---> src/models/train_regression.py       Same models, LOG_PRICE target
+    +---> run_training.py                       Candidate training + selection on val
     |
     +---> src/models/explain.py                SHAP (global + per-prediction) + fairness
     |
@@ -246,10 +247,10 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 |---|---|---|
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
-| **ML models** | `src/models/` | sklearn Pipelines; one gradient-boosted regressor |
+| **ML models** | `src/models/` | sklearn Pipelines; one Random Forest regressor |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
-| **UI** | `streamlit_app/` | Interactive NYC map, prediction form, probability charts |
+| **UI** | `streamlit_app/` | Interactive NYC map, prediction form, calibrated price range |
 | **Validation** | `src/utils/validation.py` | Schema checks, `assert_no_leakage()` (enforced in CI) |
 
 ---
@@ -340,7 +341,6 @@ curl -X POST http://localhost:8000/predict \
 | BEDS, BATH, PROPERTYSQFT | Raw | Core property attributes |
 | TOTAL_ROOMS | BEDS + BATH | Combined room signal |
 | BED_BATH_RATIO | BEDS / max(BATH, 1) | Layout balance |
-| LOG_SQFT | log1p(SQFT) | Normalize right-skewed distribution |
 | ROOMS_PER_SQFT | TOTAL_ROOMS / SQFT | Density metric |
 
 ### Geospatial
@@ -349,7 +349,6 @@ curl -X POST http://localhost:8000/predict \
 |---|---|---|
 | DIST_MANHATTAN_CENTER | Haversine to (40.758, -73.985) | hand-rolled, vectorised numpy |
 | DIST_CENTRAL_PARK | Haversine to (40.783, -73.965) | hand-rolled, vectorised numpy |
-| DIST_NEAREST_SUBWAY | = DIST_MANHATTAN_CENTER | **documented proxy by design**: station-level data is not bundled, and training + serving must share identical semantics (the API computes the same value; see MODEL_CARD.md) |
 
 H3 hex indexing and KMeans neighborhood clustering were explored during
 EDA but never entered any model's feature list, so they are not part of
@@ -362,17 +361,17 @@ feature).
 | Feature | Method | Why |
 |---|---|---|
 | BOROUGH, TYPE | OneHotEncoder | Low cardinality (5-8 values) |
-| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit per CV fold) | High cardinality (~150 ZIPs) — OneHot would create 150 sparse columns |
+| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit inside the Pipeline on train only) | High cardinality (~150 ZIPs) — OneHot would create 150 sparse columns |
 
 ---
 
 ## Models
 
 **What produced the shipped artefacts (and every number in §Results):**
-`run_training.py` — XGBoost vs LightGBM for classification, XGBoost vs
-LightGBM vs Random Forest for regression, fixed hyperparameters, best
-model selected on the **val** split and then scored once on **test**. That
-is the path whose outputs are recorded in `reports/training_metrics.json`.
+`run_training.py` — XGBoost vs LightGBM vs Random Forest for regression,
+fixed hyperparameters, best model selected on the **val** split and then
+scored once on **test**; zones are that model's predictions bucketed through
+`PRICE_ZONE_BINS`. Outputs are recorded in `reports/training_metrics.json`.
 
 ### Regression: Actual Price
 
@@ -390,8 +389,8 @@ XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilize
 ## Testing
 
 ```bash
-# Full test suite with coverage (CI gate: 65%, src/ + benchmarks/ + api/ + run_training.py)
-pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-fail-under=88
+# Full test suite with coverage (CI gate: 78%, src/ + benchmarks/ + api/ + run_training.py)
+pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
 
 # Run only leakage prevention tests
 pytest tests/test_no_leakage.py -v
@@ -411,7 +410,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 65% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 78% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -456,7 +455,7 @@ nyc-real-estate-predictor/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        Unit + adversarial firewall suite, 65% coverage gate
+├── tests/                        Unit + adversarial firewall suite, 78% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
@@ -467,6 +466,7 @@ nyc-real-estate-predictor/
 ├── docs/decisions/               Architecture Decision Records
 │   ├── 001-remove-price-per-sqft.md
 │   ├── 002-xgboost-primary-model.md
+│   ├── 003-multi-task-deep-learning.md
 │
 ├── notebooks/                    EDA + analysis (import from src/)
 ├── models/                       Flagship artifacts committed + MANIFEST.sha256-pinned;
@@ -487,15 +487,14 @@ nyc-real-estate-predictor/
 | Category | Technology |
 |---|---|
 | Language | Python 3.12 |
-| ML | scikit-learn, XGBoost, LightGBM |
+| ML | scikit-learn (shipped Random Forest); XGBoost, LightGBM (candidates) |
 | Tuning | none — fixed hyperparameters, candidates compared on val |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
-| Imbalanced learning | imbalanced-learn (SMOTE-ENN) |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (65% coverage gate; measured 69% over src/ + benchmarks/ + api/ + run_training.py) |
+| Testing | pytest (78% coverage gate; measured 87.67% over src/ + benchmarks/ + api/ + run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

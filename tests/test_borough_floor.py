@@ -56,6 +56,21 @@ def test_a_borough_below_its_baseline_raises() -> None:
         check_borough_floor(y_true, y_pred, borough)
 
 
+def test_the_majority_predictor_itself_breaches_the_floor() -> None:
+    """A model that only ever answers the majority zone has learned nothing,
+    and the floor must say so. This is also the test that pins the METRIC:
+    that predictor's macro F1 equals the baseline (breach), but its micro F1
+    equals its accuracy — far above the baseline — so scoring with micro
+    (i.e. accuracy) would silently wave it through.
+    """
+    y_true = np.array(["Low"] * 70 + ["Medium"] * 15 + ["High"] * 15)
+    y_pred = np.array(["Low"] * 100)
+    borough = pd.Series(["bronx"] * 100)
+
+    with pytest.raises(BoroughFloorError, match="bronx"):
+        check_borough_floor(y_true, y_pred, borough)
+
+
 def test_a_passing_borough_returns_its_margin() -> None:
     """A clearing borough is recorded with the margin it cleared by."""
     y_true = np.array(["Low"] * 50 + ["High"] * 50)

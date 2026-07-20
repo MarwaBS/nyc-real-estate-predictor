@@ -57,48 +57,44 @@ def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
     return listings
 
 
-def cap_outliers(
+CAP_COLUMNS = ["PRICE", "PROPERTYSQFT", "BEDS", "BATH"]
+
+
+def fit_cap_bounds(
     df: pd.DataFrame,
     columns: list[str] | None = None,
     factor: float = 3.0,
-) -> pd.DataFrame:
-    """Cap outliers at Q3 + factor*IQR, clipping rather than dropping.
+) -> dict[str, tuple[float, float]]:
+    """Fit IQR cap bounds (Q1 - f*IQR, Q3 + f*IQR) per column.
 
-    factor=3.0 is a measured trade-off, not an inherited default. Held-out
-    val, scored on a COMMON evaluation set (listings under $2,989,000, the
-    tightest cap's ceiling) so every variant faces an identical target
-    distribution:
+    Fit/apply are split so the bounds can be fitted on the TRAIN split only
+    and applied everywhere — fitting on pooled data lets val/test quantiles
+    shape the training target.
 
-        factor   val R2 (common)   val MAE (common)   listings at the cap
-        1.5           0.7279            0.2682         531  (11.73%)
-        3.0           0.6308            0.2772         351  ( 7.76%)
-        5.0           0.6273            0.2796         244  ( 5.39%)
-        none          0.6224            0.2810           1  ( 0.02%)
-
-    Two things that measurement settles. Capping beats not capping on typical
-    listings -- scored across ALL rows the uncapped model looks best (R2
-    0.7854), but that ranking is variance inflation from a single $195M
-    listing, and it reverses on a like-for-like target.
-
-    And 1.5 scores better than 3.0 on both metrics. It is not used because it
-    collapses 11.73% of listings onto one price against 7.76%: P1 covers NYC
-    residential property, not only the dense segment, and a model that cannot
-    distinguish anything above $2.99M fails that for one listing in eight. The
-    accuracy gain is 0.009 MAE (3.3% relative); the coverage cost is 180 more
-    listings rendered indistinguishable. 3.0 buys most of the benefit at half
-    the flattening.
+    factor=3.0 is a measured trade-off, not an inherited default: on held-out
+    val over a common evaluation support, 1.5 scores better on MAE but
+    collapses ~11% of train listings onto one price against ~7% at 3.0, and a
+    model that cannot distinguish anything above ~$3M fails the requirement
+    for one listing in nine. Rerun scripts/measure_cap_factor.py to re-derive.
     """
-    listings = df.copy()
-    columns = columns or ["PRICE", "PROPERTYSQFT", "BEDS", "BATH"]
-
+    columns = columns or CAP_COLUMNS
+    bounds: dict[str, tuple[float, float]] = {}
     for col in columns:
+        if col not in df.columns:
+            continue
+        q1 = df[col].quantile(0.25)
+        q3 = df[col].quantile(0.75)
+        iqr = q3 - q1
+        bounds[col] = (float(q1 - factor * iqr), float(q3 + factor * iqr))
+    return bounds
+
+
+def apply_cap(df: pd.DataFrame, bounds: dict[str, tuple[float, float]]) -> pd.DataFrame:
+    """Clip each column to its fitted bounds, keeping rows rather than dropping."""
+    listings = df.copy()
+    for col, (lower, upper) in bounds.items():
         if col not in listings.columns:
             continue
-        q1 = listings[col].quantile(0.25)
-        q3 = listings[col].quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - factor * iqr
-        upper = q3 + factor * iqr
         capped = listings[col].clip(lower=lower, upper=upper)
         n_capped = (listings[col] != capped).sum()
         listings[col] = capped
@@ -110,8 +106,19 @@ def cap_outliers(
                 lower,
                 upper,
             )
-
     return listings
+
+
+def cap_outliers(
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
+    factor: float = 3.0,
+) -> pd.DataFrame:
+    """Fit-and-apply on the same frame — for callers whose evaluation data is
+    EXTERNAL (the benchmark trainer caps its whole Kaggle training set; its
+    test rows are NYC.gov sales). Training with an internal test split must
+    use fit_cap_bounds on train + apply_cap instead."""
+    return apply_cap(df, fit_cap_bounds(df, columns, factor))
 
 
 def normalize_text_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -214,11 +221,9 @@ def normalize_type(df: pd.DataFrame, col: str = "TYPE") -> pd.DataFrame:
 def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full cleaning pipeline end-to-end on a RAW frame.
 
-    Single-pass by design, and not idempotent: ``cap_outliers`` recomputes its
-    IQR bounds from whatever it is given, so cleaning an already-cleaned frame
-    tightens the cap around the previously capped distribution and drops
-    further rows. The input is the raw export; ``run_training.py`` is the only
-    caller and passes ``load_raw()``.
+    Row-wise cleaning only — dedup, derivation, imputation and validity
+    filters. Outlier capping is NOT done here: bounds are cross-row statistics
+    and are fitted by the caller on the appropriate rows (fit_cap_bounds).
     """
     missing = sorted(_REQUIRED_RAW_COLUMNS - set(df.columns))
     if missing:
@@ -261,7 +266,9 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["PRICE"] < INT32_MAX]
     logger.info("Dropped %d rows with overflow-sentinel PRICE", before - len(df))
 
-    df = cap_outliers(df)
+    # No capping here. Cap bounds are cross-row statistics, so they are fitted
+    # on the TRAIN split (run_training) or, for the benchmark whose evaluation
+    # rows are external, on its own whole training set.
 
     # Drop rows with non-positive price or sqft (invalid data)
     before = len(df)

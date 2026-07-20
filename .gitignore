@@ -206,11 +206,7 @@ cython_debug/
 /address_sublocality_map.csv
 
 # === Private internal artifacts ===
-# Broad patterns so individual private filenames never leak. Mirrors the
-# ResumeForge .gitignore. SENIOR_PLAN.md was previously kept public; on
-# 2026-04-18 user decision was to treat all detailed engineering plans as
-# PRIVATE — SENIOR_PLAN.md was removed from the repo and moved to
-# private memory. The *_PLAN.md pattern is now active.
+# Broad patterns so individual private filenames never leak.
 *_REPORT.md
 *_STATE.md
 *_NOTES.md

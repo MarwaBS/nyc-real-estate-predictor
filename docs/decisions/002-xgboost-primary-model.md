@@ -1,7 +1,9 @@
 # ADR-002: XGBoost as primary classification model with Optuna tuning
 
 ## Status
-Accepted
+Superseded — see the dated status updates below. Final state (2026-07-19):
+Random Forest selected for regression; the classifier ruling is void (no
+classifier ships).
 
 ## Context
 We evaluated 5 model families: Random Forest, XGBoost, LightGBM, CatBoost, and a stacking ensemble. Previous experiments used RandomizedSearchCV with limited parameter ranges.
@@ -64,14 +66,18 @@ Measured on the current data (`reports/training_metrics.json`,
 
 | Regressor | val R2 |
 |---|---|
-| **XGBoost (selected)** | **0.8257** |
-| LightGBM | 0.8221 |
-| Random Forest | 0.8183 |
+| **Random Forest (selected)** | **0.7837** |
+| LightGBM | 0.7799 |
+| XGBoost | 0.7727 |
 
-So the regressor decision reverts to **XGBoost**, and both shipped models are
-now XGBoost. The classifier ruling is unchanged in direction but its numbers
-also moved: val macro F1 0.7207 (XGBoost) vs 0.7147 (LightGBM), not
-0.713/0.683.
+So the regressor ruling reverses: **Random Forest** is selected, and it scores
+R2 0.8117 on test — read once, after selection.
+
+The classifier ruling is void rather than revised. There is no classifier: the
+price zone is the regressor's prediction bucketed through `PRICE_ZONE_BINS`
+(`src/models/decode.py`), so the val macro F1 comparison this ADR recorded no
+longer describes anything that runs. Zones are scored on test only, at macro
+F1 0.699.
 
 The `min_samples_leaf=10` bound on Random Forest stands — it is what keeps the
 artifact committable regardless of which model wins.

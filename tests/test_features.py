@@ -10,7 +10,9 @@ from src.data.features import (
     add_numeric_features,
     add_target_variables,
     apply_serving_cap,
+    apply_top_categories,
     cap_categorical_cardinality,
+    fit_top_categories,
     learned_capped_categories,
 )
 
@@ -34,7 +36,6 @@ def test_add_target_variables_creates_price_zone(sample_raw_data: pd.DataFrame) 
     result = add_target_variables(sample_raw_data)
     assert "PRICE_ZONE" in result.columns
     assert "LOG_PRICE" in result.columns
-    assert "SQFT_CATEGORY" in result.columns
     assert set(result["PRICE_ZONE"].dropna().unique()).issubset(
         {"Low", "Medium", "High", "Very High"}
     )
@@ -52,6 +53,19 @@ def test_cap_cardinality_limits_categories() -> None:
     unique = result["COL"].unique()
     # 10 real categories + "other"
     assert len(unique) <= 11
+
+
+def test_fit_top_categories_defaults_to_keeping_fifty() -> None:
+    """The shipped path (run_protocol) calls fit_top_categories without
+    max_categories, so the DEFAULT shapes every ZIPCODE and SUBLOCALITY
+    encoding. Exact count, not <= 51: a bound is satisfied by any lower cap."""
+    df = pd.DataFrame({"COL": [f"cat_{i}" for i in range(60)]})
+
+    vocab = fit_top_categories(df, columns=["COL"])
+
+    assert len(vocab["COL"]) == 50
+    result = apply_top_categories(df, vocab)
+    assert (result["COL"] == "other").sum() == 10
 
 
 # ── Train/serve cap parity ───────────────────────────────────────────────────

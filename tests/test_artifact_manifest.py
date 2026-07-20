@@ -77,3 +77,16 @@ def test_every_serving_artifact_matches_its_manifest_hash() -> None:
             f"artifact changed without a manifest update (or vice versa). "
             f"Regenerate the manifest only as part of a deliberate retrain."
         )
+
+
+def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
+    """The committed file must be exactly what run_training step 9 emits —
+    same hashes in a different order passed the per-line checks while the
+    next retrain would rewrite the file with a pure-reorder diff."""
+    lines = [
+        f"{hashlib.sha256(_artifact_bytes(MODELS_DIR / name)).hexdigest()}  {name}"
+        for name in sorted(SERVING_ARTIFACTS)
+    ]
+    produced = ("\n".join(lines) + "\n").encode("ascii")
+    committed = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
+    assert committed == produced

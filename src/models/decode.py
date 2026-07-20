@@ -1,15 +1,8 @@
 """The single conversion from a predicted price to a served zone.
 
-There is no classifier. The zone is a deterministic function of price --
-``PRICE_ZONE = cut(PRICE, PRICE_ZONE_BINS)`` -- so a separate classification
-model was predicting a bucketing of what the regressor already predicts: two
-models, the same features, the same signal. It was deleted and the zone is
-derived from the estimate.
-
-Training scores zones through this same function, so the reported macro-F1
-describes exactly what serving returns. Two models could not offer that: the
-classifier's answer and the regressor's bucketed price could disagree on the
-same listing and nothing would notice.
+The zone is a deterministic function of price -- ``cut(PRICE,
+PRICE_ZONE_BINS)`` -- and training scores zones through this same function,
+so the reported macro-F1 describes exactly what serving returns.
 """
 
 from __future__ import annotations

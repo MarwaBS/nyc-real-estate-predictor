@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# The system's contract is these five boroughs. An unknown borough would
+# one-hot encode to all zeros and still return a confident price.
+VALID_BOROUGHS = frozenset(
+    {"manhattan", "brooklyn", "queens", "the bronx", "staten island"}
+)
 
 
 class PropertyInput(BaseModel):
@@ -14,6 +20,17 @@ class PropertyInput(BaseModel):
     borough: str = Field(
         description="NYC borough (manhattan, brooklyn, queens, the bronx, staten island)"
     )
+
+    @field_validator("borough")
+    @classmethod
+    def _borough_must_be_one_of_the_five(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in VALID_BOROUGHS:
+            raise ValueError(
+                f"borough must be one of {sorted(VALID_BOROUGHS)}, got {v!r}"
+            )
+        return normalized
+
     type: str = Field(
         description="Property type (condo, house, co-op, townhouse, etc.)"
     )
@@ -70,9 +87,7 @@ class PredictionResponse(BaseModel):
     training-only dependency (kept out of the inference image to keep it
     lean, ~300 MB vs ~3 GB), and per-request explainers add latency for a
     signal that is stable globally. Global SHAP feature importance is computed
-    at training time and documented in ``MODEL_CARD.md``. (A previous
-    ``top_factors`` field defaulted to an empty list on every response and is
-    removed rather than left as a hollow promise.)
+    at training time and documented in ``MODEL_CARD.md``.
     """
 
     zone: ZonePrediction

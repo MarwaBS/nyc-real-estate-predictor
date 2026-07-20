@@ -12,16 +12,8 @@ from src.config import NUMERIC_FEATURES, ONEHOT_FEATURES, TARGET_ENCODED_FEATURE
 
 logger = logging.getLogger(__name__)
 
-# Target encoding requires category_encoders — optional dependency
-try:
-    from category_encoders import TargetEncoder
-
-    _HAS_TARGET_ENCODER = True
-except ImportError:
-    _HAS_TARGET_ENCODER = False
-    logger.warning(
-        "category_encoders not installed — falling back to OneHot for high-cardinality features"
-    )
+# Unguarded import: category-encoders is a pinned hard dependency.
+from category_encoders import TargetEncoder  # noqa: E402
 
 
 def build_preprocessor(
@@ -31,8 +23,8 @@ def build_preprocessor(
 ) -> ColumnTransformer:
     """Build the ColumnTransformer for the ML pipeline.
 
-    Target encoding is applied inside the pipeline so it is fit per CV fold,
-    preventing target leakage from encoding.
+    Target encoding is applied inside the pipeline so it is fit on the train
+    split only, preventing target leakage from encoding.
     """
     numeric_features = numeric_features or NUMERIC_FEATURES
     onehot_features = onehot_features or ONEHOT_FEATURES
@@ -48,21 +40,9 @@ def build_preprocessor(
     ]
 
     if target_encoded_features:
-        if _HAS_TARGET_ENCODER:
-            transformers.append(
-                ("cat_target", TargetEncoder(smoothing=10.0), target_encoded_features),
-            )
-        else:
-            # Fallback: OneHot with max_categories to limit dimensionality
-            transformers.append(
-                (
-                    "cat_fallback",
-                    OneHotEncoder(
-                        handle_unknown="ignore", sparse_output=False, max_categories=50
-                    ),
-                    target_encoded_features,
-                ),
-            )
+        transformers.append(
+            ("cat_target", TargetEncoder(smoothing=10.0), target_encoded_features),
+        )
 
     preprocessor = ColumnTransformer(
         transformers=transformers,
@@ -77,20 +57,6 @@ def build_preprocessor(
         len(target_encoded_features),
     )
     return preprocessor
-
-
-def build_classification_pipeline(
-    model: object,
-    preprocessor: ColumnTransformer | None = None,
-) -> Pipeline:
-    """Wrap preprocessor + model into a single Pipeline."""
-    preprocessor = preprocessor or build_preprocessor()
-    return Pipeline(
-        [
-            ("preprocessor", preprocessor),
-            ("classifier", model),
-        ]
-    )
 
 
 def build_regression_pipeline(

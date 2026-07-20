@@ -18,8 +18,6 @@ from src.config import (
     MANHATTAN_CENTER,
     PRICE_ZONE_BINS,
     PRICE_ZONE_LABELS,
-    SQFT_BINS,
-    SQFT_LABELS,
 )
 from src.utils.geo import add_distance_features
 from src.utils.validation import assert_no_leakage
@@ -39,11 +37,9 @@ def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add derived numerical features (no target-derived features)."""
     listings = df.copy()
 
-    # Sums and ratios, not transforms. A gradient-boosted tree splits on
-    # thresholds, so it is invariant to any monotone transform of a single
-    # feature -- LOG_SQFT gave it exactly the partitions PROPERTYSQFT already
-    # gives and was removed. A ratio is different: the tree can only approximate
-    # BEDS/BATH through many awkward splits, so computing it is real signal.
+    # Ratios, not transforms: a tree splits on thresholds, so it is invariant
+    # to any monotone transform of a single feature, but can only approximate
+    # a ratio like BEDS/BATH through many awkward splits.
     listings["TOTAL_ROOMS"] = listings["BEDS"] + listings["BATH"]
     listings["BED_BATH_RATIO"] = listings["BEDS"] / listings["BATH"].clip(lower=1)
     listings["ROOMS_PER_SQFT"] = listings["TOTAL_ROOMS"] / listings[
@@ -55,30 +51,26 @@ def add_numeric_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_geospatial_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Haversine distances to the two landmarks the models consume.
-
-    DIST_NEAREST_SUBWAY used to be assigned here as a copy of
-    DIST_MANHATTAN_CENTER and called a proxy. A duplicate column is not a
-    proxy -- it carries zero information by construction and cost a feature
-    slot while implying the model knew something about transit access. It is
-    gone; station-level data is still not bundled.
-
-    H3 indexing and KMeans clustering were explored in EDA and never fed any
-    model, so they are not computed here either.
-    """
+    """Haversine distances to the two landmarks the model consumes."""
     listings = add_distance_features(df.copy(), REFERENCE_POINTS)
     logger.info("Added distance features: DIST_MANHATTAN_CENTER, DIST_CENTRAL_PARK")
     return listings
 
 
-def add_target_variables(df: pd.DataFrame) -> pd.DataFrame:
-    """Create target columns for classification and regression."""
+def add_target_variables(
+    df: pd.DataFrame, bins: list[float] | None = None
+) -> pd.DataFrame:
+    """Create target columns for classification and regression.
+
+    ``bins`` defaults to the shipped PRICE_ZONE_BINS; training passes the
+    cut-points it derived from its own train split, so labels can never lean
+    on quantiles of the held-out rows.
+    """
     listings = df.copy()
 
-    # Price zones (classification target)
     listings["PRICE_ZONE"] = pd.cut(
         listings["PRICE"],
-        bins=PRICE_ZONE_BINS,
+        bins=bins if bins is not None else PRICE_ZONE_BINS,
         labels=PRICE_ZONE_LABELS,
         include_lowest=True,
     )
@@ -86,17 +78,38 @@ def add_target_variables(df: pd.DataFrame) -> pd.DataFrame:
     # Log price (regression target — stabilizes variance)
     listings["LOG_PRICE"] = np.log1p(listings["PRICE"])
 
-    # SQFT category (secondary classification)
-    listings["SQFT_CATEGORY"] = pd.cut(
-        listings["PROPERTYSQFT"],
-        bins=SQFT_BINS,
-        labels=SQFT_LABELS,
-        include_lowest=True,
-    )
+    logger.info("Added targets: PRICE_ZONE (4 classes), LOG_PRICE")
+    return listings
 
-    logger.info(
-        "Added targets: PRICE_ZONE (4 classes), LOG_PRICE, SQFT_CATEGORY (3 classes)"
-    )
+
+def fit_top_categories(
+    df: pd.DataFrame,
+    columns: list[str],
+    max_categories: int = 50,
+) -> dict[str, set]:
+    """The top-N category vocabulary per column, fitted on the given rows.
+
+    Fit/apply are split so the vocabulary can be counted on the TRAIN split
+    only — pooled counts let val/test frequencies decide which categories the
+    model learns.
+    """
+    return {
+        col: set(df[col].value_counts().nlargest(max_categories).index)
+        for col in columns
+        if col in df.columns
+    }
+
+
+def apply_top_categories(df: pd.DataFrame, top: dict[str, set]) -> pd.DataFrame:
+    """Map any value outside its fitted vocabulary to 'other'."""
+    listings = df.copy()
+    for col, keep in top.items():
+        if col not in listings.columns:
+            continue
+        n_capped = (~listings[col].isin(keep)).sum()
+        listings[col] = listings[col].where(listings[col].isin(keep), "other")
+        if n_capped > 0:
+            logger.info("Capped %s: %d values -> 'other'", col, n_capped)
     return listings
 
 
@@ -105,22 +118,9 @@ def cap_categorical_cardinality(
     columns: list[str],
     max_categories: int = 50,
 ) -> pd.DataFrame:
-    """Frequency-cap high-cardinality categoricals — keep top N, rest = 'other'."""
-    listings = df.copy()
-    for col in columns:
-        if col not in listings.columns:
-            continue
-        top = listings[col].value_counts().nlargest(max_categories).index
-        n_capped = (~listings[col].isin(top)).sum()
-        listings[col] = listings[col].where(listings[col].isin(top), "other")
-        if n_capped > 0:
-            logger.info(
-                "Capped %s: %d values -> 'other' (top %d kept)",
-                col,
-                n_capped,
-                max_categories,
-            )
-    return listings
+    """Fit-and-apply on the same frame — for pooled contexts (EDA notebook).
+    Training fits the vocabulary on train and applies it everywhere."""
+    return apply_top_categories(df, fit_top_categories(df, columns, max_categories))
 
 
 def learned_capped_categories(pipeline: object) -> dict[str, set]:
@@ -189,9 +189,7 @@ def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     # SAFETY CHECK: assert no leaky features
     feature_cols = [
-        c
-        for c in df.columns
-        if c not in {"PRICE", "LOG_PRICE", "PRICE_ZONE", "SQFT_CATEGORY"}
+        c for c in df.columns if c not in {"PRICE", "LOG_PRICE", "PRICE_ZONE"}
     ]
     assert_no_leakage(feature_cols)
 

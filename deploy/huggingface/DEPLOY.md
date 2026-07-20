@@ -19,7 +19,7 @@ Mirrors the `high-pay-salary-predictor` deploy pattern. ~10 minutes total.
 1. A Hugging Face account. Sign up free at <https://huggingface.co/join> if you don't have one.
 2. Git installed locally.
 3. A local clone of this project (referred to below as `<PROJECT_DIR>`).
-4. Trained model artifacts in `<PROJECT_DIR>/models/` (`price_zone_best.joblib`, `price_regressor_best.joblib`, `label_encoder.joblib`, `drift_baseline.json`). If missing, run `make train` (= `python run_training.py`) — the raw Kaggle CSV is committed at `Resources/NY-House-Dataset.csv`, so nothing needs downloading.
+4. Trained model artifacts in `<PROJECT_DIR>/models/` (`price_regressor_best.joblib`, `price_interval.json`, `drift_baseline.json`). If missing, run `make train` (= `python run_training.py`) — the raw Kaggle CSV is committed at `Resources/NY-House-Dataset.csv`, so nothing needs downloading.
 
 ## Step 1 — Create a Hugging Face access token
 
@@ -36,7 +36,7 @@ You need a **write-scope** token to push to the Space repo.
 3. Space name: `nyc-real-estate-predictor` (matches the GitHub repo name exactly).
 4. License: `mit`.
 5. Space SDK: **Docker**.
-6. Hardware: **CPU basic (free)** — more than enough for XGBoost inference.
+6. Hardware: **CPU basic (free)** — more than enough for Random Forest inference.
 7. Visibility: **Public**.
 8. Click **Create Space**.
 
