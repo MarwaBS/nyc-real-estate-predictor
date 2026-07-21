@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# The system's contract is these five boroughs. An unknown borough would
+# one-hot encode to all zeros and still return a confident price.
+VALID_BOROUGHS = frozenset(
+    {"manhattan", "brooklyn", "queens", "the bronx", "staten island"}
+)
 
 
 class PropertyInput(BaseModel):
@@ -14,6 +20,17 @@ class PropertyInput(BaseModel):
     borough: str = Field(
         description="NYC borough (manhattan, brooklyn, queens, the bronx, staten island)"
     )
+
+    @field_validator("borough")
+    @classmethod
+    def _borough_must_be_one_of_the_five(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in VALID_BOROUGHS:
+            raise ValueError(
+                f"borough must be one of {sorted(VALID_BOROUGHS)}, got {v!r}"
+            )
+        return normalized
+
     type: str = Field(
         description="Property type (condo, house, co-op, townhouse, etc.)"
     )
@@ -44,11 +61,16 @@ class PropertyInput(BaseModel):
 
 
 class ZonePrediction(BaseModel):
-    """Price zone classification result."""
+    """Price segment, derived from the predicted price.
+
+    No ``confidence`` or ``probabilities``: the zone is a bucketing of a point
+    estimate, not a classifier output, so there is no class posterior to
+    report. Deriving a number from the interval and calling it confidence
+    would be a figure nothing measured. Uncertainty is served where it was
+    actually calibrated -- ``PricePrediction.price_range``.
+    """
 
     price_zone: str
-    confidence: float
-    probabilities: dict[str, float]
 
 
 class PricePrediction(BaseModel):
@@ -65,9 +87,7 @@ class PredictionResponse(BaseModel):
     training-only dependency (kept out of the inference image to keep it
     lean, ~300 MB vs ~3 GB), and per-request explainers add latency for a
     signal that is stable globally. Global SHAP feature importance is computed
-    at training time and documented in ``MODEL_CARD.md``. (A previous
-    ``top_factors`` field defaulted to an empty list on every response and is
-    removed rather than left as a hollow promise.)
+    at training time and documented in ``MODEL_CARD.md``.
     """
 
     zone: ZonePrediction
@@ -77,13 +97,10 @@ class PredictionResponse(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response.
 
-    ``models_loaded`` is true only when the FULL serving stack loads: the
-    classifier, the regressor, AND the label encoder. ``label_encoder_loaded``
-    surfaces the encoder specifically — it is the source of truth for decoding
-    class indices into zone names, so a loadable classifier/regressor with a
-    missing encoder would still serve mislabeled zones.
+    ``models_loaded`` is true only when the full serving stack loads: the
+    regressor AND the calibrated price interval. Both are required to answer a
+    prediction, so either one missing means the service cannot serve.
     """
 
     status: str
     models_loaded: bool
-    label_encoder_loaded: bool

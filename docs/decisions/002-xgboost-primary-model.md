@@ -1,7 +1,9 @@
 # ADR-002: XGBoost as primary classification model with Optuna tuning
 
 ## Status
-Accepted
+Superseded — see the dated status updates below. Final state (2026-07-20):
+XGBoost selected for regression under the train-split-fitted protocol; the
+classifier ruling is void (no classifier ships).
 
 ## Context
 We evaluated 5 model families: Random Forest, XGBoost, LightGBM, CatBoost, and a stacking ensemble. Previous experiments used RandomizedSearchCV with limited parameter ranges.
@@ -64,14 +66,28 @@ Measured on the current data (`reports/training_metrics.json`,
 
 | Regressor | val R2 |
 |---|---|
-| **XGBoost (selected)** | **0.8257** |
-| LightGBM | 0.8221 |
-| Random Forest | 0.8183 |
+| **Random Forest (selected then; superseded 2026-07-20)** | **0.7837** |
+| LightGBM | 0.7799 |
+| XGBoost | 0.7727 |
 
-So the regressor decision reverts to **XGBoost**, and both shipped models are
-now XGBoost. The classifier ruling is unchanged in direction but its numbers
-also moved: val macro F1 0.7207 (XGBoost) vs 0.7147 (LightGBM), not
-0.713/0.683.
+So that ruling reversed to **Random Forest** under the pooled protocol
+(R2 0.8117 on test, read once) — itself superseded on 2026-07-20 below.
+
+The classifier ruling is void rather than revised. There is no classifier: the
+price zone is the regressor's prediction bucketed through `PRICE_ZONE_BINS`
+(`src/models/decode.py`), so the val macro F1 comparison this ADR recorded no
+longer describes anything that runs. Zones are scored on test only, at macro
+F1 0.699.
 
 The `min_samples_leaf=10` bound on Random Forest stands — it is what keeps the
 artifact committable regardless of which model wins.
+
+## Status update (2026-07-20) — train-split-fitted protocol
+
+Cap bounds, zone cut-points and the category vocabulary now fit on the train
+split only, and the split stratifies on price quartiles rather than the zone
+label (`run_training.build_splits`). Under that protocol the candidate
+ordering on val is XGBoost 0.7740, LightGBM 0.7711, Random Forest 0.7682 —
+so the selection returns to **XGBoost**, scoring R2 0.8351 on the single
+test read. Selection is seed-sensitive at this data size; the seed-variance
+study in `reports/seed_variance.json` records how often each family wins.

@@ -1,8 +1,8 @@
 {
   "target_coverage": 0.8,
-  "low_multiplier": 0.6709,
-  "high_multiplier": 1.3896,
+  "low_multiplier": 0.6774,
+  "high_multiplier": 1.4573,
   "calibrated_on": "val",
-  "coverage_val": 0.7983,
-  "coverage_test": 0.7627
+  "coverage_val": 0.8039,
+  "coverage_test": 0.7792
 }

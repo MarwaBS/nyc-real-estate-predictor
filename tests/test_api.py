@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -31,7 +32,7 @@ VALID_PAYLOAD = {
 def _models_present() -> bool:
     from src.config import MODELS_DIR
 
-    return (Path(MODELS_DIR) / "price_zone_best.joblib").exists()
+    return (Path(MODELS_DIR) / "price_regressor_best.joblib").exists()
 
 
 @contextmanager
@@ -80,35 +81,6 @@ def test_health_response_has_models_loaded_field() -> None:
     assert "models_loaded" in data
 
 
-def test_health_reports_label_encoder_unloadable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression: /health must verify the SHIPPED label encoder, not only the
-    classifier/regressor. The encoder is the source of truth for decoding class
-    indices into zone names, so a loadable clf+reg with a MISSING/unloadable
-    encoder would still serve mislabeled zones. /health must surface it: the
-    dedicated ``label_encoder_loaded`` flag is False, and ``models_loaded`` (the
-    full serving stack) is False, even though clf+reg load fine."""
-    import api.main as m
-
-    def _encoder_missing() -> object:
-        raise FileNotFoundError("label_encoder.joblib missing")
-
-    monkeypatch.setattr(m, "_get_classifier", lambda: object())
-    monkeypatch.setattr(m, "_get_regressor", lambda: object())
-    monkeypatch.setattr(m, "_get_label_encoder", _encoder_missing)
-
-    resp = TestClient(m.app).get("/health")
-    # 503, not 200: every consumer of /health checks the HTTP status and none
-    # reads the body, so a 200 here means a container serving mislabeled zones
-    # is reported healthy to Docker, docker-compose, the HF Space, and CI.
-    assert resp.status_code == 503, resp.text
-    data = resp.json()
-    assert data["status"] == "degraded"
-    assert data["label_encoder_loaded"] is False
-    assert data["models_loaded"] is False
-
-
 def test_health_reports_missing_price_interval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -116,8 +88,8 @@ def test_health_reports_missing_price_interval(
 
     /predict calls get_price_interval, which raises rather than falling back to
     a guess. A deployment shipped without price_interval.json therefore had a
-    loadable clf/reg/encoder and answered /health with 200 + models_loaded
-    true, while every prediction returned 500.
+    loadable model and answered /health with 200 + models_loaded true, while
+    every prediction returned 500.
     """
     import api.main as m
     import src.models.predict as predict_module
@@ -125,9 +97,7 @@ def test_health_reports_missing_price_interval(
     def _interval_missing() -> object:
         raise FileNotFoundError("price_interval.json missing")
 
-    monkeypatch.setattr(m, "_get_classifier", lambda: object())
     monkeypatch.setattr(m, "_get_regressor", lambda: object())
-    monkeypatch.setattr(m, "_get_label_encoder", lambda: object())
     monkeypatch.setattr(predict_module, "get_price_interval", _interval_missing)
 
     resp = TestClient(m.app).get("/health")
@@ -149,9 +119,7 @@ def test_health_returns_503_when_no_models_load(
     def _missing() -> object:
         raise FileNotFoundError("no artifacts in image")
 
-    monkeypatch.setattr(m, "_get_classifier", _missing)
     monkeypatch.setattr(m, "_get_regressor", _missing)
-    monkeypatch.setattr(m, "_get_label_encoder", _missing)
 
     resp = TestClient(m.app).get("/health")
     assert resp.status_code == 503, resp.text
@@ -161,20 +129,16 @@ def test_health_returns_503_when_no_models_load(
 def test_health_reports_healthy_when_full_stack_loads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When classifier, regressor, AND the label encoder all load, /health
-    reports the full serving stack ready."""
+    """When the regressor and the calibrated interval load, /health is ready."""
     import api.main as m
 
-    monkeypatch.setattr(m, "_get_classifier", lambda: object())
     monkeypatch.setattr(m, "_get_regressor", lambda: object())
-    monkeypatch.setattr(m, "_get_label_encoder", lambda: object())
 
     resp = TestClient(m.app).get("/health")
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["status"] == "ok"
     assert data["models_loaded"] is True
-    assert data["label_encoder_loaded"] is True
 
 
 @pytest.mark.skipif(
@@ -189,55 +153,37 @@ def test_predict_returns_200_with_valid_input() -> None:
     body = response.json()
     assert set(body) == {"zone", "price"}
     assert body["zone"]["price_zone"] in {"Low", "Medium", "High", "Very High"}
-    assert 0.0 <= body["zone"]["confidence"] <= 1.0
     # A floor with domain meaning, not `> 0`: the payload is a 1,200 sqft
     # Manhattan condo, and the cheapest row anywhere in the training data is
     # ~$2.5k. `> 0` would have passed the historical bug that served a
     # Manhattan condo at single-digit dollars.
     assert body["price"]["predicted_price"] > 10_000, body["price"]
-    assert body["price"]["price_range"]["low"] <= body["price"]["price_range"]["high"]
 
-
-def test_predict_decodes_via_label_encoder_not_config_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression for the served-label bug: /predict must decode class indices
-    through the shipped label encoder's class order, NOT the semantic config
-    order. The stub encoder order here is alphabetical (like the real
-    artefact) and differs from ``PRICE_ZONE_LABELS`` — a config-order decode
-    returns "Low" for a probability vector peaked on class 0 ("High") and
-    mis-keys the probabilities dict. Runs without model artefacts (stubbed),
-    so CI enforces it."""
-    import numpy as np
-
-    import api.main as m
-
-    proba = [0.9, 0.05, 0.03, 0.02]
-
-    class _StubClf:
-        def predict_proba(self, features: object) -> object:
-            return np.asarray([proba])
-
-    class _StubReg:
-        def predict(self, features: object) -> object:
-            return np.asarray([14.0])
-
-    encoder_classes = ["High", "Low", "Medium", "Very High"]  # != config order
-    monkeypatch.setattr(m, "_get_classifier", lambda: _StubClf())
-    monkeypatch.setattr(m, "_get_regressor", lambda: _StubReg())
-    monkeypatch.setattr(m, "_get_capped_categories", dict)
-    # raising=False keeps the patch valid on code revisions that lack the
-    # helper (the buggy shape) — the assertions below then fail on the wrong
-    # label instead of erroring on the patch itself.
-    monkeypatch.setattr(m, "_get_zone_classes", lambda: encoder_classes, raising=False)
-
-    resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
-    assert resp.status_code == 200, resp.text
-    zone = resp.json()["zone"]
-    assert zone["price_zone"] == "High"
-    assert zone["confidence"] == 0.9
-    assert list(zone["probabilities"]) == encoder_classes
-    assert zone["probabilities"] == dict(zip(encoder_classes, proba, strict=True))
+    # The SERVED band must be the calibrated artefact, not merely ordered.
+    # `low <= high` passes for any fabricated pair: replacing the endpoint's
+    # price_range() call with {"low": price*0.5, "high": price*2.0} left the
+    # whole suite green, because the artefact was pinned only in the library
+    # function and nothing tied the endpoint to it. MODEL_CARD publishes this
+    # band's measured coverage, so an unpinned endpoint can publish a number
+    # the served interval does not honour.
+    interval = json.loads(
+        (
+            Path(__file__).resolve().parents[1] / "models" / "price_interval.json"
+        ).read_text(encoding="utf-8")
+    )
+    # Compared as ratios, not equalities: the endpoint derives the band from
+    # the unrounded prediction while predicted_price is rounded to the nearest
+    # $100, so the two disagree by up to one rounding unit (~5e-5 relative on a
+    # $1.8M prediction). 1e-3 sits well above that and far below any real
+    # drift — the fabricated 0.5/2.0 band above misses by 200x.
+    predicted = body["price"]["predicted_price"]
+    band = body["price"]["price_range"]
+    assert band["low"] / predicted == pytest.approx(
+        interval["low_multiplier"], abs=1e-3
+    )
+    assert band["high"] / predicted == pytest.approx(
+        interval["high_multiplier"], abs=1e-3
+    )
 
 
 def test_predict_returns_503_when_models_absent(
@@ -305,6 +251,44 @@ def test_predict_rejects_invalid_zipcode() -> None:
     assert response.status_code == 422
 
 
+def test_predict_rejects_out_of_range_beds() -> None:
+    """The le=20 bound must hold — an unbounded count feeds the model a value
+    far outside anything it trained on."""
+    response = client.post(
+        "/predict",
+        json={
+            "beds": 21,  # over the bound
+            "bath": 2.0,
+            "propertysqft": 1200.0,
+            "borough": "manhattan",
+            "type": "condo",
+            "zipcode": "10022",
+            "latitude": 40.758,
+            "longitude": -73.985,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_predict_rejects_an_unknown_borough() -> None:
+    """The contract is the five boroughs. An unknown one would one-hot encode
+    to all zeros and still return a confident price."""
+    response = client.post(
+        "/predict",
+        json={
+            "beds": 2,
+            "bath": 2.0,
+            "propertysqft": 1200.0,
+            "borough": "chicago",
+            "type": "condo",
+            "zipcode": "10022",
+            "latitude": 40.758,
+            "longitude": -73.985,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_predict_rejects_negative_sqft() -> None:
     response = client.post(
         "/predict",
@@ -325,3 +309,26 @@ def test_predict_rejects_negative_sqft() -> None:
 def test_docs_endpoint_accessible() -> None:
     response = client.get("/docs")
     assert response.status_code == 200
+
+
+def test_rate_limit_applies_to_rejected_api_keys() -> None:
+    """SECURITY.md scopes DoS out BECAUSE /predict is rate-limited, so the
+    limit has to hold for the requests an attacker actually sends.
+
+    It did not. `dependencies=[Depends(verify_api_key)]` on the route resolved
+    before slowapi's decorator, so a wrong key returned 403 without reaching
+    the counter -- measured, 15 wrong-key requests gave 15x 403 and zero 429,
+    leaving key brute-force unbounded behind a policy that relied on the
+    control. The check now runs inside the handler, after the limiter.
+    """
+    with reloaded_app(API_KEY="secret", PREDICT_RATE_LIMIT="3/minute") as m:
+        client = TestClient(m.app)
+        codes = [
+            client.post(
+                "/predict", json=VALID_PAYLOAD, headers={"X-API-Key": "wrong"}
+            ).status_code
+            for _ in range(8)
+        ]
+
+    assert 403 in codes, codes
+    assert 429 in codes, f"brute force unbounded: {codes}"

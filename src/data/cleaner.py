@@ -37,46 +37,68 @@ def deduplicate(df: pd.DataFrame) -> pd.DataFrame:
 
 def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
     """Impute missing values — borough-aware median for numerics."""
-    result = df.copy()
+    listings = df.copy()
 
-    # BEDS/BATH: median per borough (smarter than global median)
+    # BEDS/BATH: borough median — housing stock differs by borough, so a
+    # global median drags Manhattan units toward outer-borough counts.
     for col in ["BEDS", "BATH"]:
-        if col in result.columns and result[col].isna().any():
-            if "BOROUGH" in result.columns:
-                medians = result.groupby("BOROUGH")[col].transform("median")
-                result[col] = result[col].fillna(medians)
+        if col in listings.columns and listings[col].isna().any():
+            if "BOROUGH" in listings.columns:
+                medians = listings.groupby("BOROUGH")[col].transform("median")
+                listings[col] = listings[col].fillna(medians)
             # Fallback: global median for any remaining NaN
-            result[col] = result[col].fillna(result[col].median())
+            listings[col] = listings[col].fillna(listings[col].median())
             logger.info("Imputed %s: %d values filled", col, df[col].isna().sum())
 
     # PROPERTYSQFT: median (no borough split — less correlated)
-    if "PROPERTYSQFT" in result.columns and result["PROPERTYSQFT"].isna().any():
-        median_sqft = result["PROPERTYSQFT"].median()
-        result["PROPERTYSQFT"] = result["PROPERTYSQFT"].fillna(median_sqft)
+    if "PROPERTYSQFT" in listings.columns and listings["PROPERTYSQFT"].isna().any():
+        median_sqft = listings["PROPERTYSQFT"].median()
+        listings["PROPERTYSQFT"] = listings["PROPERTYSQFT"].fillna(median_sqft)
 
-    return result
+    return listings
 
 
-def cap_outliers(
+CAP_COLUMNS = ["PRICE", "PROPERTYSQFT", "BEDS", "BATH"]
+
+
+def fit_cap_bounds(
     df: pd.DataFrame,
     columns: list[str] | None = None,
     factor: float = 3.0,
-) -> pd.DataFrame:
-    """Cap outliers using IQR * factor method (cap, don't drop)."""
-    result = df.copy()
-    columns = columns or ["PRICE", "PROPERTYSQFT", "BEDS", "BATH"]
+) -> dict[str, tuple[float, float]]:
+    """Fit IQR cap bounds (Q1 - f*IQR, Q3 + f*IQR) per column.
 
+    Fit/apply are split so the bounds can be fitted on the TRAIN split only
+    and applied everywhere — fitting on pooled data lets val/test quantiles
+    shape the training target.
+
+    factor=3.0 is a measured trade-off, not an inherited default: on held-out
+    val over a common evaluation support, 1.5 scores better on MAE but
+    collapses ~11% of train listings onto one price against ~7% at 3.0, and a
+    model that cannot distinguish anything above ~$3M fails the requirement
+    for one listing in nine. Rerun scripts/measure_cap_factor.py to re-derive.
+    """
+    columns = columns or CAP_COLUMNS
+    bounds: dict[str, tuple[float, float]] = {}
     for col in columns:
-        if col not in result.columns:
+        if col not in df.columns:
             continue
-        q1 = result[col].quantile(0.25)
-        q3 = result[col].quantile(0.75)
+        q1 = df[col].quantile(0.25)
+        q3 = df[col].quantile(0.75)
         iqr = q3 - q1
-        lower = q1 - factor * iqr
-        upper = q3 + factor * iqr
-        capped = result[col].clip(lower=lower, upper=upper)
-        n_capped = (result[col] != capped).sum()
-        result[col] = capped
+        bounds[col] = (float(q1 - factor * iqr), float(q3 + factor * iqr))
+    return bounds
+
+
+def apply_cap(df: pd.DataFrame, bounds: dict[str, tuple[float, float]]) -> pd.DataFrame:
+    """Clip each column to its fitted bounds, keeping rows rather than dropping."""
+    listings = df.copy()
+    for col, (lower, upper) in bounds.items():
+        if col not in listings.columns:
+            continue
+        capped = listings[col].clip(lower=lower, upper=upper)
+        n_capped = (listings[col] != capped).sum()
+        listings[col] = capped
         if n_capped > 0:
             logger.info(
                 "Capped %d outliers in %s (range: %.0f - %.0f)",
@@ -85,17 +107,28 @@ def cap_outliers(
                 lower,
                 upper,
             )
+    return listings
 
-    return result
+
+def cap_outliers(
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
+    factor: float = 3.0,
+) -> pd.DataFrame:
+    """Fit-and-apply on the same frame — for callers whose evaluation data is
+    EXTERNAL (the benchmark trainer caps its whole Kaggle training set; its
+    test rows are NYC.gov sales). Training with an internal test split must
+    use fit_cap_bounds on train + apply_cap instead."""
+    return apply_cap(df, fit_cap_bounds(df, columns, factor))
 
 
 def normalize_text_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Lowercase + strip whitespace on all text columns."""
-    result = df.copy()
-    text_cols = result.select_dtypes(include=["object"]).columns
+    listings = df.copy()
+    text_cols = listings.select_dtypes(include=["object"]).columns
     for col in text_cols:
-        result[col] = result[col].str.strip().str.lower()
-    return result
+        listings[col] = listings[col].str.strip().str.lower()
+    return listings
 
 
 # An existing BOROUGH is consulted first so that re-running on already-derived
@@ -137,19 +170,19 @@ def derive_borough(df: pd.DataFrame) -> pd.DataFrame:
     a null whenever SUBLOCALITY held a neighbourhood name ("midtown east")
     rather than a county, and the dropna below would then discard the row.
     """
-    result = df.copy()
-    borough = pd.Series(pd.NA, index=result.index, dtype="object")
+    listings = df.copy()
+    borough = pd.Series(pd.NA, index=listings.index, dtype="object")
 
     for col in _BOROUGH_SOURCE_COLUMNS:
-        if col not in result.columns:
+        if col not in listings.columns:
             continue
         borough = borough.fillna(
-            result[col].astype(str).str.lower().str.strip().map(BOROUGH_MAP)
+            listings[col].astype(str).str.lower().str.strip().map(BOROUGH_MAP)
         )
 
-    result["BOROUGH"] = borough
-    logger.info("Derived BOROUGH for %d/%d rows", borough.notna().sum(), len(result))
-    return result
+    listings["BOROUGH"] = borough
+    logger.info("Derived BOROUGH for %d/%d rows", borough.notna().sum(), len(listings))
+    return listings
 
 
 def derive_zipcode(df: pd.DataFrame) -> pd.DataFrame:
@@ -163,37 +196,35 @@ def derive_zipcode(df: pd.DataFrame) -> pd.DataFrame:
     feature, so every unparseable row would silently share one encoded category
     and the model would learn a price for a ZIP that does not exist.
     """
-    result = df.copy()
-    source = "ZIPCODE" if "ZIPCODE" in result.columns else "STATE"
-    if source not in result.columns:
-        return result
+    listings = df.copy()
+    source = "ZIPCODE" if "ZIPCODE" in listings.columns else "STATE"
+    if source not in listings.columns:
+        return listings
 
-    result["ZIPCODE"] = result[source].astype(str).str.extract(r"(\d{5})")[0]
-    return result
+    listings["ZIPCODE"] = listings[source].astype(str).str.extract(r"(\d{5})")[0]
+    return listings
 
 
 def normalize_type(df: pd.DataFrame, col: str = "TYPE") -> pd.DataFrame:
     """Simplify property type labels."""
-    result = df.copy()
-    if col in result.columns:
+    listings = df.copy()
+    if col in listings.columns:
         # Remove trailing " for sale" etc.
-        result[col] = (
-            result[col]
+        listings[col] = (
+            listings[col]
             .str.replace(r"\s+for\s+sale$", "", regex=True)
             .str.replace(r"\s+for\s+rent$", "", regex=True)
             .str.strip()
         )
-    return result
+    return listings
 
 
 def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full cleaning pipeline end-to-end on a RAW frame.
 
-    Single-pass by design, and not idempotent: ``cap_outliers`` recomputes its
-    IQR bounds from whatever it is given, so cleaning an already-cleaned frame
-    tightens the cap around the previously capped distribution and drops
-    further rows. The input is the raw export; ``run_training.py`` is the only
-    caller and passes ``load_raw()``.
+    Row-wise cleaning only — dedup, derivation, imputation and validity
+    filters. Outlier capping is NOT done here: bounds are cross-row statistics
+    and are fitted by the caller on the appropriate rows (fit_cap_bounds).
     """
     missing = sorted(_REQUIRED_RAW_COLUMNS - set(df.columns))
     if missing:
@@ -221,22 +252,19 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     df = impute_missing(df)
 
-    # Drop 32-bit integer overflow sentinels before capping. The raw snapshot
-    # holds exactly one PRICE of 2,147,483,647 (2**31 - 1); the next highest
-    # real listing is 195,000,000, so this is a serialisation artefact rather
-    # than an expensive property. It is removed rather than capped because it
-    # is not a price at all -- unlike the genuine high-end listings the cap
-    # legitimately clips, which stay in the dataset at the cap value.
-    #
-    # The threshold catches this sentinel and anything above it; it is not a
-    # general implausible-price filter. A merely absurd value (say 2**31 - 2)
-    # would still be capped like any other outlier, which is the right
-    # treatment for a number that could be a price.
+    # Drop the 32-bit integer overflow sentinel. The raw snapshot holds exactly
+    # one PRICE of 2,147,483,647 (2**31 - 1); the next highest real listing is
+    # 195,000,000, so this is a serialisation artefact, not a price, and is
+    # removed rather than left for the downstream IQR cap to clip. The threshold
+    # catches this sentinel and anything above it; a merely absurd value (say
+    # 2**31 - 2) is left for that cap, the right treatment for a possible price.
     before = len(df)
     df = df[df["PRICE"] < INT32_MAX]
     logger.info("Dropped %d rows with overflow-sentinel PRICE", before - len(df))
 
-    df = cap_outliers(df)
+    # No capping here. Cap bounds are cross-row statistics, so they are fitted
+    # on the TRAIN split (run_training) or, for the benchmark whose evaluation
+    # rows are external, on its own whole training set.
 
     # Drop rows with non-positive price or sqft (invalid data)
     before = len(df)

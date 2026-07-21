@@ -8,28 +8,14 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
 
-from src.config import MODELS_DIR, PRICE_ZONE_LABELS
-from src.models.pipelines import (
-    build_classification_pipeline,
-    build_regression_pipeline,
-)
+from src.models.pipelines import build_regression_pipeline
 
 
 @pytest.fixture
 def mock_models(tmp_path: Path) -> Path:
-    """Create and save minimal mock models for testing prediction.
-
-    The mock label encoder is fitted on the zone STRINGS, so its class
-    order is ALPHABETICAL ('High', 'Low', 'Medium', 'Very High') — exactly
-    like the shipped artefact and deliberately DIFFERENT from the semantic
-    ``PRICE_ZONE_LABELS`` config order. Any decode path that falls back to
-    the config order mislabels 3 of the 4 classes and fails these tests;
-    a mock whose orders coincide would leave the suite structurally blind
-    to that bug (which is how it shipped the first time).
-    """
+    """The one model that ships: a regressor over the shipped feature frame."""
     n = 50
     rng = np.random.RandomState(42)
     features = pd.DataFrame(
@@ -39,34 +25,16 @@ def mock_models(tmp_path: Path) -> Path:
             "PROPERTYSQFT": rng.uniform(400, 4000, n),
             "TOTAL_ROOMS": rng.uniform(2, 10, n),
             "BED_BATH_RATIO": rng.uniform(0.5, 3.0, n),
-            "LOG_SQFT": rng.uniform(6, 9, n),
             "ROOMS_PER_SQFT": rng.uniform(0.001, 0.01, n),
             "DIST_MANHATTAN_CENTER": rng.uniform(0, 30, n),
             "DIST_CENTRAL_PARK": rng.uniform(0, 30, n),
-            "DIST_NEAREST_SUBWAY": rng.uniform(0, 5, n),
             "BOROUGH": rng.choice(["manhattan", "brooklyn", "queens"], n),
             "TYPE": rng.choice(["condo", "house", "co-op"], n),
-            "PROPERTY_CATEGORY": rng.choice(["residential", "commercial"], n),
             "ZIPCODE": rng.choice(["10022", "11217", "10001"], n),
             "SUBLOCALITY": rng.choice(["midtown", "fort greene", "chelsea"], n),
         }
     )
-    le = LabelEncoder()
-    le.fit(PRICE_ZONE_LABELS)  # classes_ sorts alphabetically != config order
-    assert list(le.classes_) != PRICE_ZONE_LABELS
-    joblib.dump(le, tmp_path / "label_encoder.joblib")
-
-    y_cls = rng.randint(0, 4, n)
     y_reg = rng.uniform(11, 15, n)
-
-    clf = build_classification_pipeline(
-        RandomForestClassifier(n_estimators=10, random_state=42)
-    )
-    clf.fit(features, y_cls)
-    joblib.dump(clf, tmp_path / "price_zone_best.joblib")
-    # The training frame doubles as a multi-class prediction batch in the
-    # decode-order regression test below.
-    joblib.dump(features, tmp_path / "train_features.joblib")
 
     reg = build_regression_pipeline(
         RandomForestRegressor(n_estimators=10, random_state=42)
@@ -87,14 +55,11 @@ def _test_row() -> pd.DataFrame:
                 "PROPERTYSQFT": 1200.0,
                 "TOTAL_ROOMS": 4.0,
                 "BED_BATH_RATIO": 1.0,
-                "LOG_SQFT": 7.09,
                 "ROOMS_PER_SQFT": 0.003,
                 "DIST_MANHATTAN_CENTER": 0.5,
                 "DIST_CENTRAL_PARK": 3.0,
-                "DIST_NEAREST_SUBWAY": 0.5,
                 "BOROUGH": "manhattan",
                 "TYPE": "condo",
-                "PROPERTY_CATEGORY": "residential",
                 "ZIPCODE": "10022",
                 "SUBLOCALITY": "midtown",
             }
@@ -103,56 +68,19 @@ def _test_row() -> pd.DataFrame:
 
 
 def test_predict_price_zone(mock_models: Path, _test_row: pd.DataFrame) -> None:
+    """The zone is the predicted price, bucketed through the shared decode."""
     import src.models.predict as pred_mod
+    from src.models.decode import zone_for_price
 
-    pred_mod._classifier_cache = None
-    pred_mod._label_encoder_cache = None
-    # Load from mock path
-    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
-    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
+    pred_mod._regressor_cache = None
+    pred_mod.get_regressor(mock_models / "price_regressor_best.joblib")
+
     results = pred_mod.predict_price_zone(_test_row)
     assert isinstance(results, list) and len(results) == 1
-    result = results[0]
-    assert "price_zone" in result
-    assert "confidence" in result
-    assert "probabilities" in result
-    # Correctness, not membership: the decoded label must be the encoder's
-    # name for the predicted class index (a bare membership check in
-    # PRICE_ZONE_LABELS stayed green while 3 of 4 labels decoded wrong).
-    expected = le.inverse_transform(clf.predict(_test_row))[0]
-    assert result["price_zone"] == expected
-    assert 0 <= result["confidence"] <= 1
-
-
-def test_predict_decodes_via_encoder_classes_not_config_order(
-    mock_models: Path,
-) -> None:
-    """Regression: serving decode order must equal ``label_encoder.classes_``.
-
-    The mock encoder's alphabetical order differs from the config order, so
-    a decode through ``PRICE_ZONE_LABELS`` mislabels every prediction except
-    'Very High'. Asserts exact label equality across a batch spanning
-    multiple predicted classes, and that the probabilities dict is keyed in
-    encoder-class order.
-    """
-    import src.models.predict as pred_mod
-
-    pred_mod._classifier_cache = None
-    pred_mod._label_encoder_cache = None
-    clf = pred_mod.get_classifier(mock_models / "price_zone_best.joblib")
-    le = pred_mod.get_label_encoder(mock_models / "label_encoder.joblib")
-
-    # Re-use the training frame as the batch — the overfit mock RF predicts
-    # a spread of classes on it, so the check cannot pass vacuously.
-    batch = joblib.load(mock_models / "train_features.joblib")
-    predicted_idx = clf.predict(batch)
-    assert len(set(predicted_idx.tolist())) >= 2, "batch must span classes"
-
-    results = pred_mod.predict_price_zone(batch)
-    expected_labels = le.inverse_transform(predicted_idx)
-    for result, expected in zip(results, expected_labels, strict=True):
-        assert result["price_zone"] == expected
-        assert list(result["probabilities"]) == list(le.classes_)
+    # Correctness, not membership: the zone must be the bucket the served
+    # price falls in, not merely a valid label.
+    price = pred_mod.predict_price(_test_row)[0]["predicted_price"]
+    assert results[0]["price_zone"] == zone_for_price(price)
 
 
 def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
@@ -174,6 +102,46 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     # a scaling bug, not a listing.
     assert 250 < result["predicted_price"] < 45_000_000
     assert result["price_range"]["low"] < result["price_range"]["high"]
+
+
+def test_served_band_reproduces_from_the_rounded_price(
+    _test_row: pd.DataFrame, monkeypatch
+) -> None:
+    """low/high must be the displayed price times the multipliers, not the
+    unrounded prediction.
+
+    The prediction is pinned so the difference crosses a $100 boundary: an
+    unrounded price near $1,000,049 (log1p) rounds to $1,000,000, and at the
+    high multiplier the two bases round to endpoints $100 apart. A test whose
+    price happens not to straddle a boundary passes on the bug — the exact
+    knife-edge this file has been burned by before."""
+    import src.models.predict as pred_mod
+
+    unrounded = 1_000_049.0
+    interval = {
+        "low_multiplier": 0.6108,
+        "high_multiplier": 1.5368,
+        "target_coverage": 0.8,
+    }
+
+    class _Stub:
+        def predict(self, X: pd.DataFrame) -> np.ndarray:
+            return np.full(len(X), np.log1p(unrounded))
+
+    monkeypatch.setattr(pred_mod, "_regressor_cache", _Stub())
+    monkeypatch.setattr(pred_mod, "_price_interval", interval)
+
+    result = pred_mod.predict_price(_test_row)[0]
+    shown = result["predicted_price"]
+    assert shown == 1_000_000  # rounded to $100
+
+    assert result["price_range"]["high"] == round(
+        shown * interval["high_multiplier"], -2
+    )
+    # And this is provably NOT the unrounded band — the defect being pinned.
+    assert result["price_range"]["high"] != round(
+        unrounded * interval["high_multiplier"], -2
+    )
 
 
 def test_predict_returns_one_entry_per_row(
@@ -217,6 +185,37 @@ def test_version_mismatch_is_refused(tmp_path: Path, monkeypatch) -> None:
                 current_sklearn_version="9.9.9",
                 original_sklearn_version="1.0.0",
             ),
+            stacklevel=2,
+        )
+        return object()
+
+    monkeypatch.setattr(pred_mod.joblib, "load", _fake_load)
+    with pytest.raises(pred_mod.ModelVersionError, match="refusing to load"):
+        pred_mod._load_model(artefact)
+
+
+def test_xgboost_version_mismatch_is_refused(tmp_path: Path, monkeypatch) -> None:
+    """XGBoost's cross-version load warning must be refused like sklearn's.
+
+    The first hardening pass promoted only InconsistentVersionWarning;
+    a booster serialized by another xgboost version warned and served on.
+    Simulated with the UserWarning xgboost emits at unpickle time (verbatim
+    first line, captured from a real 2.1.4-artefact load under 3.2.0).
+    """
+    import warnings
+
+    import src.models.predict as pred_mod
+
+    artefact = tmp_path / "model.joblib"
+    artefact.write_bytes(b"placeholder")
+
+    def _fake_load(path):
+        warnings.warn(
+            "[00:00:00] WARNING: error_msg.h:83: If you are loading a "
+            "serialized model (like pickle in Python, RDS in R) or\n"
+            "configuration generated by an older version of XGBoost, please "
+            "export the model by calling `Booster.save_model`.",
+            UserWarning,
             stacklevel=2,
         )
         return object()

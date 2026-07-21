@@ -1,5 +1,5 @@
 -r requirements.txt
--r requirements-train.txt  # adds torch, catboost, optuna, shap, mlflow, imbalanced-learn
+-r requirements-train.txt  # adds shap, mlflow
 
 # Testing
 pytest>=8.2

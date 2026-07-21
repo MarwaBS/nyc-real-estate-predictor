@@ -12,8 +12,7 @@ Three environment variables drive the API's security posture:
 
 The `validate_cors_not_wildcard_in_prod` model-validator is the critical
 piece: when `ENV=="prod"`, an empty or wildcard `ALLOWED_ORIGINS` raises
-at startup rather than silently accepting any Origin header. Mirrors the
-ResumeForge M3 fix.
+at startup rather than silently accepting any Origin header.
 """
 
 from __future__ import annotations
@@ -42,10 +41,7 @@ class APISettings(BaseSettings):
             "comparison). If empty, /predict is open (dev/portfolio mode)."
         ),
     )
-    # Renamed from daily_rate_limit: the name promised a daily quota while
-    # the value was per-minute, so "60/minute" advertised a cap of 60 while
-    # permitting 86,400 requests a day. The window now lives in the value,
-    # where a reader can see it.
+    # The window lives in the value, where a reader can see it.
     predict_rate_limit: str = Field(
         default="60/minute",
         description=(

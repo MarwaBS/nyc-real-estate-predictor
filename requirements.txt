@@ -13,7 +13,7 @@ numpy==1.26.4
 scikit-learn==1.8.0  # MUST match the version models were trained on (1.5.2 silently corrupts predictions)
 scipy==1.13.1
 
-# Gradient Boosting (inference only — primary is XGBoost per ADR-002)
+# Gradient boosting candidates — compared on val in run_training.py, not shipped
 xgboost==2.1.4
 lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 

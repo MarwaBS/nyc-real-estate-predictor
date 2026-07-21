@@ -1,10 +1,5 @@
-"""DATA LEAKAGE PREVENTION TESTS.
-
-These tests are the most critical in the suite. They ensure that
-PRICE_PER_SQFT (derived from the target variable PRICE) is never
-used as a training feature. The R2=0.997 in previous experiments
-was fake because of this leakage.
-"""
+"""PRICE_PER_SQFT is derived from the target PRICE; used as a feature it
+produced a fake R2=0.997 (ADR-001). These tests keep it out of training."""
 
 from __future__ import annotations
 

@@ -12,8 +12,10 @@ from src.data.cleaner import (
     deduplicate,
     derive_borough,
     derive_zipcode,
+    fit_cap_bounds,
     impute_missing,
     normalize_text_columns,
+    normalize_type,
 )
 
 
@@ -91,14 +93,12 @@ def test_derive_zipcode_leaves_unparseable_rows_null_not_sentinel() -> None:
     assert pd.isna(result["ZIPCODE"].iloc[1])
 
 
-def test_clean_pipeline_drops_the_overflow_sentinel_rather_than_capping_it(
+def test_clean_pipeline_drops_the_overflow_sentinel(
     raw_shaped_data: pd.DataFrame,
 ) -> None:
-    """2**31-1 must leave the dataset, not survive as a capped listing.
-
-    cap_outliers clips to the IQR bound, so a sentinel that reaches it becomes
-    an ordinary-looking listing at the cap instead of being removed.
-    """
+    """2**31-1 must leave the dataset. It is a serialisation artefact, not a
+    price; the downstream train-fitted cap would otherwise clip it to a
+    plausible-looking listing instead of removing it."""
     df = raw_shaped_data.copy()
     df.loc[0, "PRICE"] = 2_147_483_647
     result = clean_pipeline(df)
@@ -144,6 +144,28 @@ def test_cap_outliers_clips_extreme_values() -> None:
     df = pd.DataFrame({"PRICE": [100, 200, 300, 400, 100_000_000]})
     result = cap_outliers(df, columns=["PRICE"], factor=3.0)
     assert result["PRICE"].max() < 100_000_000
+
+
+def test_fit_cap_bounds_defaults_to_the_factor_the_measurement_chose() -> None:
+    """3.0 is a measured trade-off (scripts/measure_cap_factor.py); the shipped
+    path (run_protocol) calls fit_cap_bounds without factor=, so the DEFAULT is
+    what shapes the training distribution — and must be pinned exactly."""
+    prices = pd.Series([100.0, 200.0, 300.0, 400.0, 500.0, 10_000_000.0])
+    q1, q3 = prices.quantile(0.25), prices.quantile(0.75)
+
+    bounds = fit_cap_bounds(pd.DataFrame({"PRICE": prices}), columns=["PRICE"])
+
+    assert bounds["PRICE"][1] == pytest.approx(q3 + 3.0 * (q3 - q1))
+    assert bounds["PRICE"][0] == pytest.approx(q1 - 3.0 * (q3 - q1))
+
+
+def test_normalize_type_strips_the_listing_suffix() -> None:
+    """Raw TYPE values are "condo for sale"-shaped while the API sends bare
+    "condo" — without the strip, training and serving one-hot different
+    categories for the same property type."""
+    df = pd.DataFrame({"TYPE": ["condo for sale", "house for rent", "co-op"]})
+    result = normalize_type(df)
+    assert list(result["TYPE"]) == ["condo", "house", "co-op"]
 
 
 def test_normalize_text_lowercases() -> None:

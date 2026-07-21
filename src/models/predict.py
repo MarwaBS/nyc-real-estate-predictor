@@ -22,51 +22,54 @@ import pandas as pd
 from sklearn.exceptions import InconsistentVersionWarning
 
 from src.config import MODELS_DIR
+from src.models.decode import zone_for_price
 
 logger = logging.getLogger(__name__)
 
-_classifier_cache: Any = None
 _regressor_cache: Any = None
-_label_encoder_cache: Any = None
+_price_interval: dict[str, Any] | None = None
 
 
 class ModelVersionError(RuntimeError):
-    """A model artefact was produced by a different scikit-learn version.
+    """A model artefact was produced by a different library version.
 
     Raised instead of serving potentially-corrupt predictions. Retrain the
-    artefact under the pinned scikit-learn version (requirements.txt) or
-    align the runtime to the version that trained it.
+    artefact under the pinned versions (requirements.txt) or align the
+    runtime to the versions that trained it.
     """
+
+
+# XGBoost has no InconsistentVersionWarning: unpickling a booster serialized
+# by another version emits a plain UserWarning starting with this text. The
+# trained-with version is not recoverable post-unpickle, so matching the
+# warning is the only hook; if upstream rewords it the guard degrades to a
+# warning again — the pinned CI never emits it either way.
+_XGB_CROSS_VERSION = r".*If you are loading a serialized model"
 
 
 def _load_model(path: Path) -> Any:
     """Load a joblib-serialized model/pipeline, refusing version mismatches.
 
-    ``InconsistentVersionWarning`` is promoted to an error: scikit-learn
-    emits it when unpickling an estimator trained under another version,
-    which is exactly the silent-corruption precondition documented in the
-    MODEL_CARD postmortem.
+    scikit-learn's ``InconsistentVersionWarning`` and XGBoost's serialized-
+    model warning are both promoted to errors: each fires when unpickling an
+    estimator trained under another version, which is exactly the
+    silent-corruption precondition documented in the MODEL_CARD postmortem.
     """
     logger.info("Loading model from %s", path)
     with warnings.catch_warnings():
         warnings.simplefilter("error", InconsistentVersionWarning)
+        warnings.filterwarnings(
+            "error", category=UserWarning, message=_XGB_CROSS_VERSION
+        )
         try:
             return joblib.load(path)
-        except InconsistentVersionWarning as exc:
+        except (InconsistentVersionWarning, UserWarning) as exc:
             raise ModelVersionError(
                 f"refusing to load {path.name}: {exc}. The artefact must be "
-                f"retrained under the pinned scikit-learn version "
+                f"retrained under the pinned library versions "
                 f"(see requirements.txt) — loading across versions can "
                 f"silently corrupt predictions."
             ) from exc
-
-
-def get_classifier(path: Path | None = None) -> Any:
-    """Load the best classifier (cached after first call)."""
-    global _classifier_cache
-    if _classifier_cache is None:
-        _classifier_cache = _load_model(path or MODELS_DIR / "price_zone_best.joblib")
-    return _classifier_cache
 
 
 def get_regressor(path: Path | None = None) -> Any:
@@ -79,37 +82,11 @@ def get_regressor(path: Path | None = None) -> Any:
     return _regressor_cache
 
 
-def get_label_encoder(path: Path | None = None) -> Any:
-    """Load the label encoder fitted at training time (cached after first call).
-
-    This is the single source of truth for decoding class indices into zone
-    names: the classifier was fit on ``LabelEncoder``-transformed targets, so
-    class index ``i`` means ``label_encoder.classes_[i]`` — an ALPHABETICAL
-    ordering ('High', 'Low', 'Medium', 'Very High'), not the semantic
-    ``PRICE_ZONE_LABELS`` config order. Decoding through any other list is
-    exactly the bug that served "Low" for luxury Manhattan condos.
-    """
-    global _label_encoder_cache
-    if _label_encoder_cache is None:
-        _label_encoder_cache = _load_model(path or MODELS_DIR / "label_encoder.joblib")
-    return _label_encoder_cache
-
-
-def get_zone_classes() -> list[str]:
-    """Zone names in the classifier's class-index order (encoder ``classes_``)."""
-    return [str(c) for c in get_label_encoder().classes_]
-
-
-_price_interval: dict[str, Any] | None = None
-
-
 def get_price_interval() -> dict[str, Any]:
     """The calibrated price-interval multipliers (cached after first call).
 
     Load-bearing, so a missing artefact raises rather than falling back to a
-    guess: the previous behaviour was a hardcoded +/-15% that contained the
-    true price 32% of the time, and silently substituting any default here
-    would reintroduce an interval nothing measured.
+    guess that would serve an interval nothing measured.
     """
     global _price_interval
     if _price_interval is None:
@@ -126,8 +103,8 @@ def get_price_interval() -> dict[str, Any]:
 def price_range(price: float) -> dict[str, float]:
     """The interval served alongside ``price``, from the calibrated artefact.
 
-    One implementation for every surface (API, predict module, dashboard) so
-    the three cannot drift — they previously each hardcoded the same literal.
+    One implementation for the API, predict module and dashboard, so the three
+    cannot drift.
     """
     interval = get_price_interval()
     return {
@@ -137,31 +114,20 @@ def price_range(price: float) -> dict[str, float]:
 
 
 def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """Predict price zone + probabilities for one or more properties.
+    """Zone per row, derived from the predicted price.
 
-    Always returns a list with one entry per input row — callers index
-    ``[0]`` for the single-row case. (The historical single-row-returns-
-    a-bare-dict shape made every caller branch on type.)
+    There is no classifier. The zone is a bucketing of the price the regressor
+    already predicts, so a second model would have been fitting the same
+    features to the same signal -- and could disagree with the served price on
+    the same listing. Training scores zones through this same decode, so the
+    published macro-F1 describes what a caller actually receives.
+
+    No ``probabilities`` key: a bucketed point estimate has no class posterior,
+    and inventing one from the interval would be a confidence number nothing
+    measured.
     """
-    clf = get_classifier()
-    proba = clf.predict_proba(features)
-    predicted_class = clf.predict(features)
-    # Decode through the SHIPPED label encoder, never the config list: the
-    # model's class indices follow le.classes_ (alphabetical), and the two
-    # orders disagree for 3 of the 4 zones.
-    classes = get_zone_classes()
-
-    return [
-        {
-            "price_zone": classes[int(zone_idx)],
-            "confidence": round(float(row_proba.max()), 3),
-            "probabilities": {
-                label: round(float(p), 3)
-                for label, p in zip(classes, row_proba, strict=True)
-            },
-        }
-        for zone_idx, row_proba in zip(predicted_class, proba, strict=True)
-    ]
+    prices = np.expm1(np.asarray(get_regressor().predict(features), dtype=float))
+    return [{"price_zone": zone_for_price(float(p))} for p in prices]
 
 
 def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
@@ -173,10 +139,10 @@ def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
     reg = get_regressor()
     prices = np.expm1(np.asarray(reg.predict(features), dtype=float))
 
-    return [
-        {
-            "predicted_price": round(price, -2),  # Round to nearest $100
-            "price_range": price_range(price),
-        }
-        for price in prices.tolist()
-    ]
+    # Derive the band from the rounded price, so low/high reproduce from the
+    # figure shown beside them. They were multiplied from the unrounded price.
+    out = []
+    for price in prices.tolist():
+        rounded = round(price, -2)
+        out.append({"predicted_price": rounded, "price_range": price_range(rounded)})
+    return out
