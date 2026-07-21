@@ -76,6 +76,14 @@ def check(mutation: Mutation) -> tuple[bool, str]:
         result = _run_gate(mutation)
     finally:
         target.write_bytes(original.encode("utf-8"))
+        # Drop the module's compiled cache: the gate subprocess compiles a
+        # .pyc from the MUTATED source, and when the restore lands within the
+        # same mtime second Python considers that .pyc fresh — later runs then
+        # import the mutation while the source reads clean.
+        cache = target.parent / "__pycache__"
+        if cache.exists():
+            for pyc in cache.glob(f"{target.stem}.*.pyc"):
+                pyc.unlink(missing_ok=True)
 
     tail = (result.stdout.strip().splitlines() or [""])[-1]
 
