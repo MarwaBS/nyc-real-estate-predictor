@@ -15,6 +15,8 @@ short_description: NYC price prediction + derived zones, one XGBoost model
 [![XGBoost](https://img.shields.io/badge/ML-XGBoost-orange)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/MODEL_CARD.md)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://github.com/MarwaBS/nyc-real-estate-predictor/blob/main/api/main.py)
 
+**Shipped model** — `XGBoost` — matched against the trained artefact by a CI gate.
+
 Live demo of an end-to-end ML service for NYC real estate. Pick a property profile in the sidebar and the dashboard returns a **price zone** (Low / Medium / High / Very High) plus an **estimated price** with a range calibrated to contain 80% of listings (measured 77.9% on the held-out test split).
 
 **Two processes, one container:**

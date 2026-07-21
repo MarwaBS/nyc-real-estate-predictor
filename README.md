@@ -5,6 +5,8 @@
 
 **Predict NYC residential prices and derive their price zones with one XGBoost regressor over 4,500+ listings with geospatial features.**
 
+**Shipped model** — `XGBoost` — the trained artefact in [`reports/training_metrics.json`](reports/training_metrics.json) is the single source of truth; a CI gate fails if this field disagrees with it.
+
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
 > **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
