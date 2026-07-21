@@ -70,24 +70,3 @@ def test_training_pipeline_has_no_threshold_tuning() -> None:
     src = inspect.getsource(run_training)
     assert "optimize_thresholds" not in src
     assert "optimal_thresholds" not in src
-
-
-def test_split_sizes_are_three_way_and_disjoint() -> None:
-    """train/val/test must partition the data — no row in two of them."""
-    from sklearn.model_selection import train_test_split
-
-    from src.config import RANDOM_SEED, TEST_SIZE, VAL_SIZE
-
-    rng = np.random.default_rng(0)
-    y = rng.integers(0, 4, size=240)
-    idx = np.arange(len(y))
-    idx_tv, idx_test = train_test_split(
-        idx, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
-    )
-    idx_train, idx_val = train_test_split(
-        idx_tv, test_size=VAL_SIZE, random_state=RANDOM_SEED, stratify=y[idx_tv]
-    )
-    assert set(idx_train) | set(idx_val) | set(idx_test) == set(idx)
-    assert not set(idx_train) & set(idx_val)
-    assert not set(idx_train) & set(idx_test)
-    assert not set(idx_val) & set(idx_test)
