@@ -509,7 +509,7 @@ nyc-real-estate-predictor/
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (78% coverage gate; measured 87.86% over src/ + benchmarks/ + api/ + run_training.py) |
+| Testing | pytest (78% coverage gate; CI measures 88.27% over src/ + benchmarks/ + api/ + run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
