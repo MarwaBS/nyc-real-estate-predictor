@@ -182,4 +182,11 @@ MUTATIONS: list[Mutation] = [
         new="",
         gate="tests/test_cleaned_dataset_provenance.py",
     ),
+    Mutation(
+        name="xgboost-version-guard-removed",
+        path="src/models/predict.py",
+        old='"error", category=UserWarning, message=_XGB_CROSS_VERSION',
+        new='"ignore", category=UserWarning, message=_XGB_CROSS_VERSION',
+        gate="tests/test_predict.py::test_xgboost_version_mismatch_is_refused",
+    ),
 ]

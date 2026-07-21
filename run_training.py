@@ -294,7 +294,7 @@ def train_regression(
     Returns the selected model's record (name, metrics) for the committed
     training-metrics artefact.
     """
-    logger.info("STEP 4: Training regression models")
+    logger.info("Training regression models")
 
     from lightgbm import LGBMRegressor
     from sklearn.ensemble import RandomForestRegressor
@@ -508,9 +508,12 @@ def calibrate_price_interval(
         return actual / predicted
 
     ratios = {name: ratio(X, y) for name, (X, y) in splits.items()}
-    # Split-conformal finite-sample correction: the ceil((n+1)(1-alpha))-th
-    # order statistic, which covers a fresh draw where the plain empirical
-    # quantile under-covers by construction.
+    # Split-conformal finite-sample correction: quantile level lifted to
+    # ceil((n+1)(1-alpha))/n, where the plain empirical level under-covers a
+    # fresh draw by construction. np.quantile interpolates linearly rather
+    # than taking the exact order statistic, and the lower tail is the
+    # complement of the upper — both approximations are accepted because the
+    # measured coverage is gated within 2 SE of target by the test suite.
     n_cal = len(ratios[calibrate_on])
     corrected_hi = min(math.ceil((n_cal + 1) * hi_q) / n_cal, 1.0)
     corrected_lo = max(1.0 - corrected_hi, 0.0)
@@ -641,7 +644,7 @@ def main() -> None:
     # after this point sees a tree this script dirtied.
     tree_clean_at_start = _git_working_tree_clean()
 
-    # 1-4. Clean, then run the train-split-fitted protocol once with the
+    # Clean, then run the train-split-fitted protocol once with the
     # shipped seed. A dedicated classifier was measured ~1.3 SE above the
     # bucketed zones and is not shipped: two models can disagree on one
     # response with nothing to catch it.
@@ -658,7 +661,7 @@ def main() -> None:
     X_test, y_price_test = result["splits"]["test"]
     X_train = result["splits"]["train"][0]
 
-    # 5b. Calibrate the served price interval on val, report coverage on test.
+    # Calibrate the served price interval on val, report coverage on test.
     # Committed as an artefact rather than hardcoded so a retrain that shifts
     # the residuals rewrites it in step with the model.
     interval = calibrate_price_interval(
@@ -678,8 +681,7 @@ def main() -> None:
         result["baseline"],
     )
 
-    # 6. SHAP over the single model.
-    logger.info("STEP 5: SHAP explainability")
+    logger.info("SHAP explainability")
     try:
         preprocessor = best_reg.named_steps["preprocessor"]
         X_test_transformed = preprocessor.transform(X_test)
@@ -698,7 +700,7 @@ def main() -> None:
     except Exception as exc:
         logger.warning("SHAP analysis failed (non-critical): %s", exc)
 
-    # 7. Persist the committed evidence artefact behind the README numbers.
+    # Persist the committed evidence artefact behind the README numbers.
     _write_training_metrics(
         tree_clean_at_start,
         clf_record,
@@ -711,8 +713,7 @@ def main() -> None:
         baseline=result["baseline"],
     )
 
-    # 9. Save drift baseline
-    logger.info("STEP 8: Drift baseline")
+    logger.info("Drift baseline")
     try:
         from src.models.drift import save_baseline
 
@@ -721,10 +722,10 @@ def main() -> None:
     except Exception as exc:
         logger.warning("Drift baseline failed (non-critical): %s", exc)
 
-    # 10. Regenerate the artefact manifest LAST, over the files this run just
+    # Regenerate the artefact manifest LAST, over the files this run just
     # wrote, so the committed hashes always have a producer. JSON is hashed
     # LF-normalised, matching tests/test_artifact_manifest.py.
-    logger.info("STEP 9: Artefact manifest")
+    logger.info("Artefact manifest")
     manifest_lines = []
     for name in sorted(
         (

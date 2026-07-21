@@ -39,7 +39,8 @@ def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
     """Impute missing values — borough-aware median for numerics."""
     listings = df.copy()
 
-    # BEDS/BATH: median per borough (smarter than global median)
+    # BEDS/BATH: borough median — housing stock differs by borough, so a
+    # global median drags Manhattan units toward outer-borough counts.
     for col in ["BEDS", "BATH"]:
         if col in listings.columns and listings[col].isna().any():
             if "BOROUGH" in listings.columns:

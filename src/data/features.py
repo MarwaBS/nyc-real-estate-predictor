@@ -20,7 +20,6 @@ from src.config import (
     PRICE_ZONE_LABELS,
 )
 from src.utils.geo import add_distance_features
-from src.utils.validation import assert_no_leakage
 
 logger = logging.getLogger(__name__)
 
@@ -113,20 +112,10 @@ def apply_top_categories(df: pd.DataFrame, top: dict[str, set]) -> pd.DataFrame:
     return listings
 
 
-def cap_categorical_cardinality(
-    df: pd.DataFrame,
-    columns: list[str],
-    max_categories: int = 50,
-) -> pd.DataFrame:
-    """Fit-and-apply on the same frame — for pooled contexts (EDA notebook).
-    Training fits the vocabulary on train and applies it everywhere."""
-    return apply_top_categories(df, fit_top_categories(df, columns, max_categories))
-
-
 def learned_capped_categories(pipeline: object) -> dict[str, set]:
     """Categories a *fitted* pipeline learned, per column — but only for columns
     that learned an explicit ``"other"`` bucket (i.e. were frequency-capped at
-    train time by :func:`cap_categorical_cardinality`).
+    train time by :func:`fit_top_categories`).
 
     Serving uses this to map any value outside the learned set to ``"other"`` so a
     rare/unseen category gets the trained ``"other"`` encoding instead of the
@@ -168,7 +157,7 @@ def learned_capped_categories(pipeline: object) -> dict[str, set]:
 
 def apply_serving_cap(df: pd.DataFrame, known: dict[str, set]) -> pd.DataFrame:
     """Map any value outside its learned category set to ``"other"`` for each
-    capped column — the inference-time mirror of :func:`cap_categorical_cardinality`,
+    capped column — the inference-time mirror of :func:`apply_top_categories`,
     keyed off the categories the fitted model actually learned (see
     :func:`learned_capped_categories`)."""
     listings = df.copy()
@@ -176,22 +165,3 @@ def apply_serving_cap(df: pd.DataFrame, known: dict[str, set]) -> pd.DataFrame:
         if col in listings.columns:
             listings[col] = listings[col].where(listings[col].isin(allowed), "other")
     return listings
-
-
-def feature_pipeline(df: pd.DataFrame) -> pd.DataFrame:
-    """Run the full feature engineering pipeline."""
-    logger.info("Starting feature pipeline on %d rows", len(df))
-
-    df = add_numeric_features(df)
-    df = add_geospatial_features(df)
-    df = add_target_variables(df)
-    df = cap_categorical_cardinality(df, columns=["SUBLOCALITY", "TYPE", "ZIPCODE"])
-
-    # SAFETY CHECK: assert no leaky features
-    feature_cols = [
-        c for c in df.columns if c not in {"PRICE", "LOG_PRICE", "PRICE_ZONE"}
-    ]
-    assert_no_leakage(feature_cols)
-
-    logger.info("Feature pipeline complete: %d rows x %d cols", *df.shape)
-    return df

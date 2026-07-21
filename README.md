@@ -48,7 +48,7 @@ XGBoost wins selection in 16/20 runs (candidates Random Forest 3, LightGBM 1) �
 rows the candidate ranking is seed-sensitive, which is exactly why the
 spread is published next to the point estimates.
 
-Split: 2,896 train / 724 val / 906 test, stratified on price zone. Losing
+Split: 2,896 train / 724 val / 906 test, stratified on pooled price quartiles (a balancing key only — served zone labels come from train-derived cut-points). Losing
 candidates show "not scored" because they never touch test — scoring them
 there and then quoting the winner's number is how a selected maximum gets
 published as a hold-out estimate. Artifacts produced under the pinned
@@ -509,7 +509,7 @@ nyc-real-estate-predictor/
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (78% coverage gate; measured 87.49% over src/ + benchmarks/ + api/ + run_training.py) |
+| Testing | pytest (78% coverage gate; measured 87.86% over src/ + benchmarks/ + api/ + run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

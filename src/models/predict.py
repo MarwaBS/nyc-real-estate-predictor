@@ -31,31 +31,42 @@ _price_interval: dict[str, Any] | None = None
 
 
 class ModelVersionError(RuntimeError):
-    """A model artefact was produced by a different scikit-learn version.
+    """A model artefact was produced by a different library version.
 
     Raised instead of serving potentially-corrupt predictions. Retrain the
-    artefact under the pinned scikit-learn version (requirements.txt) or
-    align the runtime to the version that trained it.
+    artefact under the pinned versions (requirements.txt) or align the
+    runtime to the versions that trained it.
     """
+
+
+# XGBoost has no InconsistentVersionWarning: unpickling a booster serialized
+# by another version emits a plain UserWarning starting with this text. The
+# trained-with version is not recoverable post-unpickle, so matching the
+# warning is the only hook; if upstream rewords it the guard degrades to a
+# warning again — the pinned CI never emits it either way.
+_XGB_CROSS_VERSION = r".*If you are loading a serialized model"
 
 
 def _load_model(path: Path) -> Any:
     """Load a joblib-serialized model/pipeline, refusing version mismatches.
 
-    ``InconsistentVersionWarning`` is promoted to an error: scikit-learn
-    emits it when unpickling an estimator trained under another version,
-    which is exactly the silent-corruption precondition documented in the
-    MODEL_CARD postmortem.
+    scikit-learn's ``InconsistentVersionWarning`` and XGBoost's serialized-
+    model warning are both promoted to errors: each fires when unpickling an
+    estimator trained under another version, which is exactly the
+    silent-corruption precondition documented in the MODEL_CARD postmortem.
     """
     logger.info("Loading model from %s", path)
     with warnings.catch_warnings():
         warnings.simplefilter("error", InconsistentVersionWarning)
+        warnings.filterwarnings(
+            "error", category=UserWarning, message=_XGB_CROSS_VERSION
+        )
         try:
             return joblib.load(path)
-        except InconsistentVersionWarning as exc:
+        except (InconsistentVersionWarning, UserWarning) as exc:
             raise ModelVersionError(
                 f"refusing to load {path.name}: {exc}. The artefact must be "
-                f"retrained under the pinned scikit-learn version "
+                f"retrained under the pinned library versions "
                 f"(see requirements.txt) — loading across versions can "
                 f"silently corrupt predictions."
             ) from exc

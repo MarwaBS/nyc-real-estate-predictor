@@ -11,7 +11,6 @@ from src.data.features import (
     add_target_variables,
     apply_serving_cap,
     apply_top_categories,
-    cap_categorical_cardinality,
     fit_top_categories,
     learned_capped_categories,
 )
@@ -45,14 +44,6 @@ def test_log_price_is_log1p(sample_raw_data: pd.DataFrame) -> None:
     result = add_target_variables(sample_raw_data)
     expected = np.log1p(sample_raw_data["PRICE"])
     np.testing.assert_array_almost_equal(result["LOG_PRICE"].values, expected.values)
-
-
-def test_cap_cardinality_limits_categories() -> None:
-    df = pd.DataFrame({"COL": [f"cat_{i}" for i in range(100)]})
-    result = cap_categorical_cardinality(df, columns=["COL"], max_categories=10)
-    unique = result["COL"].unique()
-    # 10 real categories + "other"
-    assert len(unique) <= 11
 
 
 def test_fit_top_categories_defaults_to_keeping_fifty() -> None:
