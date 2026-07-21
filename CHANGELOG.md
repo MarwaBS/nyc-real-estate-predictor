@@ -6,6 +6,99 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — every cross-row statistic now fits on the train split only
+
+- **The two disclosed leakage residuals are fixed.** IQR cap bounds, zone
+  cut-points and the category vocabulary were fitted on pooled data; all
+  three now fit on the train rows only and apply everywhere
+  (`run_training.build_splits`), and the split stratifies on price quartiles
+  as a balancing key instead of the pooled-derived zone label. Enforced by
+  `tests/test_train_only_fitting.py` plus three pooled-fitting mutations in
+  the CI harness.
+- **Selection returned to XGBoost under the corrected protocol** (val R2
+  0.7740 vs LightGBM 0.7711 vs Random Forest 0.7682); test R2 **0.835**,
+  zones macro F1 **0.712**. Coverage: 77.9% against the 80% target (1.6 SE).
+- **Headline numbers now carry error bars and a naive baseline.** 20-seed
+  re-run of the full protocol: test R2 0.814 +/- 0.028, zones F1
+  0.717 +/- 0.020 (`reports/seed_variance.json`); per-borough-median
+  baseline recorded in the training artefact (R2 0.177 / F1 0.301 at seed
+  42) and on the external benchmark's own rows (-0.016 vs the model's
+  0.250, `benchmarks/results.json`).
+- **The borough fairness picture changed with the corrected bins:** Staten
+  Island is now the weakest borough (0.529) and Manhattan the strongest
+  (0.696). Every borough still clears its majority-class floor.
+
+
+### Changed — one model, derived zones, conformal interval, borough floor
+
+- **The classifier is deleted; the zone is the predicted price bucketed.**
+  `PRICE_ZONE` is a deterministic function of price, so a second model was
+  fitting the same features to the same signal. Measured cost on identical
+  bins: a dedicated classifier scores macro F1 **0.7181** against the bucketed
+  **0.6987** — about 1.3 SE on a 906-row split, so not an established
+  difference. Not shipped because two models can disagree on one response: a
+  "High" zone beside a price that buckets to "Medium", with nothing to catch
+  it. Training scores zones through the same decode serving uses.
+- **Zone cut-points are quartiles of the training prices** ($499,000 /
+  $825,000 / $1,495,000), replacing `[0, 500k, 1M, 2M]` — round numbers with no
+  derivation. Classes go from 1610/1183/929/805 to 1162/1131/1117/1116.
+  **Side effect: the borough spread narrowed from 0.29 to 0.12** and Queens
+  moved from worst (0.601) to third (0.685). Much of the previously reported
+  fairness gap was an artefact of the bins, which gave Staten Island one
+  dominant class that was easy to score.
+- **The interval is properly conformal.** Calibration used the plain empirical
+  quantile where split conformal requires the ceil((n+1)(1-alpha))-th order
+  statistic; uncorrected it under-covers by construction. Coverage moved
+  **0.7627 -> 0.8179**, and the test tolerance returned to 2 SE from the 3 SE
+  that had been chosen only because 2 SE failed.
+- **Every borough must beat its own majority-class baseline or the build
+  fails.** Derived per borough from its own class distribution, so it is not a
+  threshold picked with the results in view. Margins +0.46 to +0.59.
+- **Features removed with proof:** `LOG_SQFT` (trees are invariant to monotone
+  transforms — measured val R2 0.7715 with and without, identical to four
+  decimals); `DIST_NEAREST_SUBWAY` (was assigned as a copy of
+  `DIST_MANHATTAN_CENTER`; a duplicate column is not a proxy).
+- **Deleted:** the multi-task net (measured macro F1 0.666 vs the tree's 0.727,
+  quoted nowhere, 139 statements at 0% coverage), `train_classification.py` and
+  `train_regression.py` (zero importers), the label encoder and its
+  class-index-ordering hazard, and the `torch`, `catboost`, `optuna` and
+  `imbalanced-learn` pins that no longer had a single import.
+- **Reported metrics (test split):** regression R2 **0.812** (Random Forest),
+  zones macro F1 **0.699**. Not comparable to earlier figures — the quartile
+  bins changed the classification target and the stratification, so the splits
+  differ. Coverage rose 69% -> 87.49% (untested code deleted, gates added).
+
+### Fixed — rate limiting did not apply to rejected API keys
+
+- `SECURITY.md` scopes DoS out because `/predict` is rate-limited, but
+  route-level `dependencies=[Depends(verify_api_key)]` resolved before
+  slowapi's decorator: measured, **15 wrong-key requests produced 15x 403 and
+  zero 429**, leaving key brute-force unbounded behind a policy that relied on
+  the control. The check now runs inside the handler, after the limiter —
+  measured after: 403, 403, 403, 429...
+
+### Fixed — the coverage gate was measured over a subset
+
+- **The 88% floor described a hand-picked subset.** `pyproject.toml` omitted 8
+  modules, and every one of them was at 0% — the omit list was exactly the set
+  of files that lowered the number. `run_training.py`, which produces every
+  shipped artefact, was not in `source` at all. Real coverage was **69%**, not
+  the advertised 94.7%. The omit list now holds only the network-bound
+  benchmark modules, which the External Benchmark workflow exercises end-to-end
+  on live data, and the floor is 78 against a measured 87.49.
+- **Deleted `src/models/train_classification.py` and `train_regression.py`** —
+  152 statements with zero importers repo-wide. Both were omitted from
+  coverage, so both were invisible and unexecuted.
+- **The overflow-sentinel test could not fail.** It asserted a post-cap
+  magnitude (`max < 10M`) that `cap_outliers` guarantees unconditionally, so
+  deleting the sentinel drop left it green. It now compares row counts with and
+  without the sentinel, which distinguishes dropping from capping.
+- **The served price interval was pinned nowhere.** `/predict` was only checked
+  for `low <= high`, so replacing its band with `{price*0.5, price*2.0}` left
+  the whole suite green — the artefact was pinned in the library function and
+  nothing tied the endpoint to it. The response is now compared to the
+  artefact's multipliers.
+
 ### Fixed — the cleaned dataset had no producer (data provenance)
 
 - **`output/cleaned_house_dataset.csv` was not the output of
@@ -104,11 +197,10 @@ project uses SemVer for tagged releases.
   hurting 8 — noise. Removed rather than moved to val. `src/models/threshold.py`
   is replaced by `src/models/decode.py` (argmax only, one shared decode for
   API + dashboard); `models/optimal_thresholds.joblib` is deleted.
-- **Reported metrics (test split, current artefacts):** classification macro
-  F1 **0.727** (XGBoost; 0.721 on val), regression R² **0.835** (XGBoost;
-  0.826 on val). These are not comparable to any figure published before
-  2026-07-19 — see the data-provenance entry below, which changed the dataset
-  itself.
+- **Reported metrics (test split):** zones macro F1 **0.699**, regression R²
+  **0.812** (Random Forest; 0.784 on val). These are not comparable to any
+  figure published before 2026-07-19 — see the data-provenance entry below,
+  which changed the dataset itself.
 - **`assert_no_leakage` rejects any price-derived name.** It enumerated five
   spellings, so `["BEDS", "PRICE"]` — the raw target — passed the leakage
   guard. It now rejects any feature name containing "price"; no legitimate
@@ -184,8 +276,8 @@ project uses SemVer for tagged releases.
 
 ### Security
 - CORS wildcard in production is now rejected at startup via a Pydantic
-  `model_validator(mode="after")` on the settings, matching ResumeForge's M3
-  pattern. The guard is now covered by `tests/test_settings.py` (prod +
+  `model_validator(mode="after")` on the settings. The guard is covered by
+  `tests/test_settings.py` (prod +
   wildcard/empty/wildcard-in-list refuse startup; prod + explicit origins
   and dev + wildcard start clean).
 - Trivy container scan now runs on every CI build and fails on HIGH/CRITICAL

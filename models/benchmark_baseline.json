@@ -1,0 +1,11 @@
+{
+  "predictor": "per-borough median log1p(PRICE) of the benchmark training frame",
+  "borough_median_log_price": {
+    "Brooklyn": 13.763165,
+    "Manhattan": 14.220976,
+    "Queens": 13.413541,
+    "Staten Island": 13.498058,
+    "Bronx": 13.303019
+  },
+  "global_median_log_price": 13.62314
+}

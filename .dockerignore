@@ -9,8 +9,17 @@
 .gitattributes
 .dockerignore
 .trivyignore
-.venv
+# Every venv, not just the two canonical names: the working venv here is
+# .venv312, which the bare ".venv" entry does not match.
+.venv*
 venv
+env/
+# Secrets and local experiment state must never enter the image.
+.env
+.env.*
+*.env
+mlruns/
+notebooks/
 __pycache__/
 *.pyc
 .pytest_cache

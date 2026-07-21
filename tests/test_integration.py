@@ -5,16 +5,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 
+from src.config import NUMERIC_FEATURES, ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
 from src.data.cleaner import clean_pipeline
-from src.data.features import add_numeric_features, add_target_variables
+from src.data.features import (
+    add_geospatial_features,
+    add_numeric_features,
+    add_target_variables,
+)
+from src.models.decode import zone_for_price
 from src.models.evaluate import evaluate_classifier, evaluate_regressor
 from src.models.pipelines import (
-    build_classification_pipeline,
     build_regression_pipeline,
 )
-from src.utils.geo import add_distance_features
 from src.utils.validation import assert_no_leakage, validate_cleaned_data
 
 
@@ -81,89 +85,60 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
     assert len(issues) == 0, f"Validation failed: {issues}"
     assert len(df) > 50, "Too many rows dropped during cleaning"
 
-    # 2. Feature engineering
+    # 2. Feature engineering — the same pipeline training runs, no
+    # test-manufactured columns.
     df = add_numeric_features(df)
-    ref_points = {"MANHATTAN_CENTER": (40.7580, -73.9855)}
-    df = add_distance_features(df, ref_points)
-    df["DIST_CENTRAL_PARK"] = df["DIST_MANHATTAN_CENTER"]
-    df["DIST_NEAREST_SUBWAY"] = df["DIST_MANHATTAN_CENTER"]
+    df = add_geospatial_features(df)
     df = add_target_variables(df)
     df = df.dropna(subset=["PRICE_ZONE", "LOG_PRICE"])
 
-    # 3. Prepare features (NO leakage)
-    feature_cols = [
-        "BEDS",
-        "BATH",
-        "PROPERTYSQFT",
-        "TOTAL_ROOMS",
-        "BED_BATH_RATIO",
-        "LOG_SQFT",
-        "ROOMS_PER_SQFT",
-        "DIST_MANHATTAN_CENTER",
-        "DIST_CENTRAL_PARK",
-        "DIST_NEAREST_SUBWAY",
-        "BOROUGH",
-        "TYPE",
-        "PROPERTY_CATEGORY",
-        "ZIPCODE",
-        "SUBLOCALITY",
-    ]
-    available = [c for c in feature_cols if c in df.columns]
+    # 3. The config feature contract IS the feature list (NO leakage)
+    feature_cols = NUMERIC_FEATURES + ONEHOT_FEATURES + TARGET_ENCODED_FEATURES
+    missing = [c for c in feature_cols if c not in df.columns]
+    assert not missing, f"pipeline did not produce configured features: {missing}"
+    available = feature_cols
     assert_no_leakage(available)
 
     from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import LabelEncoder
 
-    le = LabelEncoder()
-    y_zone = le.fit_transform(df["PRICE_ZONE"])
     y_price = df["LOG_PRICE"].values
-
     features = df[available]
-    x_train, x_test, yz_train, yz_test, yp_train, yp_test = train_test_split(
+    x_train, x_test, yp_train, yp_test, zone_train, zone_test = train_test_split(
         features,
-        y_zone,
         y_price,
+        df["PRICE_ZONE"].astype(str).to_numpy(),
         test_size=0.2,
         random_state=42,
     )
 
-    # 4. Train classification
-    clf_pipeline = build_classification_pipeline(
-        RandomForestClassifier(n_estimators=20, random_state=42),
-    )
-    clf_pipeline.fit(x_train, yz_train)
-    clf_pred = clf_pipeline.predict(x_test)
-    clf_metrics = evaluate_classifier(yz_test, clf_pred)
-    # Falsifiable floor: the classifier must beat the majority-class naive
-    # baseline on this split ("accuracy > 0.0" could not fail — any output
-    # satisfies it).
-    majority_rate = float(pd.Series(yz_test).value_counts(normalize=True).iloc[0])
-    assert clf_metrics["accuracy"] > majority_rate, (
-        f"accuracy {clf_metrics['accuracy']:.3f} does not beat the "
-        f"majority-class baseline {majority_rate:.3f}"
-    )
-
-    # 5. Train regression
+    # 4. Train the one model that ships
     reg_pipeline = build_regression_pipeline(
         RandomForestRegressor(n_estimators=20, random_state=42),
     )
     reg_pipeline.fit(x_train, yp_train)
     reg_pred = reg_pipeline.predict(x_test)
     reg_metrics = evaluate_regressor(yp_test, reg_pred, log_target=True)
-    # R2 > 0 is the meaningful floor: R2 is defined so that predicting the
-    # target's mean scores exactly 0, so this asserts the regressor beats the
-    # trivial baseline. The previous bound (-10) was satisfied by a constant
-    # predictor and by almost any broken model.
+    # R2 is defined so that predicting the target's mean scores exactly 0, so
+    # this asserts the regressor beats the trivial baseline. The previous bound
+    # (-10) was satisfied by a constant predictor.
     assert reg_metrics["r2"] > 0, (
         f"R2 {reg_metrics['r2']:.3f} does not beat predicting the mean"
     )
 
+    # 5. Zones are derived from those predictions, as in serving
+    zone_pred = [zone_for_price(p) for p in np.expm1(reg_pred)]
+    zone_metrics = evaluate_classifier(zone_test, zone_pred)
+    majority_rate = float(pd.Series(zone_test).value_counts(normalize=True).iloc[0])
+    assert zone_metrics["accuracy"] > majority_rate, (
+        f"accuracy {zone_metrics['accuracy']:.3f} does not beat the "
+        f"majority-class baseline {majority_rate:.3f}"
+    )
+
     # 6. Predict single sample
     single = x_test.iloc[:1]
-    zone_pred = clf_pipeline.predict(single)
     price_pred = reg_pipeline.predict(single)
-    assert len(zone_pred) == 1
     assert np.isfinite(price_pred[0])
+    assert zone_for_price(float(np.expm1(price_pred[0]))) in set(zone_test)
 
 
 def test_no_leakage_survives_full_pipeline(integration_data: pd.DataFrame) -> None:

@@ -37,22 +37,19 @@ GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
 # ---------------------------------------------------------------------------
 RANDOM_SEED: int = 42
 TEST_SIZE: float = 0.2
-# Fraction of the post-test remainder held out for model selection and DL
-# early stopping. Every choice made during training reads VAL; TEST is scored
-# once, at the end, by the already-chosen model. Before this split existed,
-# candidate selection and threshold tuning both read the test labels, so the
-# published macro-F1 was an in-sample number wearing a hold-out's name.
+# Fraction of the post-test remainder held out for model selection. Every
+# choice made during training reads VAL; TEST is scored once, at the end, by
+# the already-chosen model.
 VAL_SIZE: float = 0.2
 CV_FOLDS: int = 5
 OPTUNA_TRIALS: int = 50
 
-# Price zone thresholds (USD)
-PRICE_ZONE_BINS: list[float] = [0, 500_000, 1_000_000, 2_000_000, float("inf")]
+# Price zone thresholds (USD): equal-frequency quartiles of the TRAIN split's
+# capped prices from the shipped run (run_training.build_splits), so serving
+# buckets exactly the way training labelled.
+# test_config_artefact_agreement.py fails if these drift from the fitted model.
+PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000, float("inf")]
 PRICE_ZONE_LABELS: list[str] = ["Low", "Medium", "High", "Very High"]
-
-# SQFT category thresholds
-SQFT_BINS: list[float] = [0, 1_000, 2_000, float("inf")]
-SQFT_LABELS: list[str] = ["Small", "Medium", "Large"]
 
 # Feature lists — CRITICAL: no PRICE_PER_SQFT (data leakage)
 NUMERIC_FEATURES: list[str] = [
@@ -61,17 +58,11 @@ NUMERIC_FEATURES: list[str] = [
     "PROPERTYSQFT",
     "TOTAL_ROOMS",
     "BED_BATH_RATIO",
-    "LOG_SQFT",
     "ROOMS_PER_SQFT",
     "DIST_MANHATTAN_CENTER",
     "DIST_CENTRAL_PARK",
-    "DIST_NEAREST_SUBWAY",
 ]
 
-# PROPERTY_CATEGORY was removed: training, the API, and the dashboard all
-# hardcoded it to "residential", so the one-hot encoder only ever saw a single
-# level. A constant column carries no signal -- it cost a feature slot and
-# implied a distinction the data never made.
 ONEHOT_FEATURES: list[str] = ["BOROUGH", "TYPE"]
 
 TARGET_ENCODED_FEATURES: list[str] = ["ZIPCODE", "SUBLOCALITY"]

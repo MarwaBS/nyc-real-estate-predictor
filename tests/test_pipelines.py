@@ -5,10 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 
 from src.models.pipelines import (
-    build_classification_pipeline,
     build_preprocessor,
     build_regression_pipeline,
 )
@@ -47,17 +46,6 @@ def test_build_preprocessor_returns_column_transformer() -> None:
     assert hasattr(preprocessor, "transformers")
 
 
-def test_classification_pipeline_fits_and_predicts(training_data: tuple) -> None:
-    features, y = training_data
-    pipeline = build_classification_pipeline(
-        RandomForestClassifier(n_estimators=10, random_state=42)
-    )
-    pipeline.fit(features, y)
-    preds = pipeline.predict(features)
-    assert len(preds) == len(features)
-    assert set(preds).issubset({0, 1, 2, 3})
-
-
 def test_regression_pipeline_fits_and_predicts(training_data: tuple) -> None:
     features, y = training_data
     y_cont = np.random.RandomState(42).uniform(11, 15, len(features))  # LOG_PRICE range
@@ -71,10 +59,11 @@ def test_regression_pipeline_fits_and_predicts(training_data: tuple) -> None:
 
 
 def test_pipeline_has_preprocessor_and_model_steps(training_data: tuple) -> None:
-    features, y = training_data
-    pipeline = build_classification_pipeline(
-        RandomForestClassifier(n_estimators=10, random_state=42)
+    features, _ = training_data
+    y_cont = np.random.RandomState(42).uniform(11, 15, len(features))
+    pipeline = build_regression_pipeline(
+        RandomForestRegressor(n_estimators=10, random_state=42)
     )
-    pipeline.fit(features, y)
+    pipeline.fit(features, y_cont)
     assert "preprocessor" in pipeline.named_steps
-    assert "classifier" in pipeline.named_steps
+    assert "regressor" in pipeline.named_steps

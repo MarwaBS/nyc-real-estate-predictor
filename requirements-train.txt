@@ -1,29 +1,21 @@
-# Training-only dependencies — NOT shipped in the production Docker image.
+# Training-only dependencies - NOT shipped in the production Docker image.
 #
-# Split from requirements.txt so the runtime image stays small (~300MB)
-# and the CI security scan on requirements.txt doesn't flag CVEs in
-# packages that never run in prod (mlflow has 19 pending CVEs; none
-# of them reach the serving path).
+# Split from requirements.txt so the runtime image stays small (~300MB) and the
+# CI security scan on requirements.txt does not flag CVEs in packages that
+# never run in prod (mlflow carries pending CVEs; none reach the serving path).
 #
-# Pulled in by requirements-dev.txt so local devs + CI's test job get
-# the full toolchain. The CI security job scans requirements.txt only.
+# Pulled in by requirements-dev.txt so local devs + CI's test job get the full
+# toolchain. The CI security job scans requirements.txt only.
+#
+# torch, catboost, optuna and imbalanced-learn were removed: after the
+# multi-task net and the extended training path were deleted, `grep -r` found
+# zero imports for any of them. An unused pinned dependency is a CVE surface
+# that buys nothing -- torch alone carried two advisories.
 
 -r requirements.txt
 
-# Deep Learning
-torch==2.12.1  # training-only; PYSEC-2024-259 / PYSEC-2025-41 fixed since 2.5.1
-
-# Gradient Boosting (training-only)
-catboost==1.2.10
-
-# Hyperparameter Tuning
-optuna==3.6.2
-
-# Explainability (training + evaluation)
+# shap: imported by src/models/explain.py for the training-time SHAP pass.
 shap==0.45.1
 
-# Imbalanced Learning
-imbalanced-learn==0.12.4
-
-# Experiment Tracking
-mlflow==3.11.1  # training-only experiment tracking (v3 line; older comment referenced a v2-era bump)
+# mlflow: imported by run_training.py for experiment tracking.
+mlflow==3.11.1
