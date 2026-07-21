@@ -15,7 +15,7 @@
 -r requirements.txt
 
 # shap: imported by src/models/explain.py for the training-time SHAP pass.
-shap==0.45.1
+shap==0.52.0
 
 # mlflow: imported by run_training.py for experiment tracking.
-mlflow==3.11.1
+mlflow==3.14.0
