@@ -1,7 +1,7 @@
 [project]
 name = "nyc-price-prediction"
 version = "1.0.0"
-description = "NYC real estate price zone classification and regression with ML + DL"
+description = "NYC real estate price prediction with derived price zones (one Random Forest regressor)"
 requires-python = ">=3.12"
 
 [tool.ruff]
@@ -50,19 +50,18 @@ disallow_untyped_defs = false
 # api/ is in scope: it holds the serving + security controls (auth, rate
 # limiting, /predict). Excluding it meant the coverage gate could go green while
 # the API layer was untested — the exact "gate avoids the breakage" trap.
-source = ["src", "benchmarks", "api"]
+source = ["src", "benchmarks", "api", "run_training.py"]
+# Every omit needs a reason that is not "it would lower the number". The
+# previous list held 8 modules that were ALL at 0% — it was exactly the set of
+# files that dragged the average down, and it made a 94.72% headline out of a
+# real 56%. run_training.py, which produces every shipped artefact, was not in
+# `source` at all.
 omit = [
     "tests/*",
     "notebooks/*",
-    "streamlit_app/*",
-    "src/models/train_classification.py",
-    "src/models/train_regression.py",
-    "src/dl/train_dl.py",
-    "src/dl/tabular_net.py",
-    "src/models/explain.py",
-    # Network-bound benchmark modules: exercised end-to-end by the
-    # External Benchmark workflow (real NYC.gov download + real model),
-    # not by the hermetic unit suite. mapping.py and invariants.py — the
+    # Network-bound: these download live NYC.gov data. Covered end-to-end by
+    # the External Benchmark workflow on every push and weekly, which is a
+    # stronger check than a mock would be. mapping.py and invariants.py — the
     # contract-bearing code — stay fully in scope.
     "benchmarks/run_benchmark.py",
     "benchmarks/datasets/*",

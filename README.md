@@ -3,17 +3,19 @@
 [![CI](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/MarwaBS/nyc-real-estate-predictor/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20Demo-on%20Hugging%20Face-yellow)](https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor)
 
-**Classify NYC properties into price zones and predict actual values using gradient boosting ensembles and multi-task deep learning on 4,500+ listings with geospatial features.**
+**Predict NYC residential prices and derive their price zones with one XGBoost regressor over 4,500+ listings with geospatial features.**
+
+**Shipped model** — `XGBoost` — the trained artefact in [`reports/training_metrics.json`](reports/training_metrics.json) is the single source of truth; a CI gate fails if this field disagrees with it.
 
 > Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
-> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** v0.1.0 on PyPI](https://pypi.org/project/schema-firewall/0.1.0/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.0` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
+> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
 
 This repository contains **two separate evaluation surfaces** that should not be conflated:
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
-| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
+| Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177) | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
 | External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
 
 Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
@@ -34,13 +36,19 @@ once, after selection is fixed.
 
 | Task | Model | Metric | Val (selection) | **Test (reported)** |
 |---|---|---|---|---|
-| Price Zone (4-class) | **XGBoost** (selected) | Macro F1 | 0.721 | **0.727** |
-| Price Zone (4-class) | LightGBM | Macro F1 | 0.715 | not scored |
-| Price Regression | **XGBoost** (selected) | R2 | 0.826 | **0.835** |
-| Price Regression | LightGBM | R2 | 0.822 | not scored |
-| Price Regression | Random Forest | R2 | 0.818 | not scored |
+| Price Regression | **XGBoost** (selected on val) | R2 | 0.774 | **0.835** |
+| Price Zone (bucketed from the above) | — | Macro F1 | — | **0.712** |
 
-Split: 2,896 train / 724 val / 906 test, stratified on price zone. Losing
+Across **20 seeds** of the full protocol (split, train-only fitting and
+candidate selection re-run each time — `scripts/measure_seed_variance.py`,
+recorded in [`reports/seed_variance.json`](reports/seed_variance.json)):
+test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**, against a
+per-borough-median baseline of 0.170 ± 0.017 R² and 0.242 ± 0.058 F1.
+XGBoost wins selection in 16/20 runs (candidates Random Forest 3, LightGBM 1) — at 4,526
+rows the candidate ranking is seed-sensitive, which is exactly why the
+spread is published next to the point estimates.
+
+Split: 2,896 train / 724 val / 906 test, stratified on pooled price quartiles (a balancing key only — served zone labels come from train-derived cut-points). Losing
 candidates show "not scored" because they never touch test — scoring them
 there and then quoting the winner's number is how a selected maximum gets
 published as a hold-out estimate. Artifacts produced under the pinned
@@ -61,33 +69,28 @@ val.
 dataset itself changed: `BOROUGH` and `ZIPCODE` are now derived by committed
 code from the raw export rather than inherited from a pre-cleaned CSV that
 nothing in this repo could regenerate, and a 2³¹−1 overflow sentinel is now
-dropped instead of being capped into a plausible-looking listing. Test macro F1
-sits slightly above val here (0.727 vs 0.721); on a 906-row test split that is
-ordinary split-to-split variance, not evidence of a better model.
-
-> The multi-task PyTorch path (`src/dl/`) is implemented and runs as an
-> optional training stage when `requirements-train.txt` extras (torch) are
-> installed; its results are not part of the shipped artefact and are
-> therefore not quoted here.
+dropped instead of being capped into a plausible-looking listing. Zones are
+scored on test only: they are bucketed from the regressor's predictions, so
+there is no separate zone model to select on val and no val macro F1 to
+compare against.
 
 ### SHAP feature importance (top 10)
 
-From the artefact's `classification.shap_top10` (mean |SHAP| over the test
-sample, averaged across the four classes; prefixes are the
-ColumnTransformer's):
+From the artefact's `classification.shap_top10` (mean |SHAP| over the
+regressor's test predictions; prefixes are the ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | DIST_MANHATTAN_CENTER | 1.167 |
-| 2 | BATH | 0.923 |
-| 3 | PROPERTYSQFT | 0.800 |
-| 4 | DIST_CENTRAL_PARK | 0.455 |
-| 5 | ROOMS_PER_SQFT | 0.314 |
-| 6 | ZIPCODE (target-encoded) | 0.277 |
-| 7 | TYPE_co-op (one-hot) | 0.271 |
-| 8 | TOTAL_ROOMS | 0.264 |
-| 9 | BED_BATH_RATIO | 0.190 |
-| 10 | SUBLOCALITY (target-encoded) | 0.187 |
+| 1 | BATH | 0.369 |
+| 2 | DIST_MANHATTAN_CENTER | 0.362 |
+| 3 | PROPERTYSQFT | 0.144 |
+| 4 | DIST_CENTRAL_PARK | 0.116 |
+| 5 | TOTAL_ROOMS | 0.108 |
+| 6 | ZIPCODE (target-encoded) | 0.097 |
+| 7 | TYPE_co-op (one-hot) | 0.079 |
+| 8 | SUBLOCALITY (target-encoded) | 0.071 |
+| 9 | ROOMS_PER_SQFT | 0.034 |
+| 10 | BOROUGH_the bronx (one-hot) | 0.027 |
 
 ### Fairness by borough
 
@@ -97,17 +100,17 @@ cleaning rather than carried into training as an unnamed category.
 
 | Borough | Macro F1 |
 |---|---|
-| Staten Island | 0.887 |
-| Brooklyn | 0.688 |
-| Manhattan | 0.680 |
-| The Bronx | 0.640 |
-| Queens | 0.601 |
+| Manhattan | 0.696 |
+| Brooklyn | 0.691 |
+| The Bronx | 0.688 |
+| Queens | 0.679 |
+| Staten Island | 0.529 |
 
-The spread (0.887 Staten Island vs 0.601 Queens) is wide enough to matter and
-is reported unexplained: Staten Island has the most concentrated zone
-distribution of the five boroughs (55.9% Medium vs Queens' most-common 37.7%),
-but no experiment here establishes that as the cause, so it is recorded as an
-observation rather than an explanation.
+The spread (0.696 Manhattan vs 0.529 Staten Island) is wide enough to matter
+and is reported unexplained: no experiment here establishes a cause, so it is
+recorded as an observation. Every borough clears its own majority-class
+baseline by at least 0.39 macro F1 — the floor `check_borough_floor` enforces
+at train time, which fails the run rather than publishing a breach.
 
 ---
 
@@ -137,6 +140,7 @@ predict, out of distribution?*
 | Scored | **18,321** |
 | Dropped (per-reason accounting below) | 62,155 |
 | **R² in log-price space** | **0.250** |
+| Naive baseline (borough-median train price, same rows) | **-0.016** |
 | Leakage — name-based / semantic (Pearson + Spearman + MI) | not triggered |
 | Schema SHA vs registry | verified BEFORE the run (hard gate) |
 | Prediction health (NaN / Inf / collapse) | passed |
@@ -239,13 +243,7 @@ src/data/features.py        Geospatial (haversine distances), numeric, target en
     v
 src/models/pipelines.py     sklearn Pipeline + ColumnTransformer (reproducible preprocessing)
     |
-    +---> src/models/train_classification.py   XGBoost / LightGBM / CatBoost / Stacking
-    |         Optuna Bayesian tuning (50 trials) + SMOTE-ENN for class imbalance
-    |
-    +---> src/models/train_regression.py       Same models, LOG_PRICE target
-    |
-    +---> src/dl/tabular_net.py                Multi-task PyTorch: shared trunk
-    |         Entity embeddings + Focal Loss + CosineAnnealing + early stopping
+    +---> run_training.py                       Candidate training + selection on val
     |
     +---> src/models/explain.py                SHAP (global + per-prediction) + fairness
     |
@@ -260,11 +258,10 @@ streamlit_app/app.py        Interactive dashboard — NYC map + prediction form
 |---|---|---|
 | **Data pipeline** | `src/data/` | Load, clean, feature-engineer with validation gates |
 | **Geospatial** | `src/utils/geo.py` | Haversine distances to fixed landmarks (vectorised numpy). H3/KMeans/subway lookups were EDA-only and were removed from the production path — they never fed a model |
-| **ML models** | `src/models/` | sklearn Pipelines (shipped); Optuna tuning, stacking ensemble, SMOTE-ENN (extended path, not shipped) |
-| **Deep learning** | `src/dl/` | Multi-task dense net (PyTorch): entity embeddings + shared MLP trunk, classification + regression heads, Focal Loss |
+| **ML models** | `src/models/` | sklearn Pipelines; one XGBoost regressor |
 | **Explainability** | `src/models/explain.py` | SHAP TreeExplainer, per-prediction explanations, fairness by borough |
 | **API** | `api/` | FastAPI with Pydantic v2 schemas, health checks |
-| **UI** | `streamlit_app/` | Interactive NYC map, prediction form, probability charts |
+| **UI** | `streamlit_app/` | Interactive NYC map, prediction form, calibrated price range |
 | **Validation** | `src/utils/validation.py` | Schema checks, `assert_no_leakage()` (enforced in CI) |
 
 ---
@@ -355,7 +352,6 @@ curl -X POST http://localhost:8000/predict \
 | BEDS, BATH, PROPERTYSQFT | Raw | Core property attributes |
 | TOTAL_ROOMS | BEDS + BATH | Combined room signal |
 | BED_BATH_RATIO | BEDS / max(BATH, 1) | Layout balance |
-| LOG_SQFT | log1p(SQFT) | Normalize right-skewed distribution |
 | ROOMS_PER_SQFT | TOTAL_ROOMS / SQFT | Density metric |
 
 ### Geospatial
@@ -364,7 +360,6 @@ curl -X POST http://localhost:8000/predict \
 |---|---|---|
 | DIST_MANHATTAN_CENTER | Haversine to (40.758, -73.985) | hand-rolled, vectorised numpy |
 | DIST_CENTRAL_PARK | Haversine to (40.783, -73.965) | hand-rolled, vectorised numpy |
-| DIST_NEAREST_SUBWAY | = DIST_MANHATTAN_CENTER | **documented proxy by design**: station-level data is not bundled, and training + serving must share identical semantics (the API computes the same value; see MODEL_CARD.md) |
 
 H3 hex indexing and KMeans neighborhood clustering were explored during
 EDA but never entered any model's feature list, so they are not part of
@@ -377,63 +372,25 @@ feature).
 | Feature | Method | Why |
 |---|---|---|
 | BOROUGH, TYPE | OneHotEncoder | Low cardinality (5-8 values) |
-| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit per CV fold) | High cardinality (~150 ZIPs) — OneHot would create 150 sparse columns |
+| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit inside the Pipeline on train only) | High cardinality (~150 ZIPs) — OneHot would create 150 sparse columns |
 
 ---
 
 ## Models
 
 **What produced the shipped artefacts (and every number in §Results):**
-`run_training.py` — XGBoost vs LightGBM for classification, XGBoost vs
-LightGBM vs Random Forest for regression, fixed hyperparameters, best
-model selected on the **val** split and then scored once on **test**. That
-is the path whose outputs are recorded in `reports/training_metrics.json`.
+`run_training.py` — XGBoost vs LightGBM vs Random Forest for regression,
+fixed hyperparameters, best model selected on the **val** split and then
+scored once on **test**; zones are that model's predictions bucketed through
+`PRICE_ZONE_BINS`. Outputs are recorded in `reports/training_metrics.json`.
 
-**Extended training path (optional, `requirements-train.txt`):**
-`src/models/train_classification.py` / `train_dl.py` additionally
-implement Optuna Bayesian tuning, CatBoost, a stacking ensemble,
-SMOTE-ENN imbalance handling, and the multi-task PyTorch net. These are
-real, runnable code — but their outputs are not the shipped artefacts,
-so this README does not quote numbers from them.
-
-### Classification: Price Zone (Low / Medium / High / Very High)
-
-| Model (shipped path) | Tuning | Class Imbalance |
-|---|---|---|
-| XGBoost | fixed hyperparameters | none |
-| LightGBM | fixed hyperparameters | class_weight="balanced" |
+The reasoning behind each choice — why one regressor over a classifier, what
+was tried and removed, and how every constant was measured — is in
+[`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md).
 
 ### Regression: Actual Price
 
-XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance). Predictions converted back via `expm1()`.
-
-### Deep Learning: Multi-Task Dense Net
-
-(Entity embeddings + a shared MLP trunk with classification and regression heads —
-a plain dense network, **not** the TabNet architecture. No sequential attention,
-sparsemax feature selection, or per-sample attention masks.)
-
-```
-Numeric (10 feats) -> BatchNorm -> Dense(128)
-Categorical        -> Entity Embeddings -> Dense(128)
-                         |
-                    Shared Trunk: 256 -> 128 -> 64 (BatchNorm + Dropout)
-                         |
-              +----------+----------+
-              |                     |
-     Classification Head      Regression Head
-     Dense(4, Softmax)        Dense(1, Linear)
-     Focal Loss               MSE Loss
-              |                     |
-              +-- Combined: 0.6*CE + 0.4*MSE --+
-```
-
-- Optimizer: AdamW (weight_decay=1e-4)
-- LR scheduler: CosineAnnealingWarmRestarts(T_0=10)
-- Early stopping: patience=15 epochs
-- Gradient clipping: max_norm=1.0
-
----
+XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance), compared on val; the winner is scored once on test. Predictions converted back via `expm1()`.
 
 ## Explainability
 
@@ -447,8 +404,8 @@ Categorical        -> Entity Embeddings -> Dense(128)
 ## Testing
 
 ```bash
-# Full test suite with coverage (CI gate: 88%, src/ + benchmarks/ + api/)
-pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-fail-under=88
+# Full test suite with coverage (CI gate: 78%, src/ + benchmarks/ + api/ + run_training.py)
+pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
 
 # Run only leakage prevention tests
 pytest tests/test_no_leakage.py -v
@@ -468,7 +425,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 88% coverage gate over `src/ + benchmarks/ + api/`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 78% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -499,14 +456,9 @@ nyc-real-estate-predictor/
 │   │   └── features.py           Feature engineering + leakage guard
 │   ├── models/
 │   │   ├── pipelines.py          sklearn Pipeline + ColumnTransformer
-│   │   ├── train_classification.py  XGBoost/LGBM/CatBoost + Optuna + stacking
-│   │   ├── train_regression.py   Same models for LOG_PRICE
 │   │   ├── evaluate.py           Metrics, confusion matrix, fairness
 │   │   ├── explain.py            SHAP values + global importance
 │   │   └── predict.py            Load model + inference
-│   ├── dl/
-│   │   ├── tabular_net.py        Multi-task PyTorch net + Focal Loss
-│   │   └── train_dl.py           Training loop, early stopping, LR scheduler
 │   └── utils/
 │       ├── geo.py                Haversine distances (vectorised numpy)
 │       └── validation.py         Schema checks, assert_no_leakage()
@@ -518,7 +470,7 @@ nyc-real-estate-predictor/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        Unit + adversarial firewall suite, 88% coverage gate
+├── tests/                        Unit + adversarial firewall suite, 78% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
@@ -529,7 +481,7 @@ nyc-real-estate-predictor/
 ├── docs/decisions/               Architecture Decision Records
 │   ├── 001-remove-price-per-sqft.md
 │   ├── 002-xgboost-primary-model.md
-│   └── 003-multi-task-deep-learning.md
+│   ├── 003-multi-task-deep-learning.md
 │
 ├── notebooks/                    EDA + analysis (import from src/)
 ├── models/                       Flagship artifacts committed + MANIFEST.sha256-pinned;
@@ -550,16 +502,14 @@ nyc-real-estate-predictor/
 | Category | Technology |
 |---|---|
 | Language | Python 3.12 |
-| ML | scikit-learn, XGBoost, LightGBM, CatBoost |
-| DL | PyTorch 2.x (multi-task dense net, Focal Loss, entity embeddings) |
-| Tuning | none in the shipped path — fixed hyperparameters; Optuna is available in the optional extended path |
+| ML | scikit-learn; XGBoost shipped (selected on val), Random Forest / LightGBM candidates |
+| Tuning | none — fixed hyperparameters, candidates compared on val |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
-| Imbalanced learning | imbalanced-learn (SMOTE-ENN) |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (88% coverage gate over src/ + benchmarks/ + api/) |
+| Testing | pytest (78% coverage gate; measured 87.86% over src/ + benchmarks/ + api/ + run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
@@ -583,7 +533,7 @@ Exact pins — training + runtime are now identical:
 | numpy | `==1.26.4` | |
 | pandas | `==2.2.3` | |
 
-All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: Optuna, SHAP, imbalanced-learn). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
+All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: SHAP, MLflow). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
 
 ---
 

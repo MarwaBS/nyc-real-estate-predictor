@@ -24,8 +24,7 @@ You can expect an initial acknowledgement within 72 hours.
 **In scope:**
 - `POST /predict` endpoint input validation + auth
 - `GET /health` endpoint information disclosure
-- Model-inversion / membership-inference attacks on the trained classifier or
-  regressor
+- Model-inversion / membership-inference attacks on the trained regressor
 - Leakage of secrets via error messages or logs
 - Container-image CVEs scanned by Trivy in CI (see `.trivyignore` for managed
   risks)
@@ -54,17 +53,17 @@ file in the repo. This project deliberately splits dependencies into:
 
 - **`requirements.txt`** — runtime: what ships in the production Docker image
   (pandas, numpy, scikit-learn, xgboost, lightgbm, fastapi, slowapi, streamlit, etc.).
-- **`requirements-train.txt`** — training-only: torch, pytorch-tabnet, catboost,
-  optuna, shap, mlflow, imbalanced-learn. These are required to RE-TRAIN the
-  model from scratch but are NEVER copied into the production image (see
-  `Dockerfile` and `deploy/huggingface/Dockerfile`).
+- **`requirements-train.txt`** — training-only: `shap` (the training-time SHAP
+  pass) and `mlflow` (experiment tracking). These are required to RE-TRAIN the
+  model but are NEVER copied into the production image (see `Dockerfile` and
+  `deploy/huggingface/Dockerfile`). torch, catboost, optuna and imbalanced-learn
+  were removed with the multi-task net and the extended training path.
 
 Most Dependabot alerts on this repo's default branch originate from
-`requirements-train.txt` packages (mlflow has 19 pending CVEs, torch has
-2-5, catboost transitives). **None of these reach the production serving
-path.** They are training-time tools used in a developer's local environment
-or in CI's scheduled retraining workflow, not in the public-facing inference
-container.
+`requirements-train.txt` — mlflow carries the bulk of the pending CVEs.
+**None of these reach the production serving path.** They are training-time
+tools used in a developer's local environment or in CI's scheduled retraining
+workflow, not in the public-facing inference container.
 
 Triage policy:
 

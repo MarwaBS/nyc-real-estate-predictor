@@ -12,9 +12,9 @@
 #   deploy-space  — on every push to main: overlay the runtime snapshot
 #                   (code + Space Dockerfile/README/start.sh +
 #                   requirements.txt) onto a clone of the Space repo,
-#                   preserving the Space's models/ (the trained .joblib
-#                   artifacts live ONLY there — they are not in this git
-#                   tree), and push if anything changed. Requires the
+#                   replacing the Space's models/ with the committed,
+#                   MANIFEST-pinned artifacts from this repo, and push if
+#                   anything changed. Requires the
 #                   HF_TOKEN repository secret (write-scoped HF token);
 #                   fails loudly with instructions if it is missing.
 #

@@ -1,7 +1,7 @@
 .PHONY: test lint typecheck ci train api streamlit
 
 test:
-	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov-report=term-missing --cov-fail-under=88
+	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
 
 # Mirrors CI's lint job exactly — a `make lint` that checks less than CI
 # just moves the failure to the slower feedback loop.
@@ -14,10 +14,8 @@ typecheck:
 
 ci: lint typecheck test
 
-# The one real training entrypoint. (The old target invoked
-# `python -m src.models.train_classification` / `train_regression`,
-# whose __main__ blocks trained nothing — runbook theater.) Requires the
-# committed raw dataset at Resources/NY-House-Dataset.csv; artifacts land
+# The one training entrypoint. Requires the committed raw dataset at
+# Resources/NY-House-Dataset.csv; artifacts land
 # in models/ with provenance in reports/training_metrics.json.
 train:
 	python run_training.py

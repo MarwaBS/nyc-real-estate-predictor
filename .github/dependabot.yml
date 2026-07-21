@@ -1,8 +1,8 @@
 # Dependabot configuration (2026 industrial standard)
 #
-# Weekly grouped updates across pip + docker + github-actions. Matches the
-# ResumeForge configuration shape — patch + minor grouped to reduce PR noise,
-# majors always isolated because they tend to be breaking.
+# Weekly grouped updates across pip + docker + github-actions — patch +
+# minor grouped to reduce PR noise, majors always isolated because they
+# tend to be breaking.
 
 version: 2
 

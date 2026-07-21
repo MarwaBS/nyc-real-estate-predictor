@@ -70,6 +70,8 @@ def test_write_training_metrics_records_the_flag_it_is_given() -> None:
                     n_val=1,
                     n_test=1,
                     features=["f"],
+                    zone_bins=[0.0, 1.0, 2.0, 3.0, float("inf")],
+                    baseline={"predictor": "stub"},
                 )
                 written = json.loads(
                     Path("reports/training_metrics.json").read_text(encoding="utf-8")

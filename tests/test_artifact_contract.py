@@ -32,11 +32,7 @@ from src.utils.geo import haversine
 def _models_present() -> bool:
     return all(
         (Path(MODELS_DIR) / name).exists()
-        for name in (
-            "price_zone_best.joblib",
-            "price_regressor_best.joblib",
-            "label_encoder.joblib",
-        )
+        for name in ("price_regressor_best.joblib", "price_interval.json")
     )
 
 
@@ -48,12 +44,8 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def artifacts() -> dict:
-    """The shipped classifier, regressor, and label encoder."""
-    return {
-        "clf": joblib.load(MODELS_DIR / "price_zone_best.joblib"),
-        "reg": joblib.load(MODELS_DIR / "price_regressor_best.joblib"),
-        "le": joblib.load(MODELS_DIR / "label_encoder.joblib"),
-    }
+    """The shipped model."""
+    return {"reg": joblib.load(MODELS_DIR / "price_regressor_best.joblib")}
 
 
 def _feature_row(
@@ -191,36 +183,6 @@ def _price_bin_rank(price: float) -> int:
     return int(np.digitize(price, PRICE_ZONE_BINS[1:-1]))
 
 
-def test_api_decode_matches_shipped_encoder(artifacts: dict) -> None:
-    """/predict must decode exactly le.classes_[argmax], for every probe.
-
-    This pins the serving-path decode order to the shipped label encoder —
-    the config-order decode returned 'Medium' for a Bronx probe whose
-    correct label is 'Low' and 'Low' for a $1.4M Manhattan condo.
-    """
-    from api.main import app
-
-    client = TestClient(app)
-    le = artifacts["le"]
-    clf = artifacts["clf"]
-
-    for name, probe in PROBES.items():
-        features = _feature_row(*probe["row"])
-        expected_idx = int(np.argmax(clf.predict_proba(features)[0]))
-        expected_label = str(le.classes_[expected_idx])
-
-        resp = client.post("/predict", json=_api_payload(probe["row"]))
-        assert resp.status_code == 200, f"{name}: {resp.text}"
-        zone = resp.json()["zone"]
-        assert zone["price_zone"] == expected_label, (
-            f"{name}: served {zone['price_zone']!r}, encoder says {expected_label!r}"
-        )
-        # Probabilities must be keyed in encoder-class order, and the mass
-        # reported as `confidence` must sit on the served label.
-        assert list(zone["probabilities"]) == [str(c) for c in le.classes_]
-        assert zone["probabilities"][zone["price_zone"]] == zone["confidence"]
-
-
 def test_zone_labels_consistent_with_predicted_prices(artifacts: dict) -> None:
     """Decoded zones must track predicted prices (the capability, not the shape).
 
@@ -262,20 +224,25 @@ def test_zone_labels_consistent_with_predicted_prices(artifacts: dict) -> None:
     assert corr >= 0.8, f"zone rank vs price correlation too weak: {corr:.3f}"
 
 
-def test_predict_module_decode_matches_encoder(artifacts: dict) -> None:
-    """src.models.predict must decode through the shipped encoder too."""
-    import src.models.predict as pred_mod
+def test_the_served_zone_is_the_served_price_bucketed(artifacts: dict) -> None:
+    """End-to-end: the API's two fields must agree with each other.
 
-    # Reset caches so earlier mock-model tests cannot leak into this one.
-    pred_mod._classifier_cache = None
-    pred_mod._regressor_cache = None
-    pred_mod._label_encoder_cache = None
+    This is what the single-model architecture buys. With a separate
+    classifier the zone came from one model and the price from another, so a
+    response could carry zone="High" beside a price that buckets to "Medium"
+    and nothing in the system would notice. Here the zone IS the bucketed
+    price, and this probes the wired path rather than the library function --
+    it fails if the endpoint stops routing through the shared decode.
+    """
+    from api.main import app
+    from src.models.decode import zone_for_price
 
-    le = artifacts["le"]
-    clf = artifacts["clf"]
+    client = TestClient(app)
+
     for name, probe in PROBES.items():
-        features = _feature_row(*probe["row"])
-        expected = str(le.classes_[int(np.argmax(clf.predict_proba(features)[0]))])
-        result = pred_mod.predict_price_zone(features)[0]
-        assert result["price_zone"] == expected, f"{name}"
-        assert list(result["probabilities"]) == [str(c) for c in le.classes_]
+        resp = client.post("/predict", json=_api_payload(probe["row"]))
+        assert resp.status_code == 200, f"{name}: {resp.text}"
+        body = resp.json()
+        assert body["zone"]["price_zone"] == zone_for_price(
+            body["price"]["predicted_price"]
+        ), name
