@@ -321,6 +321,18 @@ _FAMILY_PATTERNS = {
 }
 
 
+def _family_presented_as_shipped(line: str, other_patterns: list[str]) -> bool:
+    # A non-shipped family bound to "shipped"/"selected" in either word order is
+    # the same lie; `(?<!not )` keeps an honest "(not shipped)" line legal.
+    claim = r"(?<!not )(?:shipped|selected)"
+    for p in other_patterns:
+        if re.search(rf"{claim}\W+(\w+\W+){{0,1}}{p}", line, re.I):
+            return True
+        if re.search(rf"{p}\W+(\w+\W+){{0,1}}{claim}", line, re.I):
+            return True
+    return False
+
+
 @pytest.mark.parametrize("doc", MODEL_CLAIM_FILES)
 def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
     """The Space page, Dockerfile, footer and pin comments all once carried
@@ -335,24 +347,12 @@ def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
         other_patterns.append(r"gradient.?boost")
     others = "|".join(other_patterns)
 
-    def _presents_other_as_shipped(line: str) -> bool:
-        # Flags a non-shipped family adjacent to "shipped"/"selected" even when
-        # "candidates" appears elsewhere on the line; `(?<!not )` keeps an
-        # honest "(not shipped)" disclaimer legal.
-        claim = r"(?<!not )(?:shipped|selected)"
-        for p in other_patterns:
-            if re.search(rf"{claim}\W+(\w+\W+){{0,1}}{p}", line, re.I):
-                return True
-            if re.search(rf"{p}\s*\(\s*{claim}", line, re.I):
-                return True
-        return False
-
     wrong = [
         f"{doc}:{i}: {line.strip()[:70]}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
         if not _HISTORICAL.search(line)
         and (
-            _presents_other_as_shipped(line)
+            _family_presented_as_shipped(line, other_patterns)
             or (
                 re.search(others, line, re.IGNORECASE)
                 and re.search(r"selected|shipped", line, re.IGNORECASE)
@@ -363,6 +363,28 @@ def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
     assert not wrong, (
         f"the shipped model is {shipped}; these lines present another family "
         "as shipped:\n" + "\n".join(wrong)
+    )
+
+
+def test_the_shipped_model_gate_catches_either_word_order() -> None:
+    """The historical lie was claim-first; the honest tech-stack row is
+    family-first, so its natural corruption is family-first too. Both orders
+    must flag; the honest row and "(not shipped)" phrasings must not."""
+    others = [_FAMILY_PATTERNS["random_forest"]]
+    assert _family_presented_as_shipped(
+        "shipped Random Forest; XGBoost candidate", others
+    )
+    assert _family_presented_as_shipped(
+        "Random Forest shipped (selected on val), XGBoost / LightGBM candidates", others
+    )
+    assert not _family_presented_as_shipped(
+        "XGBoost shipped (selected on val), Random Forest / LightGBM candidates", others
+    )
+    assert not _family_presented_as_shipped(
+        "Random Forest (not shipped) was a candidate", others
+    )
+    assert not _family_presented_as_shipped(
+        "XGBoost vs Random Forest compared on val", others
     )
 
 
