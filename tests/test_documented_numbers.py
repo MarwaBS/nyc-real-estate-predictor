@@ -328,17 +328,37 @@ def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
     of the MODEL_CARD-only gate."""
     shipped = METRICS["regression"]["selected_model"]
     assert shipped in _FAMILY_PATTERNS, f"unknown family {shipped!r} — extend the map"
-    others = "|".join(p for f, p in _FAMILY_PATTERNS.items() if f != shipped)
+    other_patterns = [p for f, p in _FAMILY_PATTERNS.items() if f != shipped]
     if shipped == "random_forest":
         # "gradient boosting" as a shipped-model description misleads exactly
         # when the shipped model is not a boosted tree.
-        others += r"|gradient.?boost"
+        other_patterns.append(r"gradient.?boost")
+    others = "|".join(other_patterns)
+
+    def _presents_other_as_shipped(line: str) -> bool:
+        # Flags a non-shipped family adjacent to "shipped"/"selected" even when
+        # "candidates" appears elsewhere on the line; `(?<!not )` keeps an
+        # honest "(not shipped)" disclaimer legal.
+        claim = r"(?<!not )(?:shipped|selected)"
+        for p in other_patterns:
+            if re.search(rf"{claim}\W+(\w+\W+){{0,1}}{p}", line, re.I):
+                return True
+            if re.search(rf"{p}\s*\(\s*{claim}", line, re.I):
+                return True
+        return False
+
     wrong = [
         f"{doc}:{i}: {line.strip()[:70]}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
-        if re.search(others, line, re.IGNORECASE)
-        and not _CANDIDATE_CONTEXT.search(line)
-        and not _HISTORICAL.search(line)
+        if not _HISTORICAL.search(line)
+        and (
+            _presents_other_as_shipped(line)
+            or (
+                re.search(others, line, re.IGNORECASE)
+                and re.search(r"selected|shipped", line, re.IGNORECASE)
+                and not _CANDIDATE_CONTEXT.search(line)
+            )
+        )
     ]
     assert not wrong, (
         f"the shipped model is {shipped}; these lines present another family "

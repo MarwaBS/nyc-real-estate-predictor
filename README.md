@@ -500,14 +500,14 @@ nyc-real-estate-predictor/
 | Category | Technology |
 |---|---|
 | Language | Python 3.12 |
-| ML | scikit-learn (shipped Random Forest); XGBoost, LightGBM (candidates) |
+| ML | scikit-learn; XGBoost shipped (selected on val), Random Forest / LightGBM candidates |
 | Tuning | none — fixed hyperparameters, candidates compared on val |
 | Explainability | SHAP |
 | Geospatial | hand-rolled haversine (vectorised numpy) |
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (78% coverage gate; measured 87.67% over src/ + benchmarks/ + api/ + run_training.py) |
+| Testing | pytest (78% coverage gate; measured 87.49% over src/ + benchmarks/ + api/ + run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

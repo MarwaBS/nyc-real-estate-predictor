@@ -59,7 +59,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 78 against a measured 87.67% over the full source set
+        # Floor 78 against a measured 87.49% over the full source set
         # (src/ + api/ + benchmarks/ + run_training.py). The gap gives churn
         # headroom while losing a module's worth of coverage still fails. The
         # omit list holds only the network-bound benchmark modules, which the

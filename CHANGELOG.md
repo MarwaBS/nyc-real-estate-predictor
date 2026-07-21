@@ -66,7 +66,7 @@ project uses SemVer for tagged releases.
 - **Reported metrics (test split):** regression R2 **0.812** (Random Forest),
   zones macro F1 **0.699**. Not comparable to earlier figures — the quartile
   bins changed the classification target and the stratification, so the splits
-  differ. Coverage rose 69% -> 87.67% (untested code deleted, gates added).
+  differ. Coverage rose 69% -> 87.49% (untested code deleted, gates added).
 
 ### Fixed — rate limiting did not apply to rejected API keys
 
@@ -85,7 +85,7 @@ project uses SemVer for tagged releases.
   shipped artefact, was not in `source` at all. Real coverage was **69%**, not
   the advertised 94.7%. The omit list now holds only the network-bound
   benchmark modules, which the External Benchmark workflow exercises end-to-end
-  on live data, and the floor is 78 against a measured 87.67.
+  on live data, and the floor is 78 against a measured 87.49.
 - **Deleted `src/models/train_classification.py` and `train_regression.py`** —
   152 statements with zero importers repo-wide. Both were omitted from
   coverage, so both were invisible and unexecuted.
