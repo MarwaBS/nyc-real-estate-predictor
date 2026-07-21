@@ -282,18 +282,18 @@ def test_per_borough_f1_is_quoted_from_the_artefact(doc: str) -> None:
 def test_docs_do_not_name_an_unselected_model_as_shipped(doc: str) -> None:
     """ADR-002 announced "both shipped models are now XGBoost" while the
     artefact held a Random Forest and there was only one model."""
-    shipped = METRICS["regression"]["selected_model"].replace("_", " ")
-    others = {"xgboost", "lightgbm", "random forest"} - {shipped}
+    shipped = METRICS["regression"]["selected_model"]
+    other_patterns = [p for f, p in _FAMILY_PATTERNS.items() if f != shipped]
+    shipped_pattern = _FAMILY_PATTERNS[shipped]
     wrong = [
-        f"{doc}:{i}: names {name} as selected/shipped"
+        f"{doc}:{i}: {line.strip()[:70]}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
-        if re.search(r"selected|shipped", line, re.IGNORECASE)
-        and not re.search(r"not shipped|never|compared on val", line, re.IGNORECASE)
-        and not _HISTORICAL.search(line)
-        for name in others
-        if re.search(name, line, re.IGNORECASE)
+        if _shipped_claim_on_non_shipped_family(line, other_patterns, shipped_pattern)
     ]
-    assert not wrong, f"the artefact ships {shipped}:\n" + "\n".join(wrong)
+    assert not wrong, (
+        f"the artefact ships {shipped}; these name another family as shipped:\n"
+        + "\n".join(wrong)
+    )
 
 
 # Every file that presents the system to a reader, not only the markdown docs:
@@ -307,12 +307,6 @@ MODEL_CLAIM_FILES = [
     "requirements.txt",
 ]
 
-# A non-shipped-family mention is legitimate only as a candidate/comparison,
-# a version pin, a wheel/runtime note, or the ADR filename.
-_CANDIDATE_CONTEXT = re.compile(
-    r"compar|candidat|not shipped| vs |==|wheels|002-xgboost", re.IGNORECASE
-)
-
 # Model families the protocol compares; the artefact names the shipped one.
 _FAMILY_PATTERNS = {
     "random_forest": r"random.?forest",
@@ -320,17 +314,75 @@ _FAMILY_PATTERNS = {
     "lightgbm": r"lightgbm",
 }
 
+# A "shipped"/"selected" claim in any tense; `(?<!not )` keeps "not shipped" legal.
+_SHIP_CLAIM = re.compile(
+    r"(?<!not )(?:\bship(?:s|ped|ping)?\b|\bselect(?:s|ed|ing)?\b)", re.IGNORECASE
+)
+# Prepositions that make the adjacent family the rejected option, not the shipped one.
+_COMPARISON = re.compile(
+    r"\b(?:over|instead|rather|versus|vs|against|beat\w*|outperform\w*|behind|won)\b",
+    re.IGNORECASE,
+)
 
-def _family_presented_as_shipped(line: str, other_patterns: list[str]) -> bool:
-    # A non-shipped family bound to "shipped"/"selected" in either word order is
-    # the same lie; `(?<!not )` keeps an honest "(not shipped)" line legal.
-    claim = r"(?<!not )(?:shipped|selected)"
-    for p in other_patterns:
-        if re.search(rf"{claim}\W+(\w+\W+){{0,1}}{p}", line, re.I):
-            return True
-        if re.search(rf"{p}\W+(\w+\W+){{0,1}}{claim}", line, re.I):
-            return True
-    return False
+
+def _top_level_sentences(line: str) -> list[str]:
+    # Split on "." and ";" but not inside parentheses: "(selected then;
+    # superseded 2026)" is one historical unit, not two clauses.
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in line:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        if ch in ".;" and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
+def _shipped_claim_on_non_shipped_family(
+    line: str, other_patterns: list[str], shipped_pattern: str
+) -> str:
+    """Return the sentence naming a non-shipped family as shipped/selected, else "".
+
+    Anchored on the claim, not on a keyword exemption -- a line-scoped "does it
+    say candidates?" test pardoned a whole line whose first clause lied. Each
+    claim binds to the family nearest it: the shipped family owning the claim is
+    legitimate, a comparison preposition ("selected over X") marks X the loser,
+    and a historical or negated sentence is exempt whole. A candidate list makes
+    no claim of its own, so it stays legal without an exemption.
+    """
+    families = re.compile("|".join([*other_patterns, shipped_pattern]), re.IGNORECASE)
+    non_shipped = re.compile("|".join(other_patterns), re.IGNORECASE)
+    for sentence in _top_level_sentences(line):
+        if _HISTORICAL.search(sentence):
+            continue
+        found = list(families.finditer(sentence))
+        if not found:
+            continue
+        for claim in _SHIP_CLAIM.finditer(sentence):
+            nearest = min(
+                found,
+                key=lambda m, c=claim: max(m.start() - c.end(), c.start() - m.end(), 0),
+            )
+            if not non_shipped.fullmatch(nearest.group()):
+                continue
+            lo, hi = sorted(
+                (claim.start(), claim.end(), nearest.start(), nearest.end())
+            )[1:3]
+            between = sentence[lo:hi]
+            if _COMPARISON.search(between):
+                continue
+            commas = between.count(",")
+            words = len(re.findall(r"\w+", between))
+            if commas == 0 or (commas <= 1 and words <= 1):
+                return sentence.strip()
+    return ""
 
 
 @pytest.mark.parametrize("doc", MODEL_CLAIM_FILES)
@@ -345,20 +397,12 @@ def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
         # "gradient boosting" as a shipped-model description misleads exactly
         # when the shipped model is not a boosted tree.
         other_patterns.append(r"gradient.?boost")
-    others = "|".join(other_patterns)
+    shipped_pattern = _FAMILY_PATTERNS[shipped]
 
     wrong = [
         f"{doc}:{i}: {line.strip()[:70]}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
-        if not _HISTORICAL.search(line)
-        and (
-            _family_presented_as_shipped(line, other_patterns)
-            or (
-                re.search(others, line, re.IGNORECASE)
-                and re.search(r"selected|shipped", line, re.IGNORECASE)
-                and not _CANDIDATE_CONTEXT.search(line)
-            )
-        )
+        if _shipped_claim_on_non_shipped_family(line, other_patterns, shipped_pattern)
     ]
     assert not wrong, (
         f"the shipped model is {shipped}; these lines present another family "
@@ -366,26 +410,32 @@ def test_no_surface_presents_an_unselected_family_as_shipped(doc: str) -> None:
     )
 
 
-def test_the_shipped_model_gate_catches_either_word_order() -> None:
-    """The historical lie was claim-first; the honest tech-stack row is
-    family-first, so its natural corruption is family-first too. Both orders
-    must flag; the honest row and "(not shipped)" phrasings must not."""
-    others = [_FAMILY_PATTERNS["random_forest"]]
-    assert _family_presented_as_shipped(
-        "shipped Random Forest; XGBoost candidate", others
+def test_the_shipped_model_gate_catches_every_binding_form() -> None:
+    """Word order, multi-word gaps, appositives and present tense are the same
+    lie; comparison prepositions, negation, historical context and the honest
+    tech-stack row must stay legal."""
+    other = [_FAMILY_PATTERNS["random_forest"], _FAMILY_PATTERNS["lightgbm"]]
+    xgb = _FAMILY_PATTERNS["xgboost"]
+
+    def flags(text: str) -> bool:
+        return bool(_shipped_claim_on_non_shipped_family(text, other, xgb))
+
+    assert flags("shipped Random Forest; XGBoost candidate")
+    assert flags(
+        "Random Forest shipped (selected on val), XGBoost / LightGBM candidates"
     )
-    assert _family_presented_as_shipped(
-        "Random Forest shipped (selected on val), XGBoost / LightGBM candidates", others
+    assert flags("Random Forest is the shipped model; XGBoost/LightGBM are candidates")
+    assert flags("LightGBM was the selected final model vs XGBoost")
+    assert flags("The model, a Random Forest, is shipped")
+    assert flags("The production system ships a LightGBM regressor")
+
+    assert not flags(
+        "XGBoost shipped (selected on val), Random Forest / LightGBM candidates"
     )
-    assert not _family_presented_as_shipped(
-        "XGBoost shipped (selected on val), Random Forest / LightGBM candidates", others
-    )
-    assert not _family_presented_as_shipped(
-        "Random Forest (not shipped) was a candidate", others
-    )
-    assert not _family_presented_as_shipped(
-        "XGBoost vs Random Forest compared on val", others
-    )
+    assert not flags("XGBoost was selected over Random Forest on validation")
+    assert not flags("Random Forest (not shipped) was a candidate")
+    assert not flags("previously shipped Random Forest, before 2026")
+    assert not flags("The Random Forest algorithm is popular in industry")
 
 
 def test_no_tracked_file_references_private_projects() -> None:
