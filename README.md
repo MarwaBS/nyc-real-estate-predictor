@@ -74,22 +74,21 @@ compare against.
 
 ### SHAP feature importance (top 10)
 
-From the artefact's `classification.shap_top10` (mean |SHAP| over the test
-sample, averaged across the four classes; prefixes are the
-ColumnTransformer's):
+From the artefact's `classification.shap_top10` (mean |SHAP| over the
+regressor's test predictions; prefixes are the ColumnTransformer's):
 
 | Rank | Feature | Mean abs SHAP |
 |---|---|---|
-| 1 | BATH | 0.446 |
-| 2 | DIST_MANHATTAN_CENTER | 0.343 |
-| 3 | TOTAL_ROOMS | 0.125 |
-| 4 | PROPERTYSQFT | 0.102 |
-| 5 | SUBLOCALITY (target-encoded) | 0.066 |
-| 6 | TYPE_co-op (one-hot) | 0.060 |
-| 7 | ZIPCODE (target-encoded) | 0.036 |
-| 8 | DIST_CENTRAL_PARK | 0.035 |
-| 9 | BOROUGH_brooklyn (one-hot) | 0.015 |
-| 10 | ROOMS_PER_SQFT | 0.012 |
+| 1 | BATH | 0.369 |
+| 2 | DIST_MANHATTAN_CENTER | 0.362 |
+| 3 | PROPERTYSQFT | 0.144 |
+| 4 | DIST_CENTRAL_PARK | 0.116 |
+| 5 | TOTAL_ROOMS | 0.108 |
+| 6 | ZIPCODE (target-encoded) | 0.097 |
+| 7 | TYPE_co-op (one-hot) | 0.079 |
+| 8 | SUBLOCALITY (target-encoded) | 0.071 |
+| 9 | ROOMS_PER_SQFT | 0.034 |
+| 10 | BOROUGH_the bronx (one-hot) | 0.027 |
 
 ### Fairness by borough
 

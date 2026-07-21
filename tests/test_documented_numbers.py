@@ -385,6 +385,26 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
     )
 
 
+def test_readme_shap_table_matches_the_artefact() -> None:
+    """README once carried the previous model's SHAP values (BATH 0.446 …)
+    under a false 'read from the artefact' heading. The doc gates covered R²
+    and the model name but not this table."""
+    readme = _read("README.md")
+    shap = METRICS["classification"]["shap_top10"]
+    for row in shap[:4]:
+        # ColumnTransformer prefixes (num__, cat_target__) are stripped in the
+        # prose, so match the bare feature name and its 3-dp value.
+        feature = row["feature"].split("__", 1)[-1].split("_")[0]
+        value = f"{row['mean_abs_shap']:.3f}"
+        pattern = rf"{re.escape(feature)}[^|]*\|\s*{re.escape(value)}"
+        assert re.search(pattern, readme, re.IGNORECASE), (
+            f"README SHAP table does not carry {feature} = {value} "
+            f"(artefact rank {shap.index(row) + 1})"
+        )
+    # The stale table's top value must be gone specifically.
+    assert "0.446" not in readme, "README still carries the prior model's SHAP 0.446"
+
+
 def test_the_stated_feature_count_matches_the_fitted_model() -> None:
     """MODEL_CARD claimed 14 features (10 numeric) against an artefact holding
     12 (8 numeric) — the count was not updated when two were removed."""
