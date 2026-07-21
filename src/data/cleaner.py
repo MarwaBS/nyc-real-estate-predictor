@@ -251,17 +251,12 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     df = impute_missing(df)
 
-    # Drop 32-bit integer overflow sentinels before capping. The raw snapshot
-    # holds exactly one PRICE of 2,147,483,647 (2**31 - 1); the next highest
-    # real listing is 195,000,000, so this is a serialisation artefact rather
-    # than an expensive property. It is removed rather than capped because it
-    # is not a price at all -- unlike the genuine high-end listings the cap
-    # legitimately clips, which stay in the dataset at the cap value.
-    #
-    # The threshold catches this sentinel and anything above it; it is not a
-    # general implausible-price filter. A merely absurd value (say 2**31 - 2)
-    # would still be capped like any other outlier, which is the right
-    # treatment for a number that could be a price.
+    # Drop the 32-bit integer overflow sentinel. The raw snapshot holds exactly
+    # one PRICE of 2,147,483,647 (2**31 - 1); the next highest real listing is
+    # 195,000,000, so this is a serialisation artefact, not a price, and is
+    # removed rather than left for the downstream IQR cap to clip. The threshold
+    # catches this sentinel and anything above it; a merely absurd value (say
+    # 2**31 - 2) is left for that cap, the right treatment for a possible price.
     before = len(df)
     df = df[df["PRICE"] < INT32_MAX]
     logger.info("Dropped %d rows with overflow-sentinel PRICE", before - len(df))

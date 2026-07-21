@@ -93,14 +93,12 @@ def test_derive_zipcode_leaves_unparseable_rows_null_not_sentinel() -> None:
     assert pd.isna(result["ZIPCODE"].iloc[1])
 
 
-def test_clean_pipeline_drops_the_overflow_sentinel_rather_than_capping_it(
+def test_clean_pipeline_drops_the_overflow_sentinel(
     raw_shaped_data: pd.DataFrame,
 ) -> None:
-    """2**31-1 must leave the dataset, not survive as a capped listing.
-
-    cap_outliers clips to the IQR bound, so a sentinel that reaches it becomes
-    an ordinary-looking listing at the cap instead of being removed.
-    """
+    """2**31-1 must leave the dataset. It is a serialisation artefact, not a
+    price; the downstream train-fitted cap would otherwise clip it to a
+    plausible-looking listing instead of removing it."""
     df = raw_shaped_data.copy()
     df.loc[0, "PRICE"] = 2_147_483_647
     result = clean_pipeline(df)

@@ -382,6 +382,10 @@ fixed hyperparameters, best model selected on the **val** split and then
 scored once on **test**; zones are that model's predictions bucketed through
 `PRICE_ZONE_BINS`. Outputs are recorded in `reports/training_metrics.json`.
 
+The reasoning behind each choice — why one regressor over a classifier, what
+was tried and removed, and how every constant was measured — is in
+[`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md).
+
 ### Regression: Actual Price
 
 XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilizes variance), compared on val; the winner is scored once on test. Predictions converted back via `expm1()`.

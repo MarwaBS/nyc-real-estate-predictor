@@ -96,6 +96,7 @@ def test_readme_drop_table_reconciles_to_the_artefact() -> None:
 LIVE_DOCS = [
     "README.md",
     "MODEL_CARD.md",
+    "DESIGN_DECISIONS.md",
     "deploy/huggingface/README.md",
     "deploy/huggingface/DEPLOY.md",
 ]

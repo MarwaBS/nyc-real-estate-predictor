@@ -83,16 +83,12 @@ def test_every_borough_resolves_to_a_canonical_nyc_name(cleaned: pd.DataFrame) -
 
 
 def test_the_overflow_sentinel_row_is_dropped_not_capped() -> None:
-    """The sentinel row must LEAVE the dataset, not survive at the cap.
+    """The sentinel row must LEAVE the dataset, not survive as a listing.
 
-    Asserting a post-cap magnitude cannot detect this: cap_outliers clips the
-    sentinel to the IQR bound ($4,483,000) unconditionally, so `max < 10M`
-    holds whether or not the drop runs. Deleting the guarded line left that
-    version of this test green — it asserted a property cap_outliers
-    guarantees on its own.
-
-    Row count is what distinguishes the two: dropping removes the row,
-    capping keeps it.
+    Row count distinguishes drop from keep: cleaning the frame with and without
+    the sentinel gives the same count only if the sentinel is dropped. A
+    magnitude assertion would not — the downstream train-fitted cap would clip
+    the value either way.
     """
     raw = load_raw()
     n_sentinel = int((raw["PRICE"] >= INT32_MAX).sum())
@@ -103,7 +99,7 @@ def test_the_overflow_sentinel_row_is_dropped_not_capped() -> None:
 
     assert with_sentinel == without_sentinel, (
         "cleaning the frame with and without the sentinel gives different row "
-        "counts, so the sentinel is being kept (capped) rather than dropped"
+        "counts, so the sentinel is being kept rather than dropped"
     )
 
 
