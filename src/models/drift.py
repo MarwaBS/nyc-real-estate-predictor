@@ -65,7 +65,9 @@ def detect_drift(
     """Compare current data against baseline. Returns drifted features.
 
     A feature is flagged as drifted if its mean shifts by more than
-    `threshold` relative to the baseline standard deviation.
+    `threshold` relative to the baseline standard deviation. The 0.15 default
+    is the monitor's sensitivity knob (flag a >0.15-sigma mean move), not a
+    derived bound -- tune it per deployment.
 
     Returns:
         dict of {feature: {"baseline_mean", "current_mean", "shift_ratio"}}

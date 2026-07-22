@@ -140,6 +140,27 @@ def test_impute_missing_fills_nulls(sample_raw_data: pd.DataFrame) -> None:
     assert result["BEDS"].isna().sum() == 0
 
 
+def test_impute_is_a_noop_on_shipped_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """impute_missing runs before the split, so its medians are pooled. On the
+    shipped snapshot it must be inert -- if BEDS/BATH/PROPERTYSQFT ever reach it
+    with NaNs, the pooled fill would cross the train/test split. This pins that
+    they don't, so the leak stays hypothetical; a failure here is the signal to
+    move imputation into the train-only fit/apply family."""
+    from src.data import cleaner
+    from src.data.loader import load_raw
+
+    seen: dict[str, int] = {}
+    real_impute = cleaner.impute_missing
+
+    def spy(frame: pd.DataFrame) -> pd.DataFrame:
+        seen["nans"] = int(frame[["BEDS", "BATH", "PROPERTYSQFT"]].isna().sum().sum())
+        return real_impute(frame)
+
+    monkeypatch.setattr(cleaner, "impute_missing", spy)
+    cleaner.clean_pipeline(load_raw())
+    assert seen["nans"] == 0
+
+
 def test_cap_outliers_clips_extreme_values() -> None:
     df = pd.DataFrame({"PRICE": [100, 200, 300, 400, 100_000_000]})
     result = cap_outliers(df, columns=["PRICE"], factor=3.0)

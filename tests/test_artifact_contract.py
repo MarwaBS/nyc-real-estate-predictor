@@ -2,15 +2,14 @@
 
 These tests load the real ``models/*.joblib`` artefacts, which are committed
 and MANIFEST-pinned, and probe the CAPABILITY:
-the decoded zone label must be the label encoder's name for the predicted
-class index, and it must be consistent with the predicted price. The prior
-suite asserted only label MEMBERSHIP, which stayed green while the API
+the decoded zone label must be the bucket the predicted price falls into
+(via ``PRICE_ZONE_BINS``/``zone_for_price``), so zone and price always agree.
+The prior suite asserted only label MEMBERSHIP, which stayed green while the API
 decoded 3 of the 4 classes wrong (a $1.4M Manhattan condo served "Low").
 """
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 import joblib
@@ -20,13 +19,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.config import (
-    CENTRAL_PARK,
-    MANHATTAN_CENTER,
     MODELS_DIR,
     PRICE_ZONE_BINS,
     PRICE_ZONE_LABELS,
 )
-from src.utils.geo import haversine
 
 
 def _models_present() -> bool:
@@ -46,42 +42,6 @@ pytestmark = pytest.mark.skipif(
 def artifacts() -> dict:
     """The shipped model."""
     return {"reg": joblib.load(MODELS_DIR / "price_regressor_best.joblib")}
-
-
-def _feature_row(
-    beds: int,
-    bath: float,
-    sqft: float,
-    borough: str,
-    prop_type: str,
-    zipcode: str,
-    sublocality: str,
-    lat: float,
-    lon: float,
-) -> pd.DataFrame:
-    """Mirror api.main._build_features for a direct-artefact probe."""
-    total_rooms = beds + bath
-    return pd.DataFrame(
-        [
-            {
-                "BEDS": beds,
-                "BATH": bath,
-                "PROPERTYSQFT": float(sqft),
-                "TOTAL_ROOMS": total_rooms,
-                "BED_BATH_RATIO": beds / max(bath, 1.0),
-                "LOG_SQFT": math.log1p(sqft),
-                "ROOMS_PER_SQFT": total_rooms / max(sqft, 1.0),
-                "DIST_MANHATTAN_CENTER": haversine(lat, lon, *MANHATTAN_CENTER),
-                "DIST_CENTRAL_PARK": haversine(lat, lon, *CENTRAL_PARK),
-                "DIST_NEAREST_SUBWAY": haversine(lat, lon, *MANHATTAN_CENTER),
-                "BOROUGH": borough,
-                "TYPE": prop_type,
-                "PROPERTY_CATEGORY": "residential",
-                "ZIPCODE": zipcode,
-                "SUBLOCALITY": sublocality,
-            }
-        ]
-    )
 
 
 # Canonical probes spanning the price spectrum (beds, bath, sqft, borough,
