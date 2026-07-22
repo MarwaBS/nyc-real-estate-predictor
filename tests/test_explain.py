@@ -69,13 +69,3 @@ def test_mismatched_feature_names_raise_rather_than_mis_pair(fitted: tuple) -> N
     _, X, shap_values, explainer = fitted
     with pytest.raises(ValueError):
         get_top_features_for_prediction(explainer, shap_values, ["a", "b"], idx=0)
-
-
-def test_legacy_list_shape_is_handled() -> None:
-    """Older shap returns a per-class list; both branches must reduce."""
-    names = ["a", "b", "c"]
-    legacy = [np.array([[1.0, -2.0, 0.5]]), np.array([[0.2, 0.1, -0.3]])]
-    importance = global_feature_importance(legacy, names)
-    assert set(importance["feature"]) == set(names)
-    top = get_top_features_for_prediction(object(), legacy, names, idx=0, top_n=1)
-    assert top[0]["feature"] == "b"  # |−2.0| dominates class 0

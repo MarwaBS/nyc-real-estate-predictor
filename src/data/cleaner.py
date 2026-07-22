@@ -250,6 +250,9 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=["BOROUGH", "ZIPCODE"])
     logger.info("Dropped %d rows with underivable BOROUGH/ZIPCODE", before - len(df))
 
+    # Pre-split (pooled medians) but a verified no-op: BEDS/BATH/PROPERTYSQFT
+    # arrive complete, pinned by test_impute_is_a_noop_on_shipped_data. If NaNs
+    # ever reach here, move imputation into the train-only fit/apply family.
     df = impute_missing(df)
 
     # Drop the 32-bit integer overflow sentinel. The raw snapshot holds exactly

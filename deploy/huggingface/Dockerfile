@@ -20,7 +20,7 @@ FROM python:3.12-slim-bookworm
 
 # ── System deps + OS security patches ──────────────────────────────────────
 # libgomp1 is the OpenMP runtime the gradient-boosting wheels link against; the
-# shipped classifier is an XGBoost model, so without it every prediction fails
+# shipped regressor is an XGBoost model, so without it every prediction fails
 # with `OSError: libgomp.so.1`. It is named EXPLICITLY even though build-essential
 # already pulls it in transitively via gcc: relying on that means the day
 # someone trims build-essential (it is only here for source builds, and every
