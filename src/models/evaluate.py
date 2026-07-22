@@ -29,12 +29,10 @@ def evaluate_classifier(
 ) -> dict[str, Any]:
     """Compute all classification metrics and return as dict.
 
-    ``labels`` names the encoded classes IN INDEX ORDER — for targets encoded
-    with a ``LabelEncoder`` that is ``list(le.classes_)`` (alphabetical), not
-    any semantic ordering. Passing names in a different order silently
-    misattributes every per-class row of the classification report. The
-    order used is recorded in the returned dict under ``"labels"`` so
-    downstream artefacts (confusion matrix, per-class rows) are auditable.
+    ``labels`` is the class values in the row order wanted for the confusion
+    matrix and per-class report; it is passed through to sklearn, which would
+    otherwise sort classes alphabetically and misattribute semantically
+    ordered rows. The order used is recorded under ``"labels"``.
     """
     metrics: dict[str, Any] = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
@@ -42,11 +40,11 @@ def evaluate_classifier(
         "weighted_f1": float(f1_score(y_true, y_pred, average="weighted")),
         "cohen_kappa": float(cohen_kappa_score(y_true, y_pred)),
         "labels": list(labels) if labels is not None else None,
-        "confusion_matrix": confusion_matrix(y_true, y_pred).tolist(),
+        "confusion_matrix": confusion_matrix(y_true, y_pred, labels=labels).tolist(),
         "classification_report": classification_report(
             y_true,
             y_pred,
-            target_names=labels,
+            labels=labels,
             output_dict=True,
         ),
     }
