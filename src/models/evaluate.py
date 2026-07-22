@@ -103,6 +103,8 @@ def evaluate_fairness_by_group(
     results: dict[str, float] = {}
     for group_name in groups.unique():
         mask = groups == group_name
+        # Skip groups with < 5 members: a per-group score over so few rows is
+        # sampling noise, not a fairness signal.
         if mask.sum() < 5:
             continue
         if metric_fn == "macro_f1":

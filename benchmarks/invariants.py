@@ -203,6 +203,8 @@ def check_predictions_healthy(
     """
     arr = np.asarray(predictions, dtype=float)
 
+    # n_min=500: below this the identical-fraction and NaN-rate statistics are
+    # too sparse to separate genuine collapse from small-sample noise.
     if arr.size < n_min:
         raise HealthError(f"insufficient predictions: {arr.size} < {n_min}")
 

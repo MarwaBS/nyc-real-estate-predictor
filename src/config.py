@@ -41,8 +41,6 @@ TEST_SIZE: float = 0.2
 # choice made during training reads VAL; TEST is scored once, at the end, by
 # the already-chosen model.
 VAL_SIZE: float = 0.2
-CV_FOLDS: int = 5
-OPTUNA_TRIALS: int = 50
 
 # Price zone thresholds (USD): equal-frequency quartiles of the TRAIN split's
 # capped prices from the shipped run (run_training.build_splits), so serving
