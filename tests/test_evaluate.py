@@ -14,14 +14,30 @@ from src.models.evaluate import (
 
 
 def test_evaluate_classifier_returns_expected_keys() -> None:
-    y_true = np.array([0, 1, 2, 0, 1, 2, 0, 1])
-    y_pred = np.array([0, 1, 2, 0, 2, 2, 1, 1])
+    y_true = np.array(
+        ["Low", "Medium", "High", "Low", "Medium", "High", "Low", "Medium"]
+    )
+    y_pred = np.array(
+        ["Low", "Medium", "High", "Low", "High", "High", "Medium", "Medium"]
+    )
     metrics = evaluate_classifier(y_true, y_pred, labels=["Low", "Medium", "High"])
     assert "accuracy" in metrics
     assert "macro_f1" in metrics
     assert "cohen_kappa" in metrics
     assert "confusion_matrix" in metrics
     assert "classification_report" in metrics
+
+
+def test_per_class_rows_follow_the_given_label_order() -> None:
+    """'Low' is perfect and 'High' always wrong; sklearn's default
+    alphabetical ordering would silently swap those rows."""
+    y_true = np.array(["Low", "Low", "High", "High", "Medium"])
+    y_pred = np.array(["Low", "Low", "Medium", "Medium", "Medium"])
+    metrics = evaluate_classifier(y_true, y_pred, labels=["Low", "Medium", "High"])
+    report = metrics["classification_report"]
+    assert report["Low"]["f1-score"] == 1.0
+    assert report["High"]["f1-score"] == 0.0
+    assert metrics["confusion_matrix"][2] == [0, 2, 0]
 
 
 def test_evaluate_classifier_perfect_score() -> None:

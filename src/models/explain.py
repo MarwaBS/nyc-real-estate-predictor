@@ -30,6 +30,9 @@ def compute_shap_values(
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_sample)
     except Exception:
+        # TreeExplainer raises assorted, version-dependent errors on an
+        # unsupported model; any failure degrades to the model-agnostic
+        # KernelExplainer rather than losing the explanation.
         logger.info("TreeExplainer failed — falling back to KernelExplainer")
         explainer = shap.KernelExplainer(model.predict, shap.sample(X_sample, 100))
         shap_values = explainer.shap_values(X_sample)
@@ -46,15 +49,9 @@ def get_top_features_for_prediction(
     top_n: int = 5,
 ) -> list[dict[str, Any]]:
     """Get top N contributing features for a single prediction."""
-    if isinstance(shap_values, list):
-        # Legacy multi-class shape: list of (n_samples, n_features) per class
-        values = shap_values[0][idx]
-    else:
-        values = np.asarray(shap_values)[idx]
-        if values.ndim == 2:
-            # Modern shap multi-class: (n_features, n_classes) per sample —
-            # aggregate magnitude across classes for a single ranking.
-            values = values.mean(axis=1)
+    # Single-output regressor: TreeExplainer returns (n_samples, n_features), so
+    # one row indexes to a 1-D per-feature vector.
+    values = np.asarray(shap_values)[idx]
 
     # strict=True: one SHAP value per feature name. A mismatch means the
     # explainer's output shape disagrees with the transformed feature list,
@@ -79,16 +76,7 @@ def global_feature_importance(
     feature_names: list[str],
 ) -> pd.DataFrame:
     """Compute mean absolute SHAP values per feature (global importance)."""
-    if isinstance(shap_values, list):
-        # Legacy multi-class shape: list of (n_samples, n_features) per class
-        vals = np.mean([np.abs(sv) for sv in shap_values], axis=0)
-    else:
-        vals = np.abs(np.asarray(shap_values))
-        if vals.ndim == 3:
-            # Modern shap multi-class: (n_samples, n_features, n_classes) —
-            # average magnitude across classes first.
-            vals = vals.mean(axis=2)
-
+    vals = np.abs(np.asarray(shap_values))
     mean_importance = vals.mean(axis=0)
     importance_df = (
         pd.DataFrame(

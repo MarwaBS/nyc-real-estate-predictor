@@ -1,9 +1,9 @@
-"""Centralized configuration — all paths, constants, and env vars in one place."""
+"""Centralized configuration — paths and constants; loads .env for the
+consumers that read the environment (mlflow, api/settings.py)."""
 
 from __future__ import annotations
 
 import contextlib
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -27,12 +27,6 @@ for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
         _dir.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# API Keys (from environment — never hardcoded)
-# ---------------------------------------------------------------------------
-GEOAPIFY_API_KEY: str = os.getenv("GEOAPIFY_API_KEY", "")
-GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
-
-# ---------------------------------------------------------------------------
 # Model / training constants
 # ---------------------------------------------------------------------------
 RANDOM_SEED: int = 42
@@ -41,8 +35,6 @@ TEST_SIZE: float = 0.2
 # choice made during training reads VAL; TEST is scored once, at the end, by
 # the already-chosen model.
 VAL_SIZE: float = 0.2
-CV_FOLDS: int = 5
-OPTUNA_TRIALS: int = 50
 
 # Price zone thresholds (USD): equal-frequency quartiles of the TRAIN split's
 # capped prices from the shipped run (run_training.build_splits), so serving

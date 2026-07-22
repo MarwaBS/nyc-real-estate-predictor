@@ -47,6 +47,7 @@ from src.config import (
 )
 from src.data.cleaner import apply_cap, clean_pipeline, fit_cap_bounds
 from src.data.features import (
+    REFERENCE_POINTS,
     add_numeric_features,
     add_target_variables,
     apply_top_categories,
@@ -67,11 +68,6 @@ from src.utils.validation import assert_no_leakage
 
 setup_logging()
 logger = logging.getLogger(__name__)
-
-REFERENCE_POINTS = {
-    "MANHATTAN_CENTER": (40.7580, -73.9855),
-    "CENTRAL_PARK": (40.7829, -73.9654),
-}
 
 
 def prepare_data() -> pd.DataFrame:
