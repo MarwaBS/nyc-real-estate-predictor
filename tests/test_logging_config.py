@@ -1,8 +1,9 @@
-"""setup_logging must actually configure the root logger.
+"""setup_logging must reconfigure a root logger that is already configured.
 
-Asserting only "some handler exists" passes under any prior logging setup;
-these assert the requested level and handler land even when a handler is
-already installed (pytest's capture handler guarantees one is).
+basicConfig without force= silently no-ops when any root handler exists, so
+each test seeds a sentinel handler and a wrong level BEFORE the call — an
+assertion that starts from a bare root passes without force= and gates
+nothing.
 """
 
 from __future__ import annotations
@@ -16,11 +17,11 @@ from src.utils.logging_config import setup_logging
 
 
 @pytest.fixture
-def bare_root() -> Iterator[logging.Logger]:
+def preconfigured_root() -> Iterator[logging.Logger]:
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
-    for handler in saved_handlers:
-        root.removeHandler(handler)
+    root.addHandler(logging.NullHandler())
+    root.setLevel(logging.CRITICAL)
     yield root
     for handler in root.handlers[:]:
         root.removeHandler(handler)
@@ -29,17 +30,17 @@ def bare_root() -> Iterator[logging.Logger]:
     root.setLevel(saved_level)
 
 
-def test_setup_logging_sets_the_requested_level_and_a_stream_handler(
-    bare_root: logging.Logger,
+def test_setup_logging_wins_over_an_existing_configuration(
+    preconfigured_root: logging.Logger,
 ) -> None:
     setup_logging(level="DEBUG")
-    assert bare_root.level == logging.DEBUG
-    assert len(bare_root.handlers) == 1
-    assert isinstance(bare_root.handlers[0], logging.StreamHandler)
+    assert preconfigured_root.level == logging.DEBUG
+    assert len(preconfigured_root.handlers) == 1
+    assert isinstance(preconfigured_root.handlers[0], logging.StreamHandler)
 
 
 def test_setup_logging_falls_back_to_info_on_an_unknown_level(
-    bare_root: logging.Logger,
+    preconfigured_root: logging.Logger,
 ) -> None:
     setup_logging(level="NOT_A_LEVEL")
-    assert bare_root.level == logging.INFO
+    assert preconfigured_root.level == logging.INFO

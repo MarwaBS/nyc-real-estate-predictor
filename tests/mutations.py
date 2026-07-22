@@ -213,6 +213,13 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_documented_numbers.py",
     ),
     Mutation(
+        name="logging-force-reconfigure-removed",
+        path="src/utils/logging_config.py",
+        old="        force=True,",
+        new="",
+        gate="tests/test_logging_config.py",
+    ),
+    Mutation(
         name="drift-baseline-failure-swallowed",
         path="run_training.py",
         old=(
