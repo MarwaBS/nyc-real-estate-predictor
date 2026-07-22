@@ -189,4 +189,45 @@ MUTATIONS: list[Mutation] = [
         new='"ignore", category=UserWarning, message=_XGB_CROSS_VERSION',
         gate="tests/test_predict.py::test_xgboost_version_mismatch_is_refused",
     ),
+    Mutation(
+        name="pyproject-description-rots-to-losing-model",
+        path="pyproject.toml",
+        old=(
+            'description = "NYC real estate price prediction with derived '
+            'price zones (one XGBoost regressor)"'
+        ),
+        new=(
+            'description = "NYC real estate price prediction with derived '
+            'price zones (one Random Forest regressor)"'
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="readme-revives-argmax-serving-claim",
+        path="README.md",
+        old=(
+            "**Per-class threshold tuning was removed; serving has no "
+            "thresholds to tune.**"
+        ),
+        new="**Serving decodes with plain argmax.**",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="drift-baseline-failure-swallowed",
+        path="run_training.py",
+        old=(
+            "    from src.models.drift import save_baseline\n"
+            "\n"
+            '    save_baseline(X_train, MODELS_DIR / "drift_baseline.json")'
+        ),
+        new=(
+            "    from src.models.drift import save_baseline\n"
+            "\n"
+            "    try:\n"
+            '        save_baseline(X_train, MODELS_DIR / "drift_baseline.json")\n'
+            "    except Exception as exc:\n"
+            '        logger.warning("drift baseline failed (non-critical): %s", exc)'
+        ),
+        gate="tests/test_artifact_manifest.py",
+    ),
 ]

@@ -9,8 +9,11 @@ import sys
 def setup_logging(level: str = "INFO") -> None:
     """Configure structured logging for the project."""
     fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+    # force: without it basicConfig silently no-ops when the root logger
+    # already has any handler, leaving the requested level unset.
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format=fmt,
         handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
     )

@@ -56,7 +56,7 @@ environment (Python 3.12.13, numpy 1.26.4, scikit-learn 1.8.0 — recorded in
 the artifact's provenance block together with `working_tree_clean` and the
 producing commit).
 
-**Serving decodes with plain argmax; per-class threshold tuning was removed.**
+**Per-class threshold tuning was removed; serving has no thresholds to tune.**
 An earlier revision published 0.724 macro F1 from per-class thresholds fitted
 against the *test* labels and then scored on those same labels, so the
 advertised "+0.014 gain" was the tuner reading its own answer sheet. Measured

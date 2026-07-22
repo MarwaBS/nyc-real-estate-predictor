@@ -14,11 +14,10 @@
 #   models/ serving artifacts         <- the committed, MANIFEST-pinned
 #                                        model files (see below)
 #
-# MODELS ARE SYNCED, NOT PRESERVED. The first version of this script
-# deliberately left <space_dir>/models/ alone — and the 2026-07-14
-# re-audit caught the live demo running current code over April's
-# misattributed thresholds (21.4% of a probe grid decoded differently).
-# The serving artifacts are now committed to this repo and pinned by
+# MODELS ARE SYNCED, NOT PRESERVED. Leaving <space_dir>/models/ alone
+# once let the live demo run current code over a stale model vintage
+# (21.4% of a probe grid decoded differently).
+# The serving artifacts are committed to this repo and pinned by
 # models/MANIFEST.sha256 (enforced by tests/test_artifact_manifest.py),
 # so the overlay ships them like any other file and the weekly drift
 # guard fails on ANY divergence — code or model. The Space's

@@ -425,8 +425,7 @@ def check_borough_floor(
     The floor is derived per borough: score the constant predictor that always
     answers that borough's most common zone. A model that cannot beat that has
     learned nothing there. Deriving it is deliberate -- any fixed threshold
-    would be a number chosen with the current results already in view, which is
-    the defect the standard calls out by name.
+    would be a number chosen with the current results already in view.
 
     Raises so a failing borough fails the run, and therefore the build, rather
     than being written into the metrics file for someone to notice later.
@@ -530,6 +529,15 @@ def calibrate_price_interval(
     }
     logger.info("Price interval: %s", record)
     return record
+
+
+def save_drift_baseline(X_train: pd.DataFrame) -> None:
+    """Write the drift baseline or fail the run: the manifest step hashes
+    drift_baseline.json unconditionally, so a swallowed failure here would
+    seal the previous run's baseline into MANIFEST.sha256."""
+    from src.models.drift import save_baseline
+
+    save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
 
 
 def _git_commit_sha() -> str | None:
@@ -710,13 +718,8 @@ def main() -> None:
     )
 
     logger.info("Drift baseline")
-    try:
-        from src.models.drift import save_baseline
-
-        save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
-        logger.info("Drift baseline saved")
-    except Exception as exc:
-        logger.warning("Drift baseline failed (non-critical): %s", exc)
+    save_drift_baseline(X_train)
+    logger.info("Drift baseline saved")
 
     # Regenerate the artefact manifest LAST, over the files this run just
     # wrote, so the committed hashes always have a producer. JSON is hashed

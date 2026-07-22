@@ -16,6 +16,10 @@ import hashlib
 from pathlib import Path
 
 import joblib
+import pandas as pd
+import pytest
+
+import run_training
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODELS_DIR = REPO_ROOT / "models"
@@ -90,3 +94,22 @@ def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
     produced = ("\n".join(lines) + "\n").encode("ascii")
     committed = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
     assert committed == produced
+
+
+def test_drift_baseline_failure_fails_the_run_before_the_manifest(
+    tmp_path, monkeypatch
+) -> None:
+    """The manifest step hashes whatever drift_baseline.json bytes exist, so
+    a baseline write that fails must abort the run — surviving it would
+    certify the previous run's baseline as this run's output."""
+    monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
+    stale = tmp_path / "drift_baseline.json"
+    stale.write_text("{}", encoding="utf-8")
+
+    def failing_save(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("src.models.drift.save_baseline", failing_save)
+    with pytest.raises(OSError):
+        run_training.save_drift_baseline(pd.DataFrame({"BEDS": [1.0]}))
+    assert stale.read_text(encoding="utf-8") == "{}"

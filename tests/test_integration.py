@@ -72,7 +72,6 @@ def integration_data() -> pd.DataFrame:
             "ZIPCODE": rng.choice(["10022", "11217", "11101", "10473", "10312"], n),
             "ADDRESS": [f"{i} Test St" for i in range(n)],
             "BROKERTITLE": ["test broker"] * n,
-            "PROPERTY_CATEGORY": ["residential"] * n,
         }
     )
 
