@@ -38,7 +38,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Model performance measures:**
   - Zones: macro F1 = **0.712** on the test split, derived by bucketing the regressor's predictions (naive borough-median baseline: 0.301). There is no classifier.
   - Regression: R² = **0.835** (XGBoost) on test; 0.774 on val (naive borough-median baseline: 0.177). Honest, no leakage (see ADR-001).
-  - Split: 2,896 train / 724 val / 906 test, stratified on price zone.
+  - Split: 2,896 train / 724 val / 906 test, stratified on pooled price quartiles (a balancing key only; served zone labels come from train-derived cut-points).
 - **Decision rule:** the zone is the predicted price bucketed through `PRICE_ZONE_BINS` (`src/models/decode.py`), the same function that labels the training data. There is no classifier, no label encoder and no argmax. Earlier versions shipped per-class tuned thresholds and advertised macro F1 0.724; those were fitted on the test labels and scored on the same labels, so the number was in-sample. Measured out-of-sample over 20 stratified splits, tuning was worth +0.0006 (std 0.0106) — noise — and is gone.
 - **Variation approaches:** the full protocol (split, train-only fitting, candidate selection) re-run over 20 seeds — test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**; XGBoost selected in 16/20 runs. Recorded in `reports/seed_variance.json`; the headline numbers above are the shipped `RANDOM_SEED=42` artefact, which sits inside 1 SD of the seed mean.
 
@@ -53,7 +53,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Training data
 
 - **Same as evaluation:** a stratified three-way 64/16/20 train/val/test split of the same cleaned dataset (20% test held out first, then 20% of the remainder as val). No separate external corpus.
-- **Split strategy:** stratified on `PRICE_ZONE` to preserve class balance across train/test.
+- **Split strategy:** stratified on pooled price quartiles (`pd.qcut(PRICE, 4)`) as a balancing key only; the served `PRICE_ZONE` labels come from train-derived cut-points, not from the split key.
 - **Feature set:** 12 total — 8 numeric + 4 categorical (2 one-hot: `BOROUGH`, `TYPE`; 2 target-encoded: `ZIPCODE`, `SUBLOCALITY`). `PROPERTY_CATEGORY` was removed: training, the API and the dashboard all hardcoded it to "residential", so the encoder only ever saw one level. Full list in README "Feature engineering" section. Features deliberately **exclude** `PRICE_PER_SQFT` (target-derived; causes R² = 0.997 artefact — see ADR-001).
 
 ## Quantitative analyses
