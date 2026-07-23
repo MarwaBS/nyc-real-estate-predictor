@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pandas as pd
 import streamlit as st
 
-from src.config import CENTRAL_PARK, MANHATTAN_CENTER, MODELS_DIR
+from src.config import CENTRAL_PARK, MANHATTAN_CENTER
 from src.utils.geo import haversine
 
 st.set_page_config(
@@ -33,17 +33,16 @@ st.markdown(
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_model():
-    """Load the single regressor. Returns None on failure.
-
-    One model: the zone is the predicted price bucketed through the same
-    decode the API uses, so there is no classifier and no label encoder to
-    keep in step with it.
+    """Load the regressor through the API's guarded loader, so a cross-version
+    artefact is refused here (as the API refuses it) instead of loading and
+    raising at predict time. Returns None when the model is absent or rejected;
+    the caller shows one "unavailable" message for both.
     """
-    import joblib
+    from src.models.predict import ModelVersionError, get_regressor
 
     try:
-        return joblib.load(MODELS_DIR / "price_regressor_best.joblib")
-    except FileNotFoundError:
+        return get_regressor()
+    except (FileNotFoundError, ModelVersionError):
         return None
 
 
@@ -135,7 +134,7 @@ with col2:
         reg = load_model()
 
         if reg is None:
-            st.error("Models not found. Train them first: `python run_training.py`")
+            st.error("Model unavailable — train it first: `python run_training.py`")
         else:
             features = build_features(
                 beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude

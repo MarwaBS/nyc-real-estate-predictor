@@ -177,8 +177,7 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         name="serving-cap-skipped-in-predict",
-        # The cap lives only in predict_listings now (predict_price and
-        # predict_price_zone are projections of it), so this block is its
+        # The cap lives only in predict_listings, so this block is its
         # single site.
         path="src/models/predict.py",
         old=(

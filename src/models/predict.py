@@ -140,16 +140,3 @@ def predict_listings(features: pd.DataFrame) -> list[dict[str, Any]]:
             }
         )
     return records
-
-
-def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """Zone per row — a projection of :func:`predict_listings`."""
-    return [{"price_zone": r["price_zone"]} for r in predict_listings(features)]
-
-
-def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """Price + calibrated band per row — a projection of :func:`predict_listings`."""
-    return [
-        {"predicted_price": r["predicted_price"], "price_range": r["price_range"]}
-        for r in predict_listings(features)
-    ]
