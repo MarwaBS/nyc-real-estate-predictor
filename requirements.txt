@@ -8,14 +8,14 @@
 # upgrades. Major-version bumps are always isolated PRs.
 
 # Core
-pandas==2.2.3
+pandas==2.3.3
 numpy==1.26.4
-scikit-learn==1.8.0  # MUST match the version models were trained on (1.5.2 silently corrupts predictions)
-scipy==1.13.1
+scikit-learn==1.9.0  # MUST match the version models were trained on (1.5.2 silently corrupts predictions)
+scipy==1.18.0
 
 # Gradient boosting candidates — compared on val in run_training.py, not shipped
 xgboost==2.1.4
-lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
+lightgbm==4.7.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
 # NOTE: geopy, h3, pandera, and folium are deliberately absent —
 # nothing in the tracked codebase imports any of them (haversine is
@@ -24,7 +24,7 @@ lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 # plus CVE surface plus a false claim, all at once.
 
 # Encoding (target encoder applied at inference)
-category-encoders==2.8.1  # bumped 2.6.3 → 2.8.1 (2.6.x incompatible with sklearn 1.8.0)
+category-encoders==2.9.0  # bumped 2.6.3 → 2.8.1 (2.6.x incompatible with sklearn 1.8.0)
 
 # API. fastapi's transitive pin controls starlette; newer fastapi brings
 # newer starlette automatically (the 0.41.3-era fastapi had two starlette
@@ -34,14 +34,14 @@ fastapi>=0.118,<1.0
 # CVE-2026-54283 (HIGH — request.form() size limits silently ignored), fixed in
 # 1.3.1. fastapi doesn't yet require it, so pin the floor here (Trivy gate).
 starlette>=1.3.1
-uvicorn==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
+uvicorn==0.51.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
 slowapi==0.1.9
 httpx==0.28.1
 
 # UI
-streamlit==1.54.0  # bumped 1.38.0 → 1.54.0 (fixes CVE-2026-33682)
+streamlit==1.60.0  # bumped 1.38.0 → 1.54.0 (fixes CVE-2026-33682)
 plotly==5.24.1
 
 # Image processing (transitive via streamlit / plotly; pin explicitly for CVE fixes)
@@ -51,7 +51,7 @@ pillow==12.3.0  # bumped 12.2.0 → 12.3.0 (fixes PYSEC-2026-2253..2257; 12.2.0 
 python-dotenv==1.2.2  # bumped 1.0.1 → 1.2.2 (fixes CVE-2026-28684)
 
 # Model loading
-joblib==1.4.2
+joblib==1.5.3
 
 # Schema firewall — we dogfood our own published library for the external benchmark.
 # If this version breaks, the flagship benchmark breaks. That is deliberate.
@@ -60,4 +60,4 @@ joblib==1.4.2
 # chance-corrected release (deterministic dependence -> 1.0, independent
 # -> 0.0) and enforces n>=100 per check. mi_threshold recalibrated to the
 # 0.1.3 scale in benchmarks/invariants.py (measured, not guessed).
-schema-firewall==0.1.3
+schema-firewall==0.2.0
