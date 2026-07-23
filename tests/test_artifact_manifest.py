@@ -1,13 +1,8 @@
-"""The committed serving artifacts must match models/MANIFEST.sha256.
+"""The committed model artefacts must match models/MANIFEST.sha256.
 
-This is the recorded-AND-compared half of the model registry: the live
-demo served April's misattributed thresholds for three months precisely
-because nothing machine-checked which artifact vintage was where. The
-manifest pins the exact bytes of every serving artifact; this test
-enforces it in CI, and the deploy workflow ships the same files to the
-HF Space, where the weekly drift guard re-compares them. Regenerate the
-manifest ONLY as part of a deliberate retrain commit
-(sha256 of each file in models/, one line per artifact).
+The manifest pins the exact bytes of every governed artefact, so an artefact
+swapped without a recorded retrain fails CI. Regenerate it only as part of a
+deliberate retrain (one sha256 line per file in models/).
 """
 
 from __future__ import annotations
@@ -16,20 +11,22 @@ import hashlib
 from pathlib import Path
 
 import joblib
+import pandas as pd
+import pytest
+
+import run_training
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODELS_DIR = REPO_ROOT / "models"
 MANIFEST = MODELS_DIR / "MANIFEST.sha256"
 
-# Every committed model artefact whose exact bytes back a published claim: the
-# four the API + dashboard load at serve time (loader defaults in
-# src/models/predict.py + drift baseline), plus benchmark_regressor.joblib.
-# The benchmark model is not served, but README advertises the external
-# benchmark as "fully reproducible by anyone" and its published R2(log)
-# depends on these bytes, so an unpinned vintage there is the same defect as
-# an unpinned serving model. Manifest must cover exactly this set — a
-# committed artefact missing from it is ungoverned vintage.
-SERVING_ARTIFACTS = {
+# Every committed model artefact whose bytes back a published number: the
+# served model + interval + drift baseline, plus the benchmark pair (not served,
+# but README quotes their R2(log), so an unpinned vintage there is the same
+# defect). Kept independent of run_training.GOVERNED_ARTIFACTS so this catches
+# the producer's list rotting rather than merely agreeing with it.
+GOVERNED_ARTIFACTS = {
+    "benchmark_baseline.json",
     "benchmark_regressor.joblib",
     "price_regressor_best.joblib",
     "price_interval.json",
@@ -47,8 +44,14 @@ def _manifest_entries() -> dict[str, str]:
     return entries
 
 
-def test_manifest_covers_exactly_the_serving_set() -> None:
-    assert set(_manifest_entries()) == SERVING_ARTIFACTS
+def test_manifest_covers_exactly_the_governed_set() -> None:
+    assert set(_manifest_entries()) == GOVERNED_ARTIFACTS
+
+
+def test_producer_governs_exactly_this_set() -> None:
+    """run_training's manifest producer must cover this same set, so a retrain
+    cannot silently drop an artefact from governance."""
+    assert set(run_training.GOVERNED_ARTIFACTS) == GOVERNED_ARTIFACTS
 
 
 def _artifact_bytes(path: Path) -> bytes:
@@ -85,8 +88,27 @@ def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
     next retrain would rewrite the file with a pure-reorder diff."""
     lines = [
         f"{hashlib.sha256(_artifact_bytes(MODELS_DIR / name)).hexdigest()}  {name}"
-        for name in sorted(SERVING_ARTIFACTS)
+        for name in sorted(GOVERNED_ARTIFACTS)
     ]
     produced = ("\n".join(lines) + "\n").encode("ascii")
     committed = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
     assert committed == produced
+
+
+def test_drift_baseline_failure_fails_the_run_before_the_manifest(
+    tmp_path, monkeypatch
+) -> None:
+    """The manifest step hashes whatever drift_baseline.json bytes exist, so
+    a baseline write that fails must abort the run — surviving it would
+    certify the previous run's baseline as this run's output."""
+    monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
+    stale = tmp_path / "drift_baseline.json"
+    stale.write_text("{}", encoding="utf-8")
+
+    def failing_save(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("src.models.drift.save_baseline", failing_save)
+    with pytest.raises(OSError):
+        run_training.save_drift_baseline(pd.DataFrame({"BEDS": [1.0]}))
+    assert stale.read_text(encoding="utf-8") == "{}"

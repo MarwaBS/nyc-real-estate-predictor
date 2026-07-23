@@ -67,7 +67,9 @@ def _test_row() -> pd.DataFrame:
     )
 
 
-def test_predict_price_zone(mock_models: Path, _test_row: pd.DataFrame) -> None:
+def test_predict_zone_is_the_bucketed_served_price(
+    mock_models: Path, _test_row: pd.DataFrame
+) -> None:
     """The zone is the predicted price, bucketed through the shared decode."""
     import src.models.predict as pred_mod
     from src.models.decode import zone_for_price
@@ -75,21 +77,21 @@ def test_predict_price_zone(mock_models: Path, _test_row: pd.DataFrame) -> None:
     pred_mod._regressor_cache = None
     pred_mod.get_regressor(mock_models / "price_regressor_best.joblib")
 
-    results = pred_mod.predict_price_zone(_test_row)
-    assert isinstance(results, list) and len(results) == 1
+    record = pred_mod.predict_listings(_test_row)[0]
     # Correctness, not membership: the zone must be the bucket the served
     # price falls in, not merely a valid label.
-    price = pred_mod.predict_price(_test_row)[0]["predicted_price"]
-    assert results[0]["price_zone"] == zone_for_price(price)
+    assert record["price_zone"] == zone_for_price(record["predicted_price"])
 
 
-def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
+def test_predict_returns_price_and_band(
+    mock_models: Path, _test_row: pd.DataFrame
+) -> None:
     import src.models.predict as pred_mod
 
     pred_mod._regressor_cache = None
     # Load from mock path
     pred_mod.get_regressor(mock_models / "price_regressor_best.joblib")
-    results = pred_mod.predict_price(_test_row)
+    results = pred_mod.predict_listings(_test_row)
     assert isinstance(results, list) and len(results) == 1
     result = results[0]
     assert "predicted_price" in result
@@ -102,6 +104,37 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     # a scaling bug, not a listing.
     assert 250 < result["predicted_price"] < 45_000_000
     assert result["price_range"]["low"] < result["price_range"]["high"]
+
+
+def test_predict_applies_the_serving_cap(_test_row: pd.DataFrame, monkeypatch) -> None:
+    """An unseen capped category is mapped to "other" before inference, so this
+    module matches the encoding the API and dashboard serve (no train/serve
+    skew). Without the cap the model would receive the raw unseen value."""
+    import src.models.predict as pred_mod
+
+    seen: dict[str, list] = {}
+
+    class _Stub:
+        def predict(self, X: pd.DataFrame) -> np.ndarray:
+            seen["SUBLOCALITY"] = list(X["SUBLOCALITY"])
+            return np.zeros(len(X))
+
+    monkeypatch.setattr(pred_mod, "_regressor_cache", _Stub())
+    monkeypatch.setattr(
+        pred_mod,
+        "_price_interval",
+        {"low_multiplier": 0.6, "high_multiplier": 1.5, "target_coverage": 0.8},
+    )
+    monkeypatch.setattr(
+        pred_mod,
+        "learned_capped_categories",
+        lambda reg: {"SUBLOCALITY": {"midtown", "other"}},
+    )
+
+    row = _test_row.copy()
+    row.loc[0, "SUBLOCALITY"] = "nowhere-that-was-never-trained"
+    pred_mod.predict_listings(row)
+    assert seen["SUBLOCALITY"] == ["other"]
 
 
 def test_served_band_reproduces_from_the_rounded_price(
@@ -131,7 +164,7 @@ def test_served_band_reproduces_from_the_rounded_price(
     monkeypatch.setattr(pred_mod, "_regressor_cache", _Stub())
     monkeypatch.setattr(pred_mod, "_price_interval", interval)
 
-    result = pred_mod.predict_price(_test_row)[0]
+    result = pred_mod.predict_listings(_test_row)[0]
     shown = result["predicted_price"]
     assert shown == 1_000_000  # rounded to $100
 
@@ -153,7 +186,7 @@ def test_predict_returns_one_entry_per_row(
     pred_mod._regressor_cache = None
     pred_mod.get_regressor(mock_models / "price_regressor_best.joblib")
     batch = pd.concat([_test_row, _test_row], ignore_index=True)
-    results = pred_mod.predict_price(batch)
+    results = pred_mod.predict_listings(batch)
     assert isinstance(results, list) and len(results) == 2
 
 

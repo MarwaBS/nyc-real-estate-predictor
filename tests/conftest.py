@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -42,26 +41,5 @@ def sample_raw_data() -> pd.DataFrame:
                 "101 Pine Ln",
                 "202 Maple Dr",
             ],
-            "PROPERTY_CATEGORY": [
-                "residential",
-                "residential",
-                "residential",
-                "residential",
-                "residential",
-            ],
         }
     )
-
-
-@pytest.fixture
-def sample_features(sample_raw_data: pd.DataFrame) -> pd.DataFrame:
-    """Sample feature-engineered data (matching pipeline output)."""
-    df = sample_raw_data.copy()
-    df["TOTAL_ROOMS"] = df["BEDS"] + df["BATH"]
-    df["BED_BATH_RATIO"] = df["BEDS"] / df["BATH"].clip(lower=1)
-    df["LOG_SQFT"] = np.log1p(df["PROPERTYSQFT"])
-    df["ROOMS_PER_SQFT"] = df["TOTAL_ROOMS"] / df["PROPERTYSQFT"]
-    df["DIST_MANHATTAN_CENTER"] = [0.0, 7.5, 12.1, 15.3, 25.0]
-    df["DIST_CENTRAL_PARK"] = [2.8, 10.2, 14.5, 12.0, 28.3]
-    df["DIST_NEAREST_SUBWAY"] = [0.1, 0.3, 0.5, 0.8, 2.1]
-    return df

@@ -52,7 +52,7 @@ Both the dashboard and the API bucket through the same `zone_for_price` function
 
 ## Notes on the live environment
 
-- **This Space is deployed automatically from `main`** by the repo's Deploy workflow; a weekly drift guard fails CI if the Space ever stops matching `main`. (It was previously hand-deployed — and served a 3-month-stale revision. Never again.)
+- **This Space is deployed automatically from `main`** by the repo's Deploy workflow; a weekly drift guard fails CI if the Space ever stops matching `main`.
 - First load may take ~30s while uvicorn + Streamlit + the model artefacts come up.
 - HF Spaces free tier — no persistent state, no Redis, no rate-limit backend (slowapi falls back to in-memory).
 - **Served model provenance:** the artifacts in `models/` are the canonical training run (`run_date` in the repo's `reports/training_metrics.json` is the authoritative timestamp), committed to the GitHub repo and pinned byte-for-byte by `models/MANIFEST.sha256` — the deploy workflow syncs them here and the weekly drift guard fails if this Space's code **or models** ever diverge from `main`. The metrics quoted above describe exactly these artifacts.

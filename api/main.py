@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hmac
 import logging
-import math
 from typing import Any
 
 import pandas as pd
@@ -101,23 +100,6 @@ def _get_regressor() -> Any:
     return _regressor
 
 
-_capped_categories: dict[str, set] | None = None
-
-
-def _get_capped_categories() -> dict[str, set]:
-    """Cached {column: learned category set} for the columns the model
-    frequency-capped at train time, read off the shipped regressor. Mirroring
-    the training cap at serve time is what keeps an unseen ZIP encoded the way
-    training encoded rare ZIPs, instead of hitting the encoder's unseen
-    default."""
-    global _capped_categories
-    if _capped_categories is None:
-        from src.data.features import learned_capped_categories
-
-        _capped_categories = learned_capped_categories(_get_regressor())
-    return _capped_categories
-
-
 def _build_features(prop: PropertyInput) -> pd.DataFrame:
     """Transform a PropertyInput into the feature DataFrame the model expects."""
     total_rooms = prop.beds + prop.bath
@@ -168,33 +150,16 @@ def predict(
     """
     _verify_api_key(x_api_key)
     try:
-        features = _build_features(prop)
-        # Mirror the train-time frequency cap: map rare/unseen SUBLOCALITY/ZIPCODE
-        # to "other" so they get the trained "other" encoding rather than the
-        # encoder's unseen default (train/serve parity).
-        from src.data.features import apply_serving_cap
+        # One inference path, shared with the dashboard: capping, rounding and
+        # zoning live in src.models.predict so the surfaces cannot disagree.
+        from src.models.predict import predict_listings
 
-        features = apply_serving_cap(features, _get_capped_categories())
-
-        from src.models.decode import zone_for_price
-        from src.models.predict import price_range
-
-        log_price = float(_get_regressor().predict(features)[0])
-        price = math.expm1(log_price)
-        # Band from the rounded figure, so low/high reproduce from the
-        # predicted_price shown beside them (see predict_price).
-        rounded = round(price, -2)
-
-        # The zone is the price, bucketed -- one model, and the same decode
-        # training scored its macro-F1 through, so the published number
-        # describes this exact answer.
+        record = predict_listings(_build_features(prop))[0]
         return PredictionResponse(
-            zone=ZonePrediction(price_zone=zone_for_price(price)),
+            zone=ZonePrediction(price_zone=record["price_zone"]),
             price=PricePrediction(
-                predicted_price=rounded,
-                # Same calibrated interval the predict module and dashboard
-                # serve — one implementation, so the three cannot disagree.
-                price_range=price_range(rounded),
+                predicted_price=record["predicted_price"],
+                price_range=record["price_range"],
             ),
         )
 

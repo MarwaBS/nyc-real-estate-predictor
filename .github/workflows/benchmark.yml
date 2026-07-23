@@ -1,6 +1,6 @@
 # External Benchmark — NYC.gov 2024 Rolling Sales
 #
-# Execution contract (per Step 7 rules):
+# Execution contract:
 #   A. CI must not reinterpret results. This workflow runs the pipeline
 #      and publishes results.json. It does not summarise, threshold, or
 #      reclassify.

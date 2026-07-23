@@ -190,14 +190,16 @@ def test_predict_returns_503_when_models_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When the model artefacts can't be loaded, /predict must return 503 (not 500
-    or a corrupt 200). Forced deterministically by making the first model access
-    raise FileNotFoundError, independent of whether models exist locally."""
+    or a corrupt 200). Forced deterministically by making the shared inference
+    path's first model access raise FileNotFoundError, independent of whether
+    models exist locally."""
     import api.main as m
+    import src.models.predict as predict_module
 
-    def _missing() -> dict:
+    def _missing(*args: object, **kwargs: object) -> object:
         raise FileNotFoundError("models absent")
 
-    monkeypatch.setattr(m, "_get_capped_categories", _missing)
+    monkeypatch.setattr(predict_module, "get_regressor", _missing)
     resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
     assert resp.status_code == 503
     assert "not yet trained" in resp.json()["detail"].lower()

@@ -31,7 +31,7 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
     Not the real dataset — the real download happens at run time. This
     fixture exists only to drive the adversarial test suite with
     deterministic, schema-accurate rows covering every drop reason
-    under SCHEMA_MAP.md v2 and every borough.
+    under SCHEMA_MAP.md v3 and every borough.
     """
     rows = [
         # ── Valid 1–3 family dwellings — all five boroughs ──

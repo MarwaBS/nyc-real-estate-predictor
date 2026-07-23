@@ -1,7 +1,7 @@
 [project]
 name = "nyc-price-prediction"
 version = "1.0.0"
-description = "NYC real estate price prediction with derived price zones (one Random Forest regressor)"
+description = "NYC real estate price prediction with derived price zones (one XGBoost regressor)"
 requires-python = ">=3.12"
 
 [tool.ruff]
