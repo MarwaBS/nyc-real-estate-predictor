@@ -28,8 +28,7 @@ violation raises and fails the run; nothing is merely recorded):
 6. Run :func:`benchmarks.invariants.check_predictions_healthy` on the
    prediction array when inference succeeded; skip when it did not.
 7. Write ``benchmarks/results.json``. Whatever the first run produces
-   is what ships. No tuning, no schema edits, no retry (per Rule A of
-   the Step 5 execution contract).
+   is what ships. No tuning, no schema edits, no retry.
 """
 
 from __future__ import annotations

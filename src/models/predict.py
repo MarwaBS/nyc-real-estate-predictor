@@ -22,6 +22,7 @@ import pandas as pd
 from sklearn.exceptions import InconsistentVersionWarning
 
 from src.config import MODELS_DIR
+from src.data.features import apply_serving_cap, learned_capped_categories
 from src.models.decode import zone_for_price
 
 logger = logging.getLogger(__name__)
@@ -113,36 +114,29 @@ def price_range(price: float) -> dict[str, float]:
     }
 
 
-def predict_price_zone(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """Zone per row, derived from the predicted price.
+def predict_listings(features: pd.DataFrame) -> list[dict[str, Any]]:
+    """The single inference path — the API and dashboard both call this.
 
-    There is no classifier. The zone is a bucketing of the price the regressor
-    already predicts, so a second model would have been fitting the same
-    features to the same signal -- and could disagree with the served price on
-    the same listing. Training scores zones through this same decode, so the
-    published macro-F1 describes what a caller actually receives.
-
-    No ``probabilities`` key: a bucketed point estimate has no class posterior,
-    and inventing one from the interval would be a confidence number nothing
-    measured.
-    """
-    prices = np.expm1(np.asarray(get_regressor().predict(features), dtype=float))
-    return [{"price_zone": zone_for_price(float(p))} for p in prices]
-
-
-def predict_price(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """Predict actual price (in USD) for one or more properties.
-
-    Always returns a list with one entry per input row, mirroring
-    :func:`predict_price_zone`.
+    Applies the serving cap (so an unseen category gets the trained "other"
+    encoding, not the encoder's unseen default), predicts once, and returns per
+    row the rounded price, its calibrated band, and the zone that price falls
+    in. One implementation, so no serving surface can drift on capping,
+    rounding or zoning. The band is derived from the rounded price so low/high
+    reproduce from the figure shown beside them; the zone is derived from the
+    unrounded price. There is no classifier — the zone is the predicted price
+    bucketed through the shared decode, so it cannot disagree with that price.
     """
     reg = get_regressor()
+    features = apply_serving_cap(features, learned_capped_categories(reg))
     prices = np.expm1(np.asarray(reg.predict(features), dtype=float))
-
-    # Derive the band from the rounded price, so low/high reproduce from the
-    # figure shown beside them. They were multiplied from the unrounded price.
-    out = []
+    records = []
     for price in prices.tolist():
         rounded = round(price, -2)
-        out.append({"predicted_price": rounded, "price_range": price_range(rounded)})
-    return out
+        records.append(
+            {
+                "predicted_price": rounded,
+                "price_range": price_range(rounded),
+                "price_zone": zone_for_price(price),
+            }
+        )
+    return records

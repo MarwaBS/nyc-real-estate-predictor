@@ -95,9 +95,8 @@ def evaluate_fairness_by_group(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     groups: pd.Series,
-    metric_fn: str = "macro_f1",
 ) -> dict[str, float]:
-    """Evaluate model performance per demographic/geographic group."""
+    """Per-group macro F1 for fairness reporting."""
     results: dict[str, float] = {}
     for group_name in groups.unique():
         mask = groups == group_name
@@ -105,10 +104,7 @@ def evaluate_fairness_by_group(
         # sampling noise, not a fairness signal.
         if mask.sum() < 5:
             continue
-        if metric_fn == "macro_f1":
-            score = float(f1_score(y_true[mask], y_pred[mask], average="macro"))
-        else:
-            score = float(accuracy_score(y_true[mask], y_pred[mask]))
+        score = float(f1_score(y_true[mask], y_pred[mask], average="macro"))
         results[str(group_name)] = score
 
     logger.info("Fairness by group: %s", results)

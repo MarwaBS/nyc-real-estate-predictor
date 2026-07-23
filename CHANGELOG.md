@@ -288,7 +288,7 @@ project uses SemVer for tagged releases.
   governs: a clean `pip install -r requirements.txt` (and therefore the Docker
   image, which installs the same file) resolves starlette 1.3.1, never 1.3.0.
 
-## [1.0.0] — 2026-04-xx
+## [1.0.0] — 2026-04-18
 
 Initial production-grade ML pipeline.
 

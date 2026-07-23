@@ -17,8 +17,8 @@ scipy==1.13.1
 xgboost==2.1.4
 lightgbm==4.6.0  # bumped 4.3.0 → 4.6.0 (fixes PYSEC-2024-231)
 
-# NOTE: geopy, h3, pandera, and folium were removed in the 2026-06 audit —
-# nothing in the tracked codebase imported any of them (haversine is
+# NOTE: geopy, h3, pandera, and folium are deliberately absent —
+# nothing in the tracked codebase imports any of them (haversine is
 # hand-rolled in src/utils/geo.py; the dead H3/KMeans feature code that
 # justified h3 never fed a model). Unused runtime deps are image weight
 # plus CVE surface plus a false claim, all at once.
