@@ -1,8 +1,8 @@
 """Config and the shipped artefacts must describe the same model.
 
-Causal-reasoning gate (CODE_STANDARD A8 §5). Changing a constant in
-``src/config.py`` invalidates artefacts that were fitted under the old value,
-and until now nothing connected the two: the cut-points were shifted in config,
+Changing a constant in ``src/config.py`` invalidates artefacts that were
+fitted under the old value, and until now nothing connected the two: the
+cut-points were shifted in config,
 nothing was retrained, and all 153 tests passed. The published macro-F1 then
 described zones cut one way while serving bucketed another.
 

@@ -425,8 +425,7 @@ def check_borough_floor(
     The floor is derived per borough: score the constant predictor that always
     answers that borough's most common zone. A model that cannot beat that has
     learned nothing there. Deriving it is deliberate -- any fixed threshold
-    would be a number chosen with the current results already in view, which is
-    the defect the standard calls out by name.
+    would be a number chosen with the current results already in view.
 
     Raises so a failing borough fails the run, and therefore the build, rather
     than being written into the metrics file for someone to notice later.
@@ -530,6 +529,59 @@ def calibrate_price_interval(
     }
     logger.info("Price interval: %s", record)
     return record
+
+
+def save_drift_baseline(X_train: pd.DataFrame) -> None:
+    """Write the drift baseline or fail the run: the manifest step hashes
+    drift_baseline.json unconditionally, so a swallowed failure here would
+    seal the previous run's baseline into MANIFEST.sha256."""
+    from src.models.drift import save_baseline
+
+    save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
+
+
+# Every committed artefact whose bytes back a published number — the benchmark
+# pair included, because README quotes their R2(log) (see the manifest test).
+GOVERNED_ARTIFACTS: tuple[str, ...] = (
+    "benchmark_baseline.json",
+    "benchmark_regressor.joblib",
+    "drift_baseline.json",
+    "price_interval.json",
+    "price_regressor_best.joblib",
+)
+
+
+def write_manifest() -> None:
+    """Regenerate models/MANIFEST.sha256 over every governed artefact. JSON is
+    hashed LF-normalised so a CRLF working copy hashes the bytes git stores."""
+    lines = []
+    for name in sorted(GOVERNED_ARTIFACTS):
+        data = (MODELS_DIR / name).read_bytes()
+        if name.endswith(".json"):
+            data = data.replace(b"\r\n", b"\n")
+        lines.append(f"{hashlib.sha256(data).hexdigest()}  {name}")
+    (MODELS_DIR / "MANIFEST.sha256").write_bytes(
+        ("\n".join(lines) + "\n").encode("ascii")
+    )
+
+
+def shap_top10(best_reg: Any, X_test: pd.DataFrame) -> list[dict[str, Any]]:
+    """The top-10 SHAP rows recorded in the metrics artefact. Failure kills the
+    run rather than being swallowed: README's SHAP table is gated against it."""
+    preprocessor = best_reg.named_steps["preprocessor"]
+    X_test_transformed = preprocessor.transform(X_test)
+    feature_names = list(preprocessor.get_feature_names_out())
+
+    from src.models.explain import compute_shap_values, global_feature_importance
+
+    shap_values, _explainer = compute_shap_values(
+        best_reg.named_steps["regressor"],
+        pd.DataFrame(X_test_transformed, columns=feature_names),
+        max_samples=200,
+    )
+    importance_df = global_feature_importance(shap_values, feature_names)
+    logger.info("Top 10 SHAP features:\n%s", importance_df.head(10).to_string())
+    return importance_df.head(10).to_dict("records")
 
 
 def _git_commit_sha() -> str | None:
@@ -678,23 +730,7 @@ def main() -> None:
     )
 
     logger.info("SHAP explainability")
-    try:
-        preprocessor = best_reg.named_steps["preprocessor"]
-        X_test_transformed = preprocessor.transform(X_test)
-        feature_names = list(preprocessor.get_feature_names_out())
-
-        from src.models.explain import compute_shap_values, global_feature_importance
-
-        shap_values, _explainer = compute_shap_values(
-            best_reg.named_steps["regressor"],
-            pd.DataFrame(X_test_transformed, columns=feature_names),
-            max_samples=200,
-        )
-        importance_df = global_feature_importance(shap_values, feature_names)
-        logger.info("Top 10 SHAP features:\n%s", importance_df.head(10).to_string())
-        clf_record["shap_top10"] = importance_df.head(10).to_dict("records")
-    except Exception as exc:
-        logger.warning("SHAP analysis failed (non-critical): %s", exc)
+    clf_record["shap_top10"] = shap_top10(best_reg, X_test)
 
     # Persist the committed evidence artefact behind the README numbers.
     _write_training_metrics(
@@ -710,35 +746,14 @@ def main() -> None:
     )
 
     logger.info("Drift baseline")
-    try:
-        from src.models.drift import save_baseline
+    save_drift_baseline(X_train)
+    logger.info("Drift baseline saved")
 
-        save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
-        logger.info("Drift baseline saved")
-    except Exception as exc:
-        logger.warning("Drift baseline failed (non-critical): %s", exc)
-
-    # Regenerate the artefact manifest LAST, over the files this run just
-    # wrote, so the committed hashes always have a producer. JSON is hashed
-    # LF-normalised, matching tests/test_artifact_manifest.py.
+    # Regenerate the artefact manifest LAST, over the freshest bytes of every
+    # governed artefact, so the committed hashes always have a producer.
     logger.info("Artefact manifest")
-    manifest_lines = []
-    for name in sorted(
-        (
-            "benchmark_regressor.joblib",
-            "price_regressor_best.joblib",
-            "drift_baseline.json",
-            "price_interval.json",
-        )
-    ):
-        data = (MODELS_DIR / name).read_bytes()
-        if name.endswith(".json"):
-            data = data.replace(b"\r\n", b"\n")
-        manifest_lines.append(f"{hashlib.sha256(data).hexdigest()}  {name}")
-    (MODELS_DIR / "MANIFEST.sha256").write_bytes(
-        ("\n".join(manifest_lines) + "\n").encode("ascii")
-    )
-    logger.info("Manifest written for %d artefacts", len(manifest_lines))
+    write_manifest()
+    logger.info("Manifest written for %d artefacts", len(GOVERNED_ARTIFACTS))
 
     logger.info("TRAINING COMPLETE")
     logger.info("Models saved to: %s", MODELS_DIR)

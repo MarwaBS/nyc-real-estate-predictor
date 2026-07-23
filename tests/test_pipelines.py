@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestRegressor
 
+from src.config import NUMERIC_FEATURES, ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
 from src.models.pipelines import (
     build_preprocessor,
     build_regression_pipeline,
@@ -15,26 +16,15 @@ from src.models.pipelines import (
 
 @pytest.fixture
 def training_data() -> tuple[pd.DataFrame, np.ndarray]:
-    """Minimal training data matching the pipeline's expected features."""
+    """Minimal frame carrying exactly the configured feature columns, so a
+    feature added to or dropped from src.config changes this fixture too."""
     n = 50
     rng = np.random.RandomState(42)
     df = pd.DataFrame(
         {
-            "BEDS": rng.randint(1, 6, n),
-            "BATH": rng.uniform(1, 4, n).round(1),
-            "PROPERTYSQFT": rng.uniform(400, 4000, n),
-            "TOTAL_ROOMS": rng.uniform(2, 10, n),
-            "BED_BATH_RATIO": rng.uniform(0.5, 3.0, n),
-            "LOG_SQFT": rng.uniform(6, 9, n),
-            "ROOMS_PER_SQFT": rng.uniform(0.001, 0.01, n),
-            "DIST_MANHATTAN_CENTER": rng.uniform(0, 30, n),
-            "DIST_CENTRAL_PARK": rng.uniform(0, 30, n),
-            "DIST_NEAREST_SUBWAY": rng.uniform(0, 5, n),
-            "BOROUGH": rng.choice(["manhattan", "brooklyn", "queens"], n),
-            "TYPE": rng.choice(["condo", "house", "co-op"], n),
-            "PROPERTY_CATEGORY": rng.choice(["residential", "commercial"], n),
-            "ZIPCODE": rng.choice(["10022", "11217", "10001"], n),
-            "SUBLOCALITY": rng.choice(["midtown", "fort greene", "chelsea"], n),
+            **{c: rng.uniform(0.5, 30, n) for c in NUMERIC_FEATURES},
+            **{c: rng.choice(["a", "b", "c"], n) for c in ONEHOT_FEATURES},
+            **{c: rng.choice(["p", "q", "r"], n) for c in TARGET_ENCODED_FEATURES},
         }
     )
     y = rng.randint(0, 4, n)

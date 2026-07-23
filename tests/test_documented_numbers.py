@@ -1,10 +1,9 @@
 """Published headline numbers must match the artefacts they claim to quote.
 
-Two consecutive audits found the same class of defect: README, MODEL_CARD,
-CHANGELOG, the ADRs and the public Space page all carried figures from an
-earlier training run, including a regressor named as LightGBM when the shipped
-model was XGBoost. Every one of those was corrected by hand, which is exactly
-why they rotted -- nothing recomputed them.
+Hand-maintained figures rot: README, MODEL_CARD, CHANGELOG, the ADRs and the
+public Space page have all carried figures from an earlier training run,
+including a regressor named as LightGBM when the shipped model was XGBoost.
+Nothing recomputed them, so nothing failed when they went stale.
 
 This reads the numbers back out of the prose and compares them to
 ``reports/training_metrics.json`` and ``benchmarks/results.json``. It is
@@ -93,12 +92,14 @@ def test_readme_drop_table_reconciles_to_the_artefact() -> None:
 
 # Docs describing what ships today. CHANGELOG and the ADRs are excluded from
 # the scans below: their older entries are dated records of what was true then.
+# pyproject.toml is prose-bearing metadata (description), so it is scanned too.
 LIVE_DOCS = [
     "README.md",
     "MODEL_CARD.md",
     "DESIGN_DECISIONS.md",
     "deploy/huggingface/README.md",
     "deploy/huggingface/DEPLOY.md",
+    "pyproject.toml",
 ]
 
 # A line stating that something is gone must be allowed to name it. Matched
@@ -124,6 +125,7 @@ DELETED_COMPONENTS = [
     "SQFT_CATEGORY",
     "train_classification",
     "optimal_thresholds",
+    "argmax",
 ]
 
 # Symbols a notebook must not import or reference — deleted functions and the
@@ -292,6 +294,25 @@ def test_reader_facing_docs_declare_the_shipped_model(doc: str) -> None:
     assert normalise(claimed.group(1)) == normalise(shipped), (
         f"{doc} declares {claimed.group(1)}; the artefact ships {shipped}"
     )
+
+
+def test_pyproject_description_names_the_shipped_model() -> None:
+    """Package metadata sat outside every scan above: the description still
+    said Random Forest after the shipped regressor changed to XGBoost."""
+    match = re.search(r'^description = "([^"]*)"', _read("pyproject.toml"), re.M)
+    assert match is not None, "pyproject.toml no longer carries a description"
+    described = match.group(1).lower().replace(" ", "_")
+
+    shipped = METRICS["regression"]["selected_model"]
+    assert shipped in described, (
+        f"pyproject description does not name the shipped model {shipped}"
+    )
+    stale = sorted(
+        name
+        for name in METRICS["regression"]["candidates_val"]
+        if name != shipped and name in described
+    )
+    assert not stale, f"pyproject description names non-shipped model(s): {stale}"
 
 
 def test_no_tracked_file_references_private_projects() -> None:
