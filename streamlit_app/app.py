@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import math
+import json
 import os
 import sys
+from pathlib import Path
 
 # Ensure src/ is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -140,35 +141,16 @@ with col2:
                 beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude
             )
 
-            # Mirror the train-time frequency cap (train/serve parity, same
-            # as the API): rare/unseen SUBLOCALITY/ZIPCODE values map to
-            # "other" so they get the trained "other" encoding instead of
-            # the encoder's unseen default.
-            from src.data.features import apply_serving_cap, learned_capped_categories
+            # One inference path, shared with the API (src.models.predict):
+            # capping, rounding and zoning live in one place so the surfaces
+            # cannot disagree. No confidence figure -- the zone is a bucketed
+            # point estimate; uncertainty is the calibrated range below.
+            from src.models.predict import get_price_interval, predict_listings
 
-            features = apply_serving_cap(features, learned_capped_categories(reg))
-
-            log_price = float(reg.predict(features)[0])
-            price = math.expm1(log_price)
-
-            # zone_for_price is the same decode the API uses, so both surfaces
-            # answer identically for identical input.
-            from src.models.decode import zone_for_price
-
-            # No confidence figure: the zone is a bucketed point estimate, not
-            # a classifier output, so there is no posterior to report.
-            # Uncertainty is shown where it was calibrated -- the range below.
-            st.metric("Price Zone", zone_for_price(price))
-            # Round to $100 and band from the rounded figure, matching the API
-            # so the displayed range reproduces from the displayed price.
-            rounded = round(price, -2)
-            st.metric("Estimated Price", f"${rounded:,.0f}")
-            # Same calibrated interval the API serves, and labelled with the
-            # coverage it was measured to achieve — a range without its
-            # coverage invites the reader to assume a precision it lacks.
-            from src.models.predict import get_price_interval, price_range
-
-            band = price_range(rounded)
+            record = predict_listings(features)[0]
+            st.metric("Price Zone", record["price_zone"])
+            st.metric("Estimated Price", f"${record['predicted_price']:,.0f}")
+            band = record["price_range"]
             target = get_price_interval()["target_coverage"]
             st.caption(
                 f"{target:.0%} of listings fall in ${band['low']:,.0f} - "
@@ -182,6 +164,25 @@ with col2:
 # Footer
 # ---------------------------------------------------------------------------
 st.markdown("---")
-st.caption(
-    "Model: one XGBoost regressor | Data: NYC Housing Dataset (4,526 cleaned listings)"
-)
+
+
+def _footer_facts() -> str:
+    """Model name and cleaned-listing count read from the committed training
+    artefact, so the footer tracks the shipped run instead of being hand-kept."""
+    try:
+        metrics = json.loads(
+            (
+                Path(__file__).resolve().parents[1]
+                / "reports"
+                / "training_metrics.json"
+            ).read_text(encoding="utf-8")
+        )
+        model = str(metrics["regression"]["selected_model"]).upper()
+        p = metrics["provenance"]
+        n = p["n_train"] + p["n_val"] + p["n_test"]
+        return f"Model: one {model} regressor | Data: NYC Housing Dataset ({n:,} cleaned listings)"
+    except Exception:
+        return "Model: one regressor over the NYC Housing Dataset"
+
+
+st.caption(_footer_facts())

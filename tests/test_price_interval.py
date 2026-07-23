@@ -1,10 +1,9 @@
 """The served price interval must be calibrated, and must say what it covers.
 
-The shipped interval was a hardcoded +/-15% derived from nothing. Measured
-against the real test split it contained the true price 32% of the time while
-being presented to users as a price range — a precise-looking number with no
-evidence behind it, which is the same defect as the threshold-tuned macro F1
-this repo already corrected.
+An interval presented to users as a price range while containing the true
+price only some of the time is a precise-looking number with no evidence
+behind it. These tests assert the shipped multipliers and their measured
+coverage.
 
 The artefact-reading tests below assert the shipped numbers; the calibration
 tests drive ``calibrate_price_interval`` directly on synthetic residuals, so

@@ -108,14 +108,10 @@ def test_learned_capped_categories_finds_only_capped_columns() -> None:
 def test_serving_cap_maps_unseen_categories_to_the_trained_bucket() -> None:
     """Serving must encode an unseen ZIP the way training encoded rare ones.
 
-    Asserts PARITY only. An earlier version also asserted the un-capped input
-    predicts differently -- "the skew was real" -- which held for the deleted
-    classifier's probability vector but does NOT hold for the regressor:
-    measured on the shipped model, raw and "other" differ by 2e-15, because
-    TargetEncoder's unseen fallback is the global mean and this model's
-    "other" encoding sits on it. The cap is kept for train/serve parity (a
-    retrain can move those apart), not because it currently changes an answer,
-    and this test no longer claims otherwise.
+    Asserts PARITY only. On the shipped regressor, raw and "other" differ by
+    2e-15: TargetEncoder's unseen fallback is the global mean, which is where
+    this model's "other" encoding sits. The cap is kept for train/serve parity
+    (a retrain can move those apart), not because it changes an answer today.
     """
     model = _real_model()
     known = learned_capped_categories(model)

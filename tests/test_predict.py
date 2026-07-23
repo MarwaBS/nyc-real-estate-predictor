@@ -104,6 +104,37 @@ def test_predict_price(mock_models: Path, _test_row: pd.DataFrame) -> None:
     assert result["price_range"]["low"] < result["price_range"]["high"]
 
 
+def test_predict_applies_the_serving_cap(_test_row: pd.DataFrame, monkeypatch) -> None:
+    """An unseen capped category is mapped to "other" before inference, so this
+    module matches the encoding the API and dashboard serve (no train/serve
+    skew). Without the cap the model would receive the raw unseen value."""
+    import src.models.predict as pred_mod
+
+    seen: dict[str, list] = {}
+
+    class _Stub:
+        def predict(self, X: pd.DataFrame) -> np.ndarray:
+            seen["SUBLOCALITY"] = list(X["SUBLOCALITY"])
+            return np.zeros(len(X))
+
+    monkeypatch.setattr(pred_mod, "_regressor_cache", _Stub())
+    monkeypatch.setattr(
+        pred_mod,
+        "_price_interval",
+        {"low_multiplier": 0.6, "high_multiplier": 1.5, "target_coverage": 0.8},
+    )
+    monkeypatch.setattr(
+        pred_mod,
+        "learned_capped_categories",
+        lambda reg: {"SUBLOCALITY": {"midtown", "other"}},
+    )
+
+    row = _test_row.copy()
+    row.loc[0, "SUBLOCALITY"] = "nowhere-that-was-never-trained"
+    pred_mod.predict_price(row)
+    assert seen["SUBLOCALITY"] == ["other"]
+
+
 def test_served_band_reproduces_from_the_rounded_price(
     _test_row: pd.DataFrame, monkeypatch
 ) -> None:

@@ -158,16 +158,14 @@ Drop reasons (sum reconciles to `n_dropped` — enforced at run time):
 | `missing_zip` | 1 |
 | **Total** | **62,155** |
 
-**This number went DOWN, from 0.375 to 0.250.** The previously published
-0.375 (on 18,314 rows) came from a benchmark model trained on
-`output/cleaned_house_dataset.csv` back when that file had **no producer in
-this repo** — it could not be regenerated from any committed code, and it
+The externally-benchmarked score is **0.250 R²(log)**, below a previously
+published **0.375** (on 18,314 rows). That earlier figure came from a benchmark
+model trained on `output/cleaned_house_dataset.csv` when that file had **no
+producer in this repo**: it could not be regenerated from committed code and
 carried a 2,147,483,647 overflow sentinel plus `BOROUGH`/`ZIPCODE` columns the
-cleaner never created. Once the cleaner derived those columns for real and the
-benchmark model was retrained on the reproducible dataset, the score fell by
-0.125 absolute (33% relative). The old figure was not reproducible, so it is
-not a baseline this one regressed against — it is a number that should never
-have been published. Recorded here rather than quietly overwritten.
+cleaner never created. Retrained on the reproducible dataset, the score is
+0.250. The 0.375 was never reproducible, so it is not a baseline this figure
+regressed against.
 
 **Read the number honestly:** 0.250 R²(log) is what borough + sqft + ZIP
 explain about 2024 family-dwelling sale prices, full stop. It is *supposed*

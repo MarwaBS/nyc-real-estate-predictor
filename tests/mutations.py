@@ -176,6 +176,24 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_predict.py::test_served_band_reproduces_from_the_rounded_price",
     ),
     Mutation(
+        name="serving-cap-skipped-in-predict",
+        # The cap lives only in predict_listings now (predict_price and
+        # predict_price_zone are projections of it), so this block is its
+        # single site.
+        path="src/models/predict.py",
+        old=(
+            "    reg = get_regressor()\n"
+            "    features = apply_serving_cap(features, "
+            "learned_capped_categories(reg))\n"
+            "    prices = np.expm1(np.asarray(reg.predict(features), dtype=float))"
+        ),
+        new=(
+            "    reg = get_regressor()\n"
+            "    prices = np.expm1(np.asarray(reg.predict(features), dtype=float))"
+        ),
+        gate="tests/test_predict.py::test_predict_applies_the_serving_cap",
+    ),
+    Mutation(
         name="near-duplicate-dedup-removed",
         path="src/data/cleaner.py",
         old='    df = df.drop_duplicates(subset=["_lat_round", "_lon_round", "PRICE"], keep="first")',
@@ -236,5 +254,14 @@ MUTATIONS: list[Mutation] = [
             '        logger.warning("drift baseline failed (non-critical): %s", exc)'
         ),
         gate="tests/test_artifact_manifest.py",
+    ),
+    Mutation(
+        name="benchmark-baseline-ungoverned",
+        # Dropping it from the producer's governed set must fail a test at
+        # HEAD, not only silently on the next retrain.
+        path="run_training.py",
+        old='    "benchmark_baseline.json",\n',
+        new="",
+        gate="tests/test_artifact_manifest.py::test_producer_governs_exactly_this_set",
     ),
 ]
