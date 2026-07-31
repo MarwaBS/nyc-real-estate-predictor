@@ -141,10 +141,18 @@ predict, out of distribution?*
 | Dropped (per-reason accounting below) | 62,155 |
 | **R² in log-price space** | **0.250** |
 | Naive baseline (borough-median train price, same rows) | **-0.016** |
-| Leakage firewall (`schema-firewall`) | **passed** — no forbidden column, no statistical mirroring (Pearson + Spearman + MI) |
+| Leakage firewall (`schema-firewall`) | **passed** — no forbidden column; no statistical mirroring among the columns the MI gate covers (Pearson + Spearman + MI). Scope note below |
 | Schema SHA vs registry | verified BEFORE the run (hard gate) |
 | Prediction health (NaN / Inf / collapse) | passed |
 | Leakage tripwire (R² > 0.95 ⇒ investigate) | not triggered |
+
+**Scope of the statistical gate.** `check_leakage` reads numeric columns, so
+[`benchmarks/invariants.py`](benchmarks/invariants.py) factorises low-cardinality string columns and
+**drops** the rest before the call rather than letting them pass through unassessed. Of the three
+shipped features, `zip_code` is a high-cardinality string and is therefore covered by the name-based
+forbidden-column check only, not by Pearson/Spearman/MI. That is deliberate — factorising 1,000 ZIP
+codes into arbitrary integers would feed the detector a meaningless ordinal — but it means "no
+statistical mirroring" is a claim about `borough` and `property_sqft`, not about every column.
 
 Drop reasons (sum reconciles to `n_dropped` — enforced at run time):
 
