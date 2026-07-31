@@ -141,7 +141,7 @@ predict, out of distribution?*
 | Dropped (per-reason accounting below) | 62,155 |
 | **R² in log-price space** | **0.250** |
 | Naive baseline (borough-median train price, same rows) | **-0.016** |
-| Leakage — name-based / semantic (Pearson + Spearman + MI) | not triggered |
+| Leakage firewall (`schema-firewall`) | **passed** — no forbidden column, no statistical mirroring (Pearson + Spearman + MI) |
 | Schema SHA vs registry | verified BEFORE the run (hard gate) |
 | Prediction health (NaN / Inf / collapse) | passed |
 | Leakage tripwire (R² > 0.95 ⇒ investigate) | not triggered |
@@ -189,7 +189,7 @@ continuously re-derived by an environment that is not the author's laptop.
 The benchmark is composed of three independent layers. Each has its own success condition. Conflating them is the most common misread.
 
 **A. Data validity layer** — [SCHEMA_MAP.md](benchmarks/SCHEMA_MAP.md) (sealed version pinned in [`SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json)) + [`benchmarks/mapping.py`](benchmarks/mapping.py)
-Row-wise, stateless column mapping with an exhaustive, priority-ordered drop-rule table (§4 of the contract). Success = deterministic, auditable, target-independent; verified by the adversarial suite in [`tests/benchmarks/test_schema_firewall.py`](tests/benchmarks/test_schema_firewall.py).
+Row-wise, stateless column mapping with an exhaustive, priority-ordered drop-rule table (§4 of the contract). Success = deterministic, auditable, target-independent; verified by the hostile-input suite in [`tests/benchmarks/test_schema_firewall.py`](tests/benchmarks/test_schema_firewall.py).
 
 **B. Evaluation layer** — [`benchmarks/invariants.py`](benchmarks/invariants.py)
 The firewall checks: schema-SHA lock vs the registry (LF-normalised hashing, so the lock is platform-deterministic), name-based leakage (`FORBIDDEN_COLUMNS`), semantic leakage (Pearson + Spearman + normalised MI), drop-log reconciliation, finite-target guard, prediction health (NaN / Inf / collapse). **Every one of these is enforced inside the orchestrator at run time** — the lock check runs before the download, and a violation aborts the run rather than being recorded as an FYI.
@@ -419,11 +419,11 @@ The suite covers:
 - Geospatial utilities (haversine; plus a guard that dead geo features stay removed)
 - FastAPI endpoints (health, predict, validation errors)
 - Model-loading version guard (cross-version sklearn artefacts are refused)
-- The full adversarial benchmark firewall (`tests/benchmarks/`): schema lock,
+- The full hostile-input benchmark firewall (`tests/benchmarks/`): schema lock,
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 78% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 78% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`; currently measuring 88.85%), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -468,13 +468,13 @@ nyc-real-estate-predictor/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        Unit + adversarial firewall suite, 78% coverage gate
+├── tests/                        Unit + hostile-input firewall suite, 78% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
 │   ├── test_geo.py
 │   ├── test_api.py
-│   └── benchmarks/               Schema-lock + drop-engine adversarial suite
+│   └── benchmarks/               Schema-lock + drop-engine hostile-input suite
 │
 ├── docs/decisions/               Architecture Decision Records
 │   ├── 001-remove-price-per-sqft.md
@@ -507,7 +507,7 @@ nyc-real-estate-predictor/
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (78% coverage gate over src/ + benchmarks/ + api/ + run_training.py) |
+| Testing | pytest (78% coverage gate over src/ + benchmarks/ + api/ + run_training.py; currently measuring 88.85%) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

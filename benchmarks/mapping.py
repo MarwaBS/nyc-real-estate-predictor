@@ -2,7 +2,7 @@
 
 Contract: ``benchmarks/SCHEMA_MAP.md`` (version pinned in
 ``SCHEMA_MAP_VERSIONS.json``). This module is the reference
-implementation of that contract; the adversarial test suite in
+implementation of that contract; the hostile-input test suite in
 ``tests/benchmarks/test_schema_firewall.py`` is the executable
 specification.
 

@@ -23,7 +23,7 @@ Four things remain local:
 
 All other names (``LeakageError``, ``check_no_forbidden_columns``,
 ``check_target_independence``) are preserved as thin wrappers so that
-the existing adversarial test suite keeps passing without edits.
+the existing hostile-input test suite keeps passing without edits.
 """
 
 from __future__ import annotations
