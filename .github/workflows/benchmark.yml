@@ -79,7 +79,7 @@ jobs:
           # openpyxl is used exclusively by the benchmark downloader.
           pip install openpyxl==3.1.5
 
-      - name: Adversarial firewall suite (structural invariants)
+      - name: Hostile-input firewall suite (structural invariants)
         # Fails CI on schema-SHA drift, determinism violation, state
         # dependence, target-awareness, drop-log inconsistency,
         # forbidden-column presence, or collapse-detector regressions.
