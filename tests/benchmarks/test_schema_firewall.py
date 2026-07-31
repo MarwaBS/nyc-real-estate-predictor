@@ -1,4 +1,4 @@
-"""Adversarial tests for the sealed ``benchmarks/SCHEMA_MAP.md`` contract.
+"""Hostile-input tests for the sealed ``benchmarks/SCHEMA_MAP.md`` contract.
 
 Each test injects a specific contract violation and asserts the
 firewall catches it. A green suite means the firewall is enforced,

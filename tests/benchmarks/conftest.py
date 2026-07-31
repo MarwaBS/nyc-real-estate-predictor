@@ -29,7 +29,7 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
     """Synthetic sample mirroring the NYC.gov Rolling Sales 2024 schema.
 
     Not the real dataset — the real download happens at run time. This
-    fixture exists only to drive the adversarial test suite with
+    fixture exists only to drive the hostile-input test suite with
     deterministic, schema-accurate rows covering every drop reason
     under SCHEMA_MAP.md v3 and every borough.
     """
