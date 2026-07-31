@@ -150,7 +150,7 @@ predict, out of distribution?*
 [`benchmarks/invariants.py`](benchmarks/invariants.py) factorises low-cardinality string columns and
 **drops** the rest before the call rather than letting them pass through unassessed. Of the three
 shipped features, `zip_code` is a high-cardinality string and is therefore covered by the name-based
-forbidden-column check only, not by Pearson/Spearman/MI. That is deliberate — factorising 1,000 ZIP
+forbidden-column check only, not by Pearson/Spearman/MI. That is deliberate — factorising ZIP
 codes into arbitrary integers would feed the detector a meaningless ordinal — but it means "no
 statistical mirroring" is a claim about `borough` and `property_sqft`, not about every column.
 
