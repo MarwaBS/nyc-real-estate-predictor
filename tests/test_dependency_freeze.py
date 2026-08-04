@@ -58,7 +58,9 @@ def _pip_ignored() -> set[str]:
 def test_the_scan_finds_the_frozen_pins():
     """A renamed marker would leave the two checks below comparing empty sets."""
     pins = _frozen_pins()
-    assert len(pins) >= 8, f"only {len(pins)} frozen pins found — the marker or the files moved"
+    assert len(pins) >= 8, (
+        f"only {len(pins)} frozen pins found — the marker or the files moved"
+    )
     assert all(reason for reason in pins.values()), "a frozen pin carries no reason"
 
 
