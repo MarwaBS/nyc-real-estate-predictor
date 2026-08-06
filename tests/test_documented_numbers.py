@@ -256,6 +256,40 @@ def test_every_live_test_r2_claim_matches_the_artefact(doc: str) -> None:
     assert not wrong, "contradicted R2 claims:\n" + "\n".join(wrong)
 
 
+#: Ordered so R²(log) wins over the R² inside it.
+_BASELINE_FIGURE = re.compile(r"baseline[\s:=]*([−-]?0\.\d{3})")
+_METRIC_MARKER = re.compile(r"macro[- ]?F1|R[²2]\(log\)|R[²2]", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("doc", LIVE_DOCS)
+def test_every_naive_baseline_figure_matches_its_artefact(doc: str) -> None:
+    """The baselines the headline numbers are judged against sit outside
+    ``_claimed_values``: 0.177 is more than 60 characters from the R² it
+    qualifies. Each figure is attributed to the nearest metric named before it,
+    so one quoted against the wrong metric fails as well as a stale one.
+    """
+    recorded = {
+        "r2": METRICS["baseline"]["test_r2"],
+        "f1": METRICS["baseline"]["test_zones_macro_f1"],
+        "bench": BENCH["performance"]["baseline_r2_log_space"],
+    }
+    keys = {"macrof1": "f1", "r²(log)": "bench", "r2(log)": "bench"}
+    text = _read(doc)
+    wrong = []
+    for figure in _BASELINE_FIGURE.finditer(text):
+        markers = list(_METRIC_MARKER.finditer(text[: figure.start()]))
+        assert markers, f"{doc}: a baseline figure precedes any metric name"
+        marker = markers[-1].group(0).lower().replace(" ", "").replace("-", "")
+        expected = recorded[keys.get(marker, "r2")]
+        stated = figure.group(1).lstrip("−-")
+        if stated != f"{abs(expected):.3f}":
+            line = text[: figure.start()].count("\n") + 1
+            wrong.append(
+                f"{doc}:{line}: {markers[-1].group(0)} baseline {stated} (artefact: {abs(expected):.3f})"
+            )
+    assert not wrong, "baseline figures contradict the artefacts:\n" + "\n".join(wrong)
+
+
 @pytest.mark.parametrize("doc", ["README.md", "MODEL_CARD.md"])
 def test_per_borough_f1_is_quoted_from_the_artefact(doc: str) -> None:
     """The ungated table that carried "0.887 Staten Island vs 0.601 Queens"
@@ -408,6 +442,13 @@ def test_seed_variance_claims_match_the_recorded_study() -> None:
         text = _read(doc)
         assert r2_claim in text, f"{doc} does not quote test R² {r2_claim}"
         assert f1_claim in text, f"{doc} does not quote zones F1 {f1_claim}"
+
+    # _study_values() exempts these from the contradiction scans.
+    readme = _read("README.md")
+    for key in ("baseline_test_r2", "baseline_zones_macro_f1"):
+        spread = SEED_VARIANCE[key]
+        claim = f"{spread['mean']:.3f} ± {spread['std']:.3f}"
+        assert claim in readme, f"README does not quote the {key} spread {claim}"
     # The selection-count claim must match too.
     counts = SEED_VARIANCE["selected_model_counts"]
     winner = max(counts, key=lambda k: counts[k])

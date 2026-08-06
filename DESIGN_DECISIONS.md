@@ -21,9 +21,10 @@ The system predicts price with a single regressor over `LOG_PRICE`, and the
   returns. See `run_training.run_protocol`.
 - **Why beat a naive baseline, not just report R²?** Every headline is reported
   next to a per-borough-median predictor scored on the same rows: test R² 0.835
-  vs 0.177 in-distribution, and 0.250 vs −0.016 on the external benchmark. A
-  number without its floor is not evidence of skill (`_borough_median_baseline`
-  in `run_training.py`; `benchmarks/results.json`).
+  against baseline 0.177 in-distribution, and R²(log) 0.250 against
+  baseline −0.016 on the external benchmark. A number without its floor is not
+  evidence of skill (`_borough_median_baseline` in `run_training.py`;
+  `benchmarks/results.json`).
 
 ## Dead ends (what was tried and removed)
 
