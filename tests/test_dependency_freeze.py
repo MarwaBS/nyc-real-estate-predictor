@@ -64,13 +64,22 @@ def _minor_ignored() -> set[str]:
     }
 
 
-def _runtime_pins() -> list[str]:
-    text = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
-    return [
-        _normalise(match.group(1))
-        for line in text.splitlines()
-        if (match := re.match(r"^\s*([A-Za-z0-9_.\-]+)\s*[=<>~!]", line))
-    ]
+def _managed_pins() -> list[str]:
+    """Every pin Dependabot manages. Its pip entry sets `directory: "/"` with no
+    file restriction, and CI installs requirements-dev.txt, which pulls the other
+    two into one resolve, so a bump in any of them can break it."""
+    names = []
+    for filename in REQUIREMENTS:
+        path = REPO_ROOT / filename
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            # `pkg[extra]==v` is ordinary; a name-only pattern skips the line and
+            # the package leaves the scan without failing anything.
+            match = re.match(r"^\s*([A-Za-z0-9_.\-]+)(\[[^\]]*\])?\s*[=<>~!]", line)
+            if match:
+                names.append(_normalise(match.group(1)))
+    return names
 
 
 def _direct_dependencies(package: str) -> set[str]:
@@ -129,11 +138,15 @@ def test_every_ignored_package_is_a_frozen_pin(package: str):
     )
 
 
-def test_every_runtime_pin_is_installed():
-    """_reaches_numpy reads installed metadata. A missing package answers False
-    for everything below it, so the two checks after this one would pass empty."""
+def test_the_scan_finds_the_managed_pins():
+    """_reaches_numpy reads installed metadata, so a package the scan misses or
+    that is absent from the environment answers False and fails nothing."""
+    pins = _managed_pins()
+    assert len(pins) >= 20, (
+        f"only {len(pins)} managed pins found; the files or the pattern moved"
+    )
     missing = []
-    for package in _runtime_pins():
+    for package in pins:
         try:
             version(package)
         except PackageNotFoundError:
@@ -152,7 +165,7 @@ def test_numpy_is_still_pinned_below_2():
     assert pin is not None and pin.group(1) == "1", "numpy is no longer held at 1.x"
 
 
-@pytest.mark.parametrize("package", sorted(set(_runtime_pins())))
+@pytest.mark.parametrize("package", sorted(set(_managed_pins())))
 def test_a_package_that_reaches_numpy_cannot_take_a_minor_bump(package: str):
     """numpy 2 entered the tree through scipy, then through shap, and each time
     the resolve failed at `pip install`. The set is recomputed here rather than

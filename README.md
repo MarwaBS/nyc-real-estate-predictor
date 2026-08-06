@@ -7,16 +7,16 @@
 
 **Shipped model** — `XGBoost` — the trained artefact in [`reports/training_metrics.json`](reports/training_metrics.json) is the single source of truth; a CI gate fails if this field disagrees with it.
 
-> Every model is trained without data leakage. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
+> The shipped feature list contains no price-derived column: `assert_no_leakage` rejects any feature name containing `price`, and the leakage suite fails the build if one reappears. Previous R2=0.997 results were caused by PRICE_PER_SQFT (derived from target) — this has been removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
-> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job on every push. `pip install schema-firewall` works globally.
+> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT — and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal — is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job, which runs on pushes touching `benchmarks/`, `requirements.txt` or `pyproject.toml`, and weekly.
 
 This repository contains **two separate evaluation surfaces** that should not be conflated:
 
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
 | Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177) | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
-| External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; **fully reproducible by anyone** — the benchmark model ships in the repo and the data is a public download) |
+| External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; recomputable by anyone while NYC.gov keeps publishing the 2024 files — the benchmark model ships in the repo and the data is a public download) |
 
 Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
 
@@ -51,9 +51,9 @@ spread is published next to the point estimates.
 Split: 2,896 train / 724 val / 906 test, stratified on pooled price quartiles (a balancing key only — served zone labels come from train-derived cut-points). Losing
 candidates show "not scored" because they never touch test — scoring them
 there and then quoting the winner's number is how a selected maximum gets
-published as a hold-out estimate. Artifacts produced under the pinned
+published as a hold-out estimate. Artefacts produced under the pinned
 environment (Python 3.12.13, numpy 1.26.4, scikit-learn 1.8.0 — recorded in
-the artifact's provenance block together with `working_tree_clean` and the
+the artefact's provenance block together with `working_tree_clean` and the
 producing commit).
 
 **Per-class threshold tuning was removed; serving has no thresholds to tune.**
@@ -109,15 +109,16 @@ cleaning rather than carried into training as an unnamed category.
 The spread (0.696 Manhattan vs 0.529 Staten Island) is wide enough to matter
 and is reported unexplained: no experiment here establishes a cause, so it is
 recorded as an observation. Every borough clears its own majority-class
-baseline by at least 0.39 macro F1 — the floor `check_borough_floor` enforces
+baseline by at least 0.389 macro F1 — the floor `check_borough_floor` enforces
 at train time, which fails the run rather than publishing a breach.
 
 ---
 
 ## External Benchmark — NYC.gov 2024
 
-**What this is.** A schema-constrained, leakage-proof, **fully reproducible**
-out-of-distribution benchmark: a lean regressor trained only on the three
+**What this is.** A schema-constrained out-of-distribution benchmark, gated on
+the checks listed under B below
+and recomputable from public data: a lean regressor trained only on the three
 features the Kaggle training data and NYC.gov Rolling Sales genuinely share
 (borough, property square footage, ZIP) is scored against real 2024 sale
 transactions, under a SHA-sealed transformation contract that the
@@ -184,15 +185,17 @@ benchmark is that this gap is measured and sealed, not hidden.
 committed at `models/benchmark_regressor.joblib`, 0.6 MB):
 
 ```bash
-pip install -r requirements.txt && pip install openpyxl
+pip install -r requirements.txt && pip install openpyxl==3.1.5
 python -m benchmarks.run_benchmark
 ```
 
 The `External Benchmark` CI workflow runs exactly this on every relevant
 push and weekly (NYC.gov drift watch), so the committed number is
-continuously re-derived by an environment that is not the author's laptop.
+recomputed on a GitHub runner rather than the author's laptop. The recomputed
+value is uploaded as a run artefact; nothing compares it to the committed one,
+so drift is visible in the logs, not enforced.
 
-### Layer separation (the whole point)
+### Layer separation
 
 The benchmark is composed of three independent layers. Each has its own success condition. Conflating them is the most common misread.
 
@@ -377,8 +380,8 @@ feature).
 
 | Feature | Method | Why |
 |---|---|---|
-| BOROUGH, TYPE | OneHotEncoder | Low cardinality (5-8 values) |
-| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit inside the Pipeline on train only) | High cardinality (~150 ZIPs) — OneHot would create 150 sparse columns |
+| BOROUGH, TYPE | OneHotEncoder | Low cardinality (5 and 13 values on the cleaned frame) |
+| ZIPCODE, SUBLOCALITY | TargetEncoder (smoothing=10, fit inside the Pipeline on train only) | High cardinality (178 ZIPs, 21 sublocalities) — OneHot would create 178 sparse columns |
 
 ---
 
@@ -477,20 +480,18 @@ nyc-real-estate-predictor/
 │   └── app.py                    Interactive NYC map + prediction form
 │
 ├── tests/                        Unit + hostile-input firewall suite, 85% coverage gate
-│   ├── test_data_cleaner.py
-│   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
-│   ├── test_geo.py
-│   ├── test_api.py
+│   ├── test_documented_numbers.py  Published figures vs the artefacts
+│   ├── …                         (30 files in total)
 │   └── benchmarks/               Schema-lock + drop-engine hostile-input suite
 │
 ├── docs/decisions/               Architecture Decision Records
 │   ├── 001-remove-price-per-sqft.md
 │   ├── 002-xgboost-primary-model.md
-│   ├── 003-multi-task-deep-learning.md
+│   └── 003-multi-task-deep-learning.md
 │
 ├── notebooks/                    EDA + analysis (import from src/)
-├── models/                       Flagship artifacts committed + MANIFEST.sha256-pinned;
+├── models/                       Flagship artefacts committed + MANIFEST.sha256-pinned;
 │                                 regenerate with run_training.py
 ├── reports/training_metrics.json Committed evidence artefact for §Results
 ├── .github/workflows/ci.yml      4-job CI: lint + test + security + docker-build
@@ -539,7 +540,7 @@ Exact pins — training + runtime are now identical:
 | numpy | `==1.26.4` | |
 | pandas | `==2.2.3` | |
 
-All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: SHAP, MLflow). A rebuild 6 months from now pulls the exact same wheels. Dependabot is configured to PR updates; no pin changes without a full re-train + smoke-test cycle.
+All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirements-train.txt`](requirements-train.txt) (training extras: SHAP, MLflow). The libraries fitted into the shipped pickles are pinned to exact versions; `fastapi` and `starlette` carry security floors rather than exact pins, and transitive dependencies are not locked, so a rebuild is not byte-reproducible. No pin changes without a full re-train + smoke-test cycle.
 
 ---
 

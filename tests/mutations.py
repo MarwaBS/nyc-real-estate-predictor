@@ -291,6 +291,57 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_documented_numbers.py",
     ),
     Mutation(
+        name="tree-state-resampled-for-the-writer",
+        # The early sample stays, so call order still checks out. Only the value
+        # handed to the writer changes, and by then the models are on disk.
+        path="run_training.py",
+        old="    _write_training_metrics(\n        tree_clean_at_start,",
+        new="    _write_training_metrics(\n        _git_working_tree_clean(),",
+        gate="tests/test_training_provenance.py",
+    ),
+    Mutation(
+        name="baseline-figure-moved-left-of-the-metric",
+        # Same falsification as baseline-figure-rewritten, written before the
+        # metric name instead of after it.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177)",
+        new="naive borough-median baseline 0.577; R² = 0.835 on the 20% test split",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="numpy-reaching-train-package-unfrozen",
+        path=".github/dependabot.yml",
+        old=(
+            '      - dependency-name: "shap"\n'
+            '        update-types: ["version-update:semver-minor"]\n'
+        ),
+        new="",
+        gate="tests/test_dependency_freeze.py",
+    ),
+    Mutation(
+        name="coverage-omit-swallows-a-module",
+        # The other half of the same knob: source keeps the module, omit removes
+        # it, and the percentage rises.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "streamlit_app/*",\n    "tests/*",',
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="type-check-scope-narrowed",
+        path=".github/workflows/ci.yml",
+        old=" streamlit_app/ scripts/ run_training.py --ignore-missing-imports",
+        new=" run_training.py --ignore-missing-imports",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="cap-study-figure-rots",
+        path="MODEL_CARD.md",
+        old="0.2792 at 3.0",
+        new="0.2892 at 3.0",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
         name="doc-link-points-at-nothing",
         path="README.md",
         old="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json)",

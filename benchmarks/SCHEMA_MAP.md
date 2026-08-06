@@ -79,7 +79,7 @@ The model input `X` contains exactly three features (matching
 | `ZIP CODE`                  | `zip_code`          | integer → string category                         |
 
 `YEAR BUILT` and `BUILDING CLASS CATEGORY` are read for **row filtering only**
-(§4) and never enter `X`. `LAND SQUARE FEET` is unused in v2.
+(§4) and never enter `X`. `LAND SQUARE FEET` is unused.
 
 Borough lookup (fixed):
 ```
@@ -120,7 +120,7 @@ enforces exactly these rules in exactly this order:
 |---|--------------------------------------------------------|--------------------------------|
 | 1 | `SALE PRICE` is blank/NaN                              | `missing_sale_price` — a blank price would otherwise survive every numeric threshold (NaN compares False) and poison the log-target |
 | 2 | `SALE PRICE` ≤ 0                                       | `sale_price_non_positive` — invalid / non-arms-length |
-| 3 | `SALE PRICE` < 10,000 or > 100,000,000                 | `sale_price_out_of_range` — outlier / commercial artifact |
+| 3 | `SALE PRICE` < 10,000 or > 100,000,000                 | `sale_price_out_of_range` — outlier / commercial artefact |
 | 4 | `GROSS SQUARE FEET` is NaN or ≤ 0                      | `missing_gross_sqft` — missing structural feature |
 | 5 | `YEAR BUILT` is NaN or = 0                             | `missing_year_built` — record-quality filter: not a model feature, but a sale row with no build year is a low-confidence record |
 | 6 | `BOROUGH` not in {1..5}                                | `invalid_borough` — unmappable to a borough name |
@@ -185,8 +185,9 @@ A mapping is considered valid only if the full firewall suite
 
 Known limitation (documented, not addressed in this version):
 **segment-conditioned leakage.** The suite catches global and row-level
-leakage. Per-stratum MI detection would require more samples per stratum
-than this dataset supports (~180 rows/borough). Not implemented; flagged
+leakage. Per-stratum MI detection is not implemented; the
+threshold below which it stops being informative has not been measured, so
+no row count is claimed here. Not implemented; flagged
 in the public README alongside benchmark results.
 
 ---
@@ -212,7 +213,7 @@ match `benchmarks/run_benchmark.py` exactly):
 - `performance` (`r2_log_space`, `n_scored` — the regression-only v2+
   contract; there is no classifier in the lean benchmark, hence no F1)
 - `leakage_tripwire` (threshold + triggered bool)
-- `reproducibility` (tolerance statement)
+- `reproducibility` (what enforces it; no cross-architecture claim)
 
 ---
 
@@ -246,9 +247,12 @@ Enforced twice: by `test_schema_map_sha_matches_registered_version` in CI, and a
 RUN TIME by `benchmarks.invariants.verify_schema_map_lock`, which the
 orchestrator calls before downloading anything — a benchmark cannot
 execute, locally or in CI, against a contract whose hash is not sealed
-in the registry. Authority separation between author and reviewer is
-enforced by `.github/CODEOWNERS` + branch protection on `main`
-(required review, required status checks).
+in the registry. Edits are caught mechanically:
+`test_schema_map_sha_matches_registered_version` fails on any change that
+does not bump the version, and `verify_schema_map_lock` aborts a run before
+the download. This is a single-maintainer repository; there is no independent
+human reviewer, and `.github/CODEOWNERS` routes review requests rather than
+gating merges.
 
 No exceptions.
 

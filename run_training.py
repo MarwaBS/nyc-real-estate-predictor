@@ -581,6 +581,8 @@ def shap_top10(best_reg: Any, X_test: pd.DataFrame) -> list[dict[str, Any]]:
     )
     importance_df = global_feature_importance(shap_values, feature_names)
     logger.info("Top 10 SHAP features:\n%s", importance_df.head(10).to_string())
+    # to_dict keys are typed Hashable; rebuilt as str so the JSON artefact's
+    # key type matches the signature rather than being asserted with cast().
     rows = importance_df.head(10).to_dict("records")
     return [{str(name): value for name, value in row.items()} for row in rows]
 

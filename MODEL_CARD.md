@@ -9,12 +9,12 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 - **Persons or organisations developing the model:** Marwa Ben Salem (solo).
 - **Model date:** 2026-07-20 (last trained — `run_date` in `reports/training_metrics.json` is authoritative).
 - **Model version:** v1.0.0.
-- **Model type:** ONE artifact.
+- **Model type:** ONE artefact.
   - **Regressor** - `XGBoost` on `LOG_PRICE`. Predictions converted back via `expm1()`.
   - The 4-class price zone is **derived by bucketing that prediction**, not predicted by a second model. `PRICE_ZONE` is a deterministic function of price, so a classifier was fitting the same features to the same signal - and could disagree with the served price on the same listing. Training scores zones through the same decode serving uses.
 - **Additional models compared (not shipped):** Random Forest, LightGBM - compared on val, never scored on test.
-- **Training / tuning (shipped artifacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the **val** split, with **test** scored exactly once by the already-selected model. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
-  - **Provenance-SHA caveat:** the `commit_sha` recorded in `reports/training_metrics.json` (and in `benchmarks/results.json`) is the PR-branch commit that produced the artifact. This repo squash-merges, which orphans branch commits, so those SHAs are **not ancestors of `main`** — the artifact's integrity is instead checked by reproduction: the External Benchmark workflow re-runs the committed model weekly on live NYC.gov data and recomputes its benchmark R²(log) (`benchmarks/results.json`), so a model that stops matching its code turns that scheduled run red. (This re-derives the benchmark metrics, not every field of `reports/training_metrics.json`.)
+- **Training / tuning (shipped artefacts):** `run_training.py` — fixed hyperparameters, best-of-candidates selection on the **val** split, with **test** scored exactly once by the already-selected model. Full record with provenance (commit SHA, sklearn version, seed, splits) in `reports/training_metrics.json`.
+  - **Provenance-SHA caveat:** the `commit_sha` recorded in `reports/training_metrics.json` (and in `benchmarks/results.json`) is the PR-branch commit that produced the artefact. This repo squash-merges, which orphans branch commits, so those SHAs are **not ancestors of `main`**. What pins the artefacts instead is `models/MANIFEST.sha256`, which records a SHA-256 for each of the six governed files; `tests/test_artifact_manifest.py` recomputes them and fails on any drift. That ties the shipped bytes to the committed manifest. It does not tie them to the code that produced them.
 - **Paper or resource:** architecture, feature engineering, and decisions documented in `README.md` + `docs/decisions/*.md` (ADRs 001–003).
 - **Licence:** MIT.
 - **Citation / contact:** `marwabensalem30@gmail.com`; include `[MODEL_CARD]` in subject.
@@ -59,7 +59,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 ## Quantitative analyses
 
 - **Unitary results:** top SHAP features (mean |SHAP| over the regressor's test predictions; from `reports/training_metrics.json → classification.shap_top10`): `BATH` (0.369), `DIST_MANHATTAN_CENTER` (0.362), `PROPERTYSQFT` (0.144), `DIST_CENTRAL_PARK` (0.116). Full top-10 in README.
-- **Intersectional results:** borough-level macro F1 (from the artifact's
+- **Intersectional results:** borough-level macro F1 (from the artefact's
   `fairness_by_borough`). There is no `nan` group: rows whose borough cannot
   be derived are dropped during cleaning rather than carried as an unnamed
   category.
@@ -85,7 +85,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
   That is 2.1 points below the target: the binomial standard error of a proportion at p=0.8 on the 906-row test split is 1.33 points, so the gap is 1.6 SE — within sampling noise. It is reported rather than widened to hit 80% exactly, which would make the target a fitted quantity. It is a marginal band: one interval for every property, so it does not widen for unusual inputs the way a quantile-regression or conformal-by-difficulty interval would.
   - **Cross-row statistics are train-fitted:** IQR cap bounds, zone cut-points and the category vocabulary are fitted on the train split only and applied to val/test (`run_training.build_splits`), enforced by `tests/test_train_only_fitting.py` and three pooled-fitting mutations in the CI harness.
-  - **The IQR cap factor (3.0) is measured, and it bites harder than "tails".** It clips PRICE at Q3 + 3·IQR = $4,483,000 on this snapshot. **351 of 4,526 rows (7.76%) sit at exactly that value** — every listing from $4,483,000 up (373 in the raw export) is collapsed onto one price, not just the $56M-$195M outliers. So the model cannot distinguish any property above ~$4.5M, and the top of the price distribution is a spike rather than a tail. Scored on a common evaluation set (listings under $2,989,000, so every variant faces the same target distribution), val MAE is 0.2682 at factor 1.5, 0.2772 at 3.0, 0.2796 at 5.0 and 0.2810 uncapped -- capping beats not capping, and tighter is better on the metric. **1.5 measured better than the shipped 3.0** and is not used because it collapses 11.73% of listings onto one price against 7.76%: the gain is 0.009 MAE (3.3% relative), the cost is 180 more listings the model cannot tell apart. Note that scored across ALL rows the uncapped variant looks best (R2 0.7854) -- that ranking is variance inflation from a single $195M listing and reverses entirely on a like-for-like target. The lower clip bound never fires (it computes to −$2,489,000 for PRICE, so zero rows).
+  - **The IQR cap factor (3.0) is measured, and it bites harder than "tails".** Fitted on the train split, it clips PRICE at Q3 + 3·IQR = $4,487,000. **205 of 2,896 train rows (7.08%) sit at exactly that value** — every listing from $4,487,000 up is collapsed onto one price, not only the extreme ones. So the model cannot distinguish any property above ~$4.5M, and the top of the price distribution is a spike rather than a tail. Scored on a common evaluation set (listings under $2,991,500, so every variant faces the same target distribution), val MAE is 0.2750 at factor 1.5, 0.2792 at 3.0, 0.2812 at 5.0 and 0.2827 uncapped — capping beats not capping, and tighter is better on the metric. **1.5 measured better than the shipped 3.0** and is not used because it collapses 11.15% of train rows onto one price against 7.08%: the gain is 0.0042 MAE (1.5% relative), the cost is 118 more listings the model cannot tell apart. Note that scored across ALL rows the uncapped variant looks best — that ranking is variance inflation from a single $195M listing and reverses entirely on a like-for-like target. The lower clip bound never fires (it computes to −$2,492,000 for PRICE, so zero rows). Every figure here is measured with the Random Forest candidate, not the shipped XGBoost, and recorded in [`reports/cap_factor_study.json`](reports/cap_factor_study.json) by `scripts/measure_cap_factor.py`.
   - **One overflow sentinel is dropped, not capped.** The raw export contains a single `PRICE` of 2,147,483,647 (2³¹−1) where the next-highest real listing is $195M. It is removed before capping, because capping would convert it into a plausible-looking listing at the IQR bound instead of eliminating it.
   - **No naive-baseline column next to the headline metrics:** R²=0.835 (Kaggle split, baseline 0.177) and R²(log)=0.250 (external benchmark, baseline -0.016) are each reported beside the per-borough-median naive predictor scored on the same rows, recorded in the artefacts.
 - **Recommendations:**
@@ -94,11 +94,14 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
   - Retrain quarterly if the dataset can be refreshed.
   - Expand fairness analysis to calibration plots + per-group confusion matrices if this model were promoted beyond portfolio use.
 
-## Production incidents (postmortem)
+## Failure modes observed
 
 - **2026-04-19 — silent prediction corruption from a scikit-learn version
-  mismatch.** A serving environment running `scikit-learn==1.5.2` loaded
-  pipeline artifacts trained under `1.8.0`. sklearn emitted
+  mismatch.** Reproduced locally against a container built from an older
+  `requirements.txt`, not on a live user-facing deployment; this model has
+  never served real pricing decisions. A serving environment running
+  `scikit-learn==1.5.2` loaded
+  pipeline artefacts trained under `1.8.0`. sklearn emitted
   `InconsistentVersionWarning` — a warning, not an error — and the pipeline
   continued serving with corrupted internal state (a Manhattan condo
   predicted at **$2**). Nothing crashed; the failure mode was silence.
@@ -109,5 +112,5 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
      (`requirements.txt`).
   2. *Runtime guard:* `src/models/predict.py::_load_model` promotes
      `InconsistentVersionWarning` to a hard `ModelVersionError` — a
-     cross-version artifact is **refused**, never served. Regression-tested
+     cross-version artefact is **refused**, never served. Regression-tested
      in `tests/test_predict.py::test_version_mismatch_is_refused`.

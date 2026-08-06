@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -210,57 +211,67 @@ def _study_values() -> set[float]:
     return values
 
 
-def _claimed_values(text: str, keyword: str) -> list[tuple[int, float]]:
-    """Every number stated after `keyword` on its line, with the line number.
+#: A metric name, and a three-decimal figure that is not part of a longer number.
+_METRIC_NAME = re.compile(r"macro[- ]?F1|R[²2]", re.IGNORECASE)
+_THREE_DP = re.compile(r"(?<![\d.])(0\.\d{3})(?![\d])")
 
-    To the end of the line, not a fixed window. A 60-character one stopped four
-    characters short of the naive baseline in "R² = 0.835 on the 20% test split
-    (naive borough-median baseline: 0.177)", so that figure was reachable by no
-    check and could be rewritten to anything.
+
+def _artefact_values() -> set[float]:
+    """Every three-decimal quantity the artefacts actually contain."""
+    values = {
+        round(METRICS["regression"]["metrics"]["r2"], 3),
+        round(METRICS["regression"]["selection_metrics_val"]["r2"], 3),
+        round(METRICS["classification"]["metrics"]["macro_f1"], 3),
+        round(METRICS["classification"]["metrics"]["accuracy"], 3),
+        round(METRICS["regression"]["price_interval"]["coverage_test"], 3),
+        round(abs(BENCH["performance"]["r2_log_space"]), 3),
+        # The leaked PRICE_PER_SQFT figure ADR-001 exists to document. Named
+        # deliberately and repeatedly, so it is allowed by value.
+        0.997,
+    }
+    values |= _study_values()
+    values |= {
+        round(v, 3) for v in METRICS["classification"]["fairness_by_borough"].values()
+    }
+    values |= {
+        round(figure, 3)
+        for entry in METRICS["classification"]["borough_floor"].values()
+        for key, figure in entry.items()
+        if key != "n"
+    }
+    values |= {
+        round(row["mean_abs_shap"], 3)
+        for row in METRICS["classification"]["shap_top10"]
+    }
+    return values
+
+
+@pytest.mark.parametrize("doc", LIVE_DOCS)
+def test_every_figure_beside_a_metric_name_is_in_the_artefacts(doc: str) -> None:
+    """A line naming a metric may only carry figures the artefacts hold.
+
+    The whole line, on both sides of the name. Scanning rightward only was
+    walked around by writing the false figure first: "naive borough-median
+    baseline 0.577; R² = 0.835 ..." passed with the artefact holding 0.177.
+
+    This catches a fabricated or stale figure. It does not catch a real figure
+    quoted against the wrong metric, since membership does not know which name
+    on the line owns which number.
     """
-    found = []
-    for i, line in enumerate(text.splitlines(), 1):
-        for m in re.finditer(keyword, line, re.IGNORECASE):
-            if _HISTORICAL.search(line[: m.start()]):
-                continue
-            found.extend(
-                (i, float(v))
-                for v in re.findall(r"\*{0,2}(0\.\d{3})\*{0,2}", line[m.end() :])
-            )
-    return found
-
-
-@pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_live_macro_f1_claim_matches_the_artefact(doc: str) -> None:
-    """Asserting the true value appears somewhere passes while a contradictory
-    figure sits three lines away — which is how 0.727 survived beside 0.699."""
-    shipped = round(METRICS["classification"]["metrics"]["macro_f1"], 3)
-    wrong = [
-        f"{doc}:{line}: macro F1 {value} (artefact: {shipped})"
-        for line, value in _claimed_values(_read(doc), r"macro[- ]?F1")
-        if value != shipped and value not in _study_values()
-    ]
-    assert not wrong, "contradicted macro F1 claims:\n" + "\n".join(wrong)
-
-
-@pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_live_test_r2_claim_matches_the_artefact(doc: str) -> None:
-    """The external benchmark's R2(log) is a different quantity, so only the
-    in-distribution values are compared."""
-    shipped = round(METRICS["regression"]["metrics"]["r2"], 3)
-    val = round(METRICS["regression"]["selection_metrics_val"]["r2"], 3)
-    bench = round(BENCH["performance"]["r2_log_space"], 3)
-    # 0.997 is the leaked PRICE_PER_SQFT figure ADR-001 exists to document. It
-    # is named deliberately and repeatedly, so it is allowed by value rather
-    # than by loosening the historical-phrasing filter every line must pass.
-    # The seed study's mean/std/baseline values are gated separately.
-    allowed = {shipped, val, bench, 0.997} | _study_values()
-    wrong = [
-        f"{doc}:{line}: R2 {value} (artefact test {shipped} / val {val})"
-        for line, value in _claimed_values(_read(doc), r"R[²2]")
-        if value not in allowed
-    ]
-    assert not wrong, "contradicted R2 claims:\n" + "\n".join(wrong)
+    allowed = _artefact_values()
+    wrong = []
+    for i, line in enumerate(_read(doc).splitlines(), 1):
+        name = _METRIC_NAME.search(line)
+        if name is None or _HISTORICAL.search(line[: name.start()]):
+            continue
+        wrong += [
+            f"{doc}:{i}: {value} is in no artefact"
+            for value in _THREE_DP.findall(line)
+            if float(value) not in allowed
+        ]
+    assert not wrong, (
+        "figures beside a metric name that no artefact holds:\n" + "\n".join(wrong)
+    )
 
 
 @pytest.mark.parametrize("doc", ["README.md", "MODEL_CARD.md"])
@@ -356,6 +367,7 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
 
     readme = _read("README.md")
     stated_gates = set(re.findall(r"(\d+)% coverage gate", readme))
+    stated_gates |= set(re.findall(r"CI gate: (\d+)%", readme))
     stated_cmds = set(re.findall(r"--cov-fail-under=(\d+)", readme))
     assert stated_gates | stated_cmds <= {gate.group(1)}, (
         f"CI gates at {gate.group(1)}%; README states {stated_gates | stated_cmds}"
@@ -381,21 +393,125 @@ def test_every_relative_link_in_the_docs_resolves() -> None:
     assert not broken, "markdown links pointing at nothing:\n" + "\n".join(broken)
 
 
-def test_every_invocation_measures_the_declared_module_set() -> None:
-    """The floor is pinned to ci.yml; the SCOPE it applies to was not. Dropping
-    a --cov= module raises the percentage, so the gate can shed the code it was
-    extended to cover and go greener doing it."""
-    declared = {
-        entry.removesuffix(".py")
-        for entry in tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"][
-            "source"
-        ]
-    }
-    for path in (".github/workflows/ci.yml", "Makefile", "README.md"):
-        measured = set(re.findall(r"--cov=([\w./]+)", _read(path)))
-        assert measured == declared, (
-            f"{path} measures {sorted(measured)}; pyproject declares {sorted(declared)}"
+#: Tracked Python that coverage does not measure. tests/ is the suite itself;
+#: scripts/ runs as subprocesses and by hand, so its line coverage means nothing;
+#: notebooks/ is not executed by CI.
+_UNMEASURED_TREES = {"tests", "scripts", "notebooks"}
+
+
+def _tracked_heads() -> set[str]:
+    """First path segment of every tracked Python file: `src`, `run_training.py`."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return {path.split("/")[0] for path in tracked}
+
+
+def _shipped_modules() -> set[str]:
+    return {head.removesuffix(".py") for head in _tracked_heads()} - _UNMEASURED_TREES
+
+
+def _tool_paths(text: str, tool: str) -> set[str]:
+    line = next(
+        row
+        for row in text.splitlines()
+        if re.search(rf"\b{tool} ", row) and "run_training.py" in row
+    )
+    arguments = line.split(f"{tool} ", 1)[1].split()
+    return {a.rstrip("/") for a in arguments if a.endswith("/") or a.endswith(".py")}
+
+
+@pytest.mark.parametrize("tool", ["mypy", "bandit"])
+def test_type_and_security_checks_cover_every_tracked_module(tool: str) -> None:
+    """The path lists are hardcoded in two files. A new top-level module is
+    invisible to both tools until someone remembers to add it, and nothing said
+    so: a file dropped outside the six listed paths left the suite green and
+    mypy reporting success."""
+    expected = {head.rstrip("/") for head in _tracked_heads()} - {"tests"}
+    for path in (".github/workflows/ci.yml", "Makefile"):
+        assert _tool_paths(_read(path), tool) == expected, (
+            f"{path} runs {tool} over {sorted(_tool_paths(_read(path), tool))}; "
+            f"tracked Python outside tests/ is {sorted(expected)}"
         )
+
+
+def _declared_source() -> set[str]:
+    config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"]
+    return {entry.removesuffix(".py") for entry in config["source"]}
+
+
+def _cov_flags(text: str) -> set[str]:
+    """The --cov= set on the pytest command line, not anywhere in the file. Read
+    file-wide, the flag can be satisfied from a comment while the command that
+    runs measures less."""
+    command = next(line for line in text.splitlines() if "--cov-fail-under=" in line)
+    return set(re.findall(r"--cov=([\w./]+)", command))
+
+
+def test_coverage_measures_every_shipped_module() -> None:
+    """Anchored to the tree, not to agreement between documents. Four files can
+    be edited to agree on a smaller set, which raises the percentage and passes
+    the floor while the module that was just brought into scope leaves it."""
+    assert _declared_source() == _shipped_modules(), (
+        f"pyproject declares {sorted(_declared_source())}; tracked Python outside "
+        f"{sorted(_UNMEASURED_TREES)} is {sorted(_shipped_modules())}"
+    )
+
+
+def test_no_omit_entry_removes_a_shipped_module() -> None:
+    """`omit` is the other half of the same knob: two entries there drop 309
+    statements and lift the headline 6.5 points with every test still green."""
+    config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"]
+    declared = _declared_source()
+    whole_module = [
+        entry
+        for entry in config["omit"]
+        if entry.rstrip("/*").removesuffix(".py") in declared
+    ]
+    assert not whole_module, f"omit removes whole shipped modules: {whole_module}"
+
+
+def test_every_invocation_measures_the_declared_module_set() -> None:
+    for path in (".github/workflows/ci.yml", "Makefile", "README.md"):
+        measured = _cov_flags(_read(path))
+        assert measured == _declared_source(), (
+            f"{path} measures {sorted(measured)}; pyproject declares "
+            f"{sorted(_declared_source())}"
+        )
+
+
+CAP_STUDY = json.loads(
+    (ROOT / "reports" / "cap_factor_study.json").read_text(encoding="utf-8")
+)
+
+
+def test_the_cap_factor_paragraph_quotes_the_study() -> None:
+    """MODEL_CARD's cap paragraph is the longest derivation in the doc set and
+    had no producer: its dollar figures were the pooled fit, left behind when
+    cap bounds moved to a train-only fit, and its MAE figures were from an
+    earlier run of the study."""
+    card = _read("MODEL_CARD.md")
+    low, high = CAP_STUDY["train_fit_price_bounds"]
+    quoted = [
+        f"${high:,.0f}",
+        f"−${abs(low):,.0f}",
+        f"${CAP_STUDY['common_support_ceiling']:,.0f}",
+    ]
+    quoted += [f"{row['val_mae_common']:.4f}" for row in CAP_STUDY["rows"]]
+    # Only the two factors the paragraph weighs against each other: the
+    # percentages are what it uses to justify keeping 3.0 over 1.5.
+    compared = {CAP_STUDY["shipped_factor"], 1.5}
+    quoted += [
+        f"{row['pct_at_cap']}%"
+        for row in CAP_STUDY["rows"]
+        if row["factor"] in compared
+    ]
+    missing = [value for value in quoted if value not in card]
+    assert not missing, f"MODEL_CARD does not quote the cap study: {missing}"
 
 
 def test_readme_shap_table_matches_the_artefact() -> None:

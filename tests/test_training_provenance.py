@@ -57,7 +57,10 @@ def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
     its result and hardcode the flag, and every name is still where it was.
     """
     manager = mock.MagicMock()
-    manager.sample.return_value = False
+    # A distinct answer per call. A constant return_value cannot tell the first
+    # sample from a second one handed to the writer after the models are on disk,
+    # which is the same defect wearing a different shape.
+    manager.sample.side_effect = [False, True, True, True]
     manager.run_protocol.return_value = STUB_PROTOCOL
     manager.calibrate.return_value = {}
     manager.shap.return_value = []
@@ -78,7 +81,10 @@ def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
         run_training.main()
 
     order = [call[0] for call in manager.mock_calls]
-    assert "sample" in order, "main no longer samples the working tree"
+    assert order.count("sample") == 1, (
+        f"the working tree is sampled {order.count('sample')} times; a second "
+        "sample reads a tree this run has already written to"
+    )
     assert order.index("sample") < order.index("prepare_data"), (
         "the working tree is sampled after prepare_data has written the cleaned "
         "dataset, so the flag can only ever record False"

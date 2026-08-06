@@ -98,7 +98,7 @@ benchmark run.
 2. **SCHEMA_MAP v1 feature space does not intersect the trained
    model's required feature space sufficiently for inference.** The
    model was trained on the Kaggle 2023 listings schema and requires
-   15 features as of this run (14 today) including `BEDS`, `BATH`,
+   15 features as of this run, including `BEDS`, `BATH`,
    `DIST_MANHATTAN_CENTER`,
    `DIST_CENTRAL_PARK`, `DIST_NEAREST_SUBWAY`, and `SUBLOCALITY`.
    NYC.gov Rolling Sales 2024 publishes transaction data only — it
@@ -138,7 +138,7 @@ locked.
 Firewall validation: **success**. The benchmark's stated claim —
 *"a leakage-guarded, schema-locked pipeline produces reproducible,
 auditable behaviour under real-world distribution shift"* — holds on
-the real 2024 NYC.gov data. The 🟡 structural weaknesses surfaced by
+the real 2024 NYC.gov data. The structural weaknesses surfaced by
 this run are the benchmark doing its job, not the benchmark failing.
 
 ---

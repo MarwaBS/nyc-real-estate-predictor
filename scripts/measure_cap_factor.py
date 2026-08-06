@@ -1,7 +1,7 @@
 """Measure the IQR cap-factor trade-off cited in fit_cap_bounds' docstring.
 
 For each candidate factor: fit bounds on the TRAIN split, cap, train the
-shipped protocol's Random Forest, and score val on a COMMON evaluation support
+Random Forest candidate, and score val on a COMMON evaluation support
 (rows under the tightest cap's ceiling) so every variant faces an identical
 target distribution — scored on all rows, the uncapped variant "wins" purely
 through variance inflation from a single $195M listing.
@@ -11,6 +11,7 @@ through variance inflation from a single $195M listing.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -97,6 +98,20 @@ def main() -> int:
             }
         )
         print(rows[-1], flush=True)
+
+    study = {
+        "model": "random_forest",
+        "shipped_factor": 3.0,
+        "train_fit_price_bounds": [
+            round(float(b), 2) for b in fit_cap_bounds(df_clean.loc[idx_train])["PRICE"]
+        ],
+        "common_support_ceiling": round(float(tight_hi), 2),
+        "n_train": len(idx_train),
+        "rows": rows,
+    }
+    out = Path(__file__).resolve().parents[1] / "reports" / "cap_factor_study.json"
+    out.write_text(json.dumps(study, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {out}")
 
     print("\nfactor   val R2 (common)   val MAE (common)   train rows at cap")
     for r in rows:

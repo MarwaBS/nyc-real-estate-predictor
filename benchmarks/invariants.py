@@ -42,7 +42,7 @@ from schema_firewall import (
     check_schema,
 )
 
-SCHEMA_MAP_VERSION = "v3"
+SCHEMA_MAP_VERSION = "v4"
 
 _BENCHMARKS_DIR = Path(__file__).resolve().parent
 SCHEMA_MAP_PATH = _BENCHMARKS_DIR / "SCHEMA_MAP.md"
