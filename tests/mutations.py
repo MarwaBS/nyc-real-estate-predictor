@@ -291,6 +291,13 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_documented_numbers.py",
     ),
     Mutation(
+        name="doc-link-points-at-nothing",
+        path="README.md",
+        old="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json)",
+        new="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_VERSIONS.json)",
+        gate="tests/test_documented_numbers.py::test_every_relative_link_in_the_docs_resolves",
+    ),
+    Mutation(
         name="numpy-reaching-package-unfrozen",
         path=".github/dependabot.yml",
         old=(

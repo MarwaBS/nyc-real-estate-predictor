@@ -38,6 +38,9 @@ jobs:
         run: ruff check .
       - name: ruff format --check
         run: ruff format --check .
+      - name: codespell
+        # Tracked text only, so untracked scratch files cannot fail the build.
+        run: codespell $(git ls-files '*.md' '*.py' '*.yml' '*.toml' '*.txt' '*.cfg')
       - name: mypy type check
         # Every tracked Python file outside tests/. `--ignore-missing-imports`
         # covers the libraries that ship no stubs.

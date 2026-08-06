@@ -362,6 +362,25 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
     )
 
 
+def test_every_relative_link_in_the_docs_resolves() -> None:
+    """A renamed or deleted file leaves the prose pointing at nothing, and the
+    reader finds out instead of CI. External URLs are out of scope: they fail
+    for reasons that have nothing to do with this commit."""
+    broken = []
+    for doc in sorted(ROOT.rglob("*.md")):
+        if any(part.startswith(".venv") or part == ".git" for part in doc.parts):
+            continue
+        text = doc.read_text(encoding="utf-8")
+        for match in re.finditer(r"\[[^\]]*\]\(([^)#\s]+)\)", text):
+            target = match.group(1)
+            if target.startswith(("http://", "https://", "mailto:")):
+                continue
+            if not (doc.parent / target).exists():
+                line = text[: match.start()].count("\n") + 1
+                broken.append(f"{doc.relative_to(ROOT).as_posix()}:{line} -> {target}")
+    assert not broken, "markdown links pointing at nothing:\n" + "\n".join(broken)
+
+
 def test_every_invocation_measures_the_declared_module_set() -> None:
     """The floor is pinned to ci.yml; the SCOPE it applies to was not. Dropping
     a --cov= module raises the percentage, so the gate can shed the code it was

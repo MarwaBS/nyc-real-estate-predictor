@@ -7,6 +7,7 @@ test:
 lint:
 	ruff check .
 	ruff format --check .
+	codespell $$(git ls-files '*.md' '*.py' '*.yml' '*.toml' '*.txt' '*.cfg')
 
 typecheck:
 	mypy src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py --ignore-missing-imports

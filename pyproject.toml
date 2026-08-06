@@ -28,6 +28,11 @@ ignore = ["E501"]
 # above hid src/models/ entirely, so their N803/N806 never surfaced.
 "src/models/**" = ["N803", "N806"]
 
+[tool.codespell]
+# MAPE is the metric; unparseable is a variant codespell rewrites to
+# unparsable. Both are correct here.
+ignore-words-list = "mape,unparseable"
+
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
 pythonpath = ["."]
