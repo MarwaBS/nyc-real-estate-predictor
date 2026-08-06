@@ -52,9 +52,9 @@ project uses SemVer for tagged releases.
   else keeps its minor security updates, and the frozen set still takes
   patches.
 - **mypy, bandit and coverage cover every tracked module.** `run_training.py`
-  produced all six artefacts from outside mypy and bandit, and carried two
+  produced every governed artefact from outside mypy and bandit, and carried two
   live type errors; `streamlit_app/` was in neither the coverage source list
-  nor its omit list. Coverage floor 78 to 85 against a measured 90.12%, and
+  nor its omit list. Coverage floor 78 to 85 against a measured 90.23%, and
   the measured module set is now pinned across `ci.yml`, the `Makefile`,
   `README.md` and `pyproject.toml`.
 - **`working_tree_clean` is checked by running the pipeline, not by reading

@@ -3,14 +3,12 @@
 > **Deploys are automated.** Every push to `main` runs `.github/workflows/deploy.yml`,
 > which overlays the runtime snapshot (code + `deploy/huggingface/` files +
 > `requirements.txt`) onto the Space via `deploy/huggingface/assemble.sh` and pushes
-> it — preserving the Space's `models/` artefacts. A weekly `space-drift` job fails
+> it. `assemble.sh` syncs `models/` rather than preserving what the Space held. A weekly `space-drift` job fails
 > CI if the live Space ever stops matching `main`. The one-time setup it needs:
 > a **write-scoped** HF token saved as the `HF_TOKEN` repository secret
-> (Settings → Secrets and variables → Actions). The manual steps below are the
-> original bootstrap procedure — still valid for creating the Space from scratch
-> or for emergency pushes, but routine deploys must ride `main`, because the
-> hand-deployed Space previously drifted 3 months stale while `main` carried the
-> fixes.
+> (Settings → Secrets and variables → Actions). Only the one-time Space
+> creation is manual; the hand-deploy path is not documented here, because a
+> hand-deployed Space drifted 3 months stale while `main` carried the fixes.
 
 The Space itself is created once, by hand. Everything after that rides
 `main`; the steps that used to describe the hand-deploy path are gone,
@@ -29,7 +27,7 @@ Save it in the GitHub repo as the `HF_TOKEN` secret
 
 ## Step 2 — Create the Space
 
-<https://huggingface.co/new-space> → SDK **Streamlit**, hardware **CPU basic**,
+<https://huggingface.co/new-space> → SDK **Docker**, hardware **CPU basic**,
 visibility **Public**. Leave it empty; the first push from `main` fills it.
 
 ## Rollback

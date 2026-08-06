@@ -64,15 +64,31 @@ def _minor_ignored() -> set[str]:
     }
 
 
+def _requirement_files() -> list[str]:
+    """Every requirements file that reaches one `pip install`, followed through
+    `-r` includes rather than listed. A literal list misses a new file the
+    moment someone adds it, and the package moved into it leaves the scan."""
+    seen: list[str] = []
+    stack = list(REQUIREMENTS)
+    while stack:
+        name = stack.pop()
+        if name in seen or not (REPO_ROOT / name).exists():
+            continue
+        seen.append(name)
+        for line in (REPO_ROOT / name).read_text(encoding="utf-8").splitlines():
+            include = re.match(r"^\s*-r\s+(\S+)", line)
+            if include:
+                stack.append(include.group(1))
+    return seen
+
+
 def _managed_pins() -> list[str]:
     """Every pin Dependabot manages. Its pip entry sets `directory: "/"` with no
-    file restriction, and CI installs requirements-dev.txt, which pulls the other
-    two into one resolve, so a bump in any of them can break it."""
+    file restriction, and CI installs requirements-dev.txt, which pulls the
+    others into one resolve, so a bump in any of them can break it."""
     names = []
-    for filename in REQUIREMENTS:
+    for filename in _requirement_files():
         path = REPO_ROOT / filename
-        if not path.exists():
-            continue
         for line in path.read_text(encoding="utf-8").splitlines():
             # `pkg[extra]==v` is ordinary; a name-only pattern skips the line and
             # the package leaves the scan without failing anything.
@@ -141,6 +157,8 @@ def test_every_ignored_package_is_a_frozen_pin(package: str):
 def test_the_scan_finds_the_managed_pins():
     """_reaches_numpy reads installed metadata, so a package the scan misses or
     that is absent from the environment answers False and fails nothing."""
+    files = _requirement_files()
+    assert len(files) >= 3, f"only {len(files)} requirements files reached: {files}"
     pins = _managed_pins()
     assert len(pins) >= 20, (
         f"only {len(pins)} managed pins found; the files or the pattern moved"

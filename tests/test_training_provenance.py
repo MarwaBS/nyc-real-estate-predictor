@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -95,6 +96,34 @@ def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
     )
     assert written["working_tree_clean"] is False, (
         "the artefact does not carry the value the sample returned"
+    )
+
+
+def test_the_working_tree_sampler_reports_both_states(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering test above replaces this function with a mock, so nothing
+    else executes it. Hardcoding its body to ``return True`` left the whole
+    suite green while the flag could only report the good outcome."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "test")
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "initial")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_training._git_working_tree_clean() is True, (
+        "a committed tree with no edits must read clean"
+    )
+    tracked.write_text("two\n", encoding="utf-8")
+    assert run_training._git_working_tree_clean() is False, (
+        "an edited tracked file must read dirty"
     )
 
 

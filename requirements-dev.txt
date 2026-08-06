@@ -15,7 +15,7 @@ mypy>=1.10
 # <3.0.4 caps at the last stubs release that types astype(str) as a string
 # series; 3.0.5 resolves .str on it to SeriesStringMethods[bool] and fails
 # mypy on five call sites that are correct at runtime.
-pandas-stubs>=2.2,<3.0.4
+pandas-stubs>=2.2,<3.0.4  # minor updates ignored: numpy is in its tree
 
 # Security
 pip-audit>=2.7

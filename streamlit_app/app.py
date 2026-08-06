@@ -33,7 +33,7 @@ st.markdown(
 # Load models once (cached)
 # ---------------------------------------------------------------------------
 @st.cache_resource
-def load_model() -> Any | None:
+def load_model() -> Any:
     """Load the regressor through the API's guarded loader, so a cross-version
     artefact is refused here (as the API refuses it) instead of loading and
     raising at predict time. Returns None when the model is absent or rejected;
@@ -78,6 +78,9 @@ def build_features(
                 "BOROUGH": borough.lower(),
                 "TYPE": prop_type.lower(),
                 "ZIPCODE": zipcode,
+                # No dashboard field for it: the encoder folds an unseen value
+                # into "other", so this surface predicts without a shipped
+                # feature the API accepts.
                 "SUBLOCALITY": "unknown",
             }
         ]
@@ -160,10 +163,13 @@ with col2:
             st.metric("Price Zone", record["price_zone"])
             st.metric("Estimated Price", f"${record['predicted_price']:,.0f}")
             band = record["price_range"]
-            target = get_price_interval()["target_coverage"]
+            interval = get_price_interval()
+            target = interval["target_coverage"]
+            measured = interval["coverage_test"]
             st.caption(
-                f"{target:.0%} of listings fall in ${band['low']:,.0f} - "
-                f"${band['high']:,.0f}"
+                f"Calibrated for {target:.0%} coverage; measured "
+                f"{measured:.1%} on the test split. "
+                f"${band['low']:,.0f} - ${band['high']:,.0f}"
             )
 
     else:

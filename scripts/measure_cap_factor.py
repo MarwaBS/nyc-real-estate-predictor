@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
@@ -23,7 +24,12 @@ from sklearn.model_selection import train_test_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run_training import REFERENCE_POINTS, get_feature_df, prepare_data  # noqa: E402
+from run_training import (  # noqa: E402
+    REFERENCE_POINTS,
+    build_splits,
+    get_feature_df,
+    prepare_data,
+)
 from src.config import RANDOM_SEED, TEST_SIZE, VAL_SIZE  # noqa: E402
 from src.data.cleaner import apply_cap, fit_cap_bounds  # noqa: E402
 from src.data.features import (  # noqa: E402
@@ -99,8 +105,28 @@ def main() -> int:
         )
         print(rows[-1], flush=True)
 
+    # What the cap costs the headline. The bounds fit on train, correctly, but
+    # apply to the whole frame, so the reported test R2 is scored against a
+    # clipped target. Measured with the shipped regressor, not the candidate.
+    shipped_hi = fit_cap_bounds(df_clean.loc[idx_train])["PRICE"][1]
+    shipped = joblib.load(
+        Path(__file__).resolve().parents[1] / "models" / "price_regressor_best.joblib"
+    )
+    X_test, y_capped = build_splits(df_clean, seed=RANDOM_SEED)["splits"]["test"]
+    listed_price = df_clean.loc[X_test.index, "PRICE"]
+    predicted = shipped.predict(X_test)
+    censored = int((listed_price > shipped_hi).sum())
+
     study = {
         "model": "random_forest",
+        "shipped_model_test_r2_capped_target": round(
+            float(r2_score(np.asarray(y_capped, dtype=float), predicted)), 4
+        ),
+        "shipped_model_test_r2_listed_target": round(
+            float(r2_score(np.log1p(listed_price.to_numpy(dtype=float)), predicted)), 4
+        ),
+        "test_rows_censored_by_the_cap": censored,
+        "n_test": len(X_test),
         "shipped_factor": 3.0,
         "train_fit_price_bounds": [
             round(float(b), 2) for b in fit_cap_bounds(df_clean.loc[idx_train])["PRICE"]

@@ -60,7 +60,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 85, measured 90.12%, so there is room for 52 more uncovered
+        # Floor 85, measured 90.23%, so there is room for 53 more uncovered
         # statements. The number is a total over the whole tree, so a module
         # smaller than that can lose all its tests and still pass.
         run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-report=xml --cov-fail-under=85

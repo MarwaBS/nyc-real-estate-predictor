@@ -1,5 +1,9 @@
 {
   "model": "random_forest",
+  "shipped_model_test_r2_capped_target": 0.8351,
+  "shipped_model_test_r2_listed_target": 0.7883,
+  "test_rows_censored_by_the_cap": 72,
+  "n_test": 906,
   "shipped_factor": 3.0,
   "train_fit_price_bounds": [
     -2492000.0,

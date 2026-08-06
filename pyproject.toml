@@ -24,6 +24,7 @@ ignore = ["E501"]
 # code LESS readable to its audience.
 "benchmarks/**" = ["N803", "N806"]
 "run_training.py" = ["N803", "N806"]
+"scripts/**" = ["N803", "N806"]
 # Same convention, same reason. These were never listed because the exclude
 # above hid src/models/ entirely, so their N803/N806 never surfaced.
 "src/models/**" = ["N803", "N806"]

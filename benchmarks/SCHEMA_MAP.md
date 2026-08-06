@@ -1,6 +1,6 @@
 # SCHEMA_MAP.md — NYC.gov Rolling Sales 2024 → Model Feature Contract
 
-**Version:** v3
+**Version:** v4
 **Status:** Active
 **Scope:** External benchmark only. This file governs the transformation
 between NYC.gov Rolling Sales 2024 and the feature space used by the

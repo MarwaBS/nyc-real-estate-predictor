@@ -26,15 +26,18 @@ import json
 import re
 import subprocess
 import tomllib
+from fnmatch import fnmatch
 from pathlib import Path
 
 import pytest
+import yaml
 
 from src.config import ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
 
 ROOT = Path(__file__).resolve().parents[1]
 METRICS = json.loads((ROOT / "reports" / "training_metrics.json").read_text("utf-8"))
 BENCH = json.loads((ROOT / "benchmarks" / "results.json").read_text("utf-8"))
+CAP_STUDY = json.loads((ROOT / "reports" / "cap_factor_study.json").read_text("utf-8"))
 
 
 def _read(relative: str) -> str:
@@ -110,11 +113,7 @@ LIVE_DOCS = [
 # and a whole-line filter exempted it — the mutation to 0.727 passed.
 _HISTORICAL = re.compile(
     r"earlier|previous|no longer|there is no|was removed|is gone|used to"
-    r"|deleted|void|before 2026|superseded"
-    # A measurement of a rejected variant is a different quantity, not a
-    # contradicted claim — the cap-factor derivation reports one for each
-    # candidate factor.
-    r"|uncapped|variant",
+    r"|deleted|void|before 2026|superseded",
     re.IGNORECASE,
 )
 
@@ -211,64 +210,84 @@ def _study_values() -> set[float]:
     return values
 
 
-#: A metric name, and a three-decimal figure that is not part of a longer number.
+#: A metric name, and a decimal figure of three places or more. Matching exactly
+#: three let a false figure ship by writing it at four.
 _METRIC_NAME = re.compile(r"macro[- ]?F1|R[²2]", re.IGNORECASE)
-_THREE_DP = re.compile(r"(?<![\d.])(0\.\d{3})(?![\d])")
+_DECIMAL = re.compile(r"(?<![\d.])(0\.\d{3,})")
 
 
-def _artefact_values() -> set[float]:
-    """Every three-decimal quantity the artefacts actually contain."""
+def _artefact_floats() -> set[float]:
+    """Every fractional quantity the artefacts hold, unrounded."""
     values = {
-        round(METRICS["regression"]["metrics"]["r2"], 3),
-        round(METRICS["regression"]["selection_metrics_val"]["r2"], 3),
-        round(METRICS["classification"]["metrics"]["macro_f1"], 3),
-        round(METRICS["classification"]["metrics"]["accuracy"], 3),
-        round(METRICS["regression"]["price_interval"]["coverage_test"], 3),
-        round(abs(BENCH["performance"]["r2_log_space"]), 3),
+        METRICS["regression"]["metrics"]["r2"],
+        METRICS["regression"]["selection_metrics_val"]["r2"],
+        METRICS["classification"]["metrics"]["macro_f1"],
+        METRICS["classification"]["metrics"]["accuracy"],
+        METRICS["regression"]["price_interval"]["coverage_test"],
+        abs(BENCH["performance"]["r2_log_space"]),
         # The leaked PRICE_PER_SQFT figure ADR-001 exists to document. Named
         # deliberately and repeatedly, so it is allowed by value.
         0.997,
     }
     values |= _study_values()
+    values |= set(METRICS["classification"]["fairness_by_borough"].values())
     values |= {
-        round(v, 3) for v in METRICS["classification"]["fairness_by_borough"].values()
-    }
-    values |= {
-        round(figure, 3)
+        figure
         for entry in METRICS["classification"]["borough_floor"].values()
         for key, figure in entry.items()
         if key != "n"
     }
+    values |= {row["mean_abs_shap"] for row in METRICS["classification"]["shap_top10"]}
+    values |= {row["val_mae_common"] for row in CAP_STUDY["rows"]}
+    values |= {row["val_r2_common"] for row in CAP_STUDY["rows"]}
     values |= {
-        round(row["mean_abs_shap"], 3)
-        for row in METRICS["classification"]["shap_top10"]
+        figure
+        for key, figure in CAP_STUDY.items()
+        if isinstance(figure, float) and key != "shipped_factor"
     }
-    return values
+    values |= {
+        figure
+        for key, figure in METRICS["regression"]["price_interval"].items()
+        if isinstance(figure, (int, float))
+    }
+    # The cap paragraph's gain is the difference between two figures above.
+    mae = {row["factor"]: row["val_mae_common"] for row in CAP_STUDY["rows"]}
+    values.add(round(mae[CAP_STUDY["shipped_factor"]] - mae[1.5], 4))
+    return values | set(_UNGATED_FIGURES)
+
+
+#: Figures the docs state that no artefact holds. The set is closed: each is a
+#: one-off measurement or a superseded value the prose names as such, and adding
+#: one means editing this list, which is a visible act in review.
+_UNGATED_FIGURES = {
+    0.014,  # the retracted threshold-tuning gain, named as in-sample
+    0.0006,  # its honest out-of-sample re-measurement, run once, no artefact
+    0.0106,  # the standard deviation of that same study
+    0.375,  # the superseded benchmark score, named as never reproducible
+}
 
 
 @pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_figure_beside_a_metric_name_is_in_the_artefacts(doc: str) -> None:
-    """A line naming a metric may only carry figures the artefacts hold.
-
-    The whole line, on both sides of the name. Scanning rightward only was
-    walked around by writing the false figure first: "naive borough-median
-    baseline 0.577; R² = 0.835 ..." passed with the artefact holding 0.177.
+def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Every fractional figure in a shipped document, not only those beside a
+    metric name. Requiring the name on the line was walked around by putting the
+    false figure on a table row that names no metric.
 
     This catches a fabricated or stale figure. It does not catch a real figure
-    quoted against the wrong metric, since membership does not know which name
-    on the line owns which number.
+    quoted against the wrong metric: membership does not know which quantity
+    owns which number.
     """
-    allowed = _artefact_values()
+    allowed = _artefact_floats()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
-        name = _METRIC_NAME.search(line)
-        if name is None or _HISTORICAL.search(line[: name.start()]):
+        if _HISTORICAL.search(line):
             continue
-        wrong += [
-            f"{doc}:{i}: {value} is in no artefact"
-            for value in _THREE_DP.findall(line)
-            if float(value) not in allowed
-        ]
+        for value in _DECIMAL.findall(line):
+            places = len(value.split(".")[1])
+            # Compared at the precision the document chose, so a figure written
+            # to more places than the artefact carries is still checked.
+            if float(value) not in {round(v, places) for v in allowed}:
+                wrong.append(f"{doc}:{i}: {value} is in no artefact")
     assert not wrong, (
         "figures beside a metric name that no artefact holds:\n" + "\n".join(wrong)
     )
@@ -415,26 +434,72 @@ def _shipped_modules() -> set[str]:
     return {head.removesuffix(".py") for head in _tracked_heads()} - _UNMEASURED_TREES
 
 
-def _tool_paths(text: str, tool: str) -> set[str]:
-    line = next(
+def _ci_step_command(step_name: str) -> str:
+    """The ``run:`` scalar of a named CI step, read as YAML.
+
+    Line matching cannot do this. Any line holding the marker satisfies it,
+    including a comment, so a decoy above the real command reads as correct
+    while the command that executes covers less.
+    """
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    for job in workflow["jobs"].values():
+        for step in job.get("steps", []):
+            if step.get("name") == step_name:
+                return str(step["run"])
+    raise AssertionError(f"ci.yml has no step named {step_name!r}")
+
+
+def _make_recipe(target: str) -> str:
+    """The tab-indented recipe body of a Makefile target. Comments sit at column
+    zero, so they are structurally outside it."""
+    body, inside = [], False
+    for line in _read("Makefile").splitlines():
+        if line.startswith(f"{target}:"):
+            inside = True
+            continue
+        if inside:
+            if line.startswith("\t"):
+                body.append(line.lstrip("\t"))
+            elif line.strip():
+                break
+    return "\n".join(body)
+
+
+def _readme_pytest_command() -> str:
+    lines = [
         row
-        for row in text.splitlines()
-        if re.search(rf"\b{tool} ", row) and "run_training.py" in row
-    )
-    arguments = line.split(f"{tool} ", 1)[1].split()
+        for row in _read("README.md").splitlines()
+        if row.startswith("pytest ") and "--cov-fail-under=" in row
+    ]
+    assert len(lines) == 1, f"README shows {len(lines)} pytest commands, expected 1"
+    return lines[0]
+
+
+def _tool_paths(command: str, tool: str) -> set[str]:
+    arguments = command.split(f"{tool} ", 1)[1].split()
     return {a.rstrip("/") for a in arguments if a.endswith("/") or a.endswith(".py")}
 
 
-@pytest.mark.parametrize("tool", ["mypy", "bandit"])
+TOOL_STEPS = {
+    "mypy": ("mypy type check", "typecheck"),
+    "bandit": ("bandit security scan", "security"),
+}
+
+
+@pytest.mark.parametrize("tool", sorted(TOOL_STEPS))
 def test_type_and_security_checks_cover_every_tracked_module(tool: str) -> None:
-    """The path lists are hardcoded in two files. A new top-level module is
-    invisible to both tools until someone remembers to add it, and nothing said
-    so: a file dropped outside the six listed paths left the suite green and
-    mypy reporting success."""
+    """The path lists are hardcoded in two files, so a new top-level module is
+    invisible to both tools until someone remembers it. Commands are read
+    structurally: from the step's ``run:`` scalar and the Makefile recipe body,
+    not from any line that mentions the tool."""
     expected = {head.rstrip("/") for head in _tracked_heads()} - {"tests"}
-    for path in (".github/workflows/ci.yml", "Makefile"):
-        assert _tool_paths(_read(path), tool) == expected, (
-            f"{path} runs {tool} over {sorted(_tool_paths(_read(path), tool))}; "
+    step, target = TOOL_STEPS[tool]
+    for label, command in (
+        ("ci.yml", _ci_step_command(step)),
+        ("Makefile", _make_recipe(target)),
+    ):
+        assert _tool_paths(command, tool) == expected, (
+            f"{label} runs {tool} over {sorted(_tool_paths(command, tool))}; "
             f"tracked Python outside tests/ is {sorted(expected)}"
         )
 
@@ -444,11 +509,7 @@ def _declared_source() -> set[str]:
     return {entry.removesuffix(".py") for entry in config["source"]}
 
 
-def _cov_flags(text: str) -> set[str]:
-    """The --cov= set on the pytest command line, not anywhere in the file. Read
-    file-wide, the flag can be satisfied from a comment while the command that
-    runs measures less."""
-    command = next(line for line in text.splitlines() if "--cov-fail-under=" in line)
+def _cov_flags(command: str) -> set[str]:
     return set(re.findall(r"--cov=([\w./]+)", command))
 
 
@@ -463,30 +524,48 @@ def test_coverage_measures_every_shipped_module() -> None:
 
 
 def test_no_omit_entry_removes_a_shipped_module() -> None:
-    """`omit` is the other half of the same knob: two entries there drop 309
-    statements and lift the headline 6.5 points with every test still green."""
+    """`omit` is the other half of the same knob: entries there drop statements
+    and lift the headline with every test still green.
+
+    Matched per file rather than by top-level name. `streamlit_app/*` and
+    `streamlit_app/app.py` have the same effect, and comparing name strings
+    catches only the first spelling.
+    """
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"]
-    declared = _declared_source()
-    whole_module = [
-        entry
-        for entry in config["omit"]
-        if entry.rstrip("/*").removesuffix(".py") in declared
-    ]
-    assert not whole_module, f"omit removes whole shipped modules: {whole_module}"
+    tracked = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    for module in sorted(_shipped_modules()):
+        owned = [
+            path
+            for path in tracked
+            if path == f"{module}.py" or path.startswith(f"{module}/")
+        ]
+        kept = [
+            path
+            for path in owned
+            if not any(fnmatch(path, pattern) for pattern in config["omit"])
+            and (ROOT / path).read_text(encoding="utf-8").strip()
+        ]
+        assert kept, f"omit leaves no measurable file under {module}"
 
 
 def test_every_invocation_measures_the_declared_module_set() -> None:
-    for path in (".github/workflows/ci.yml", "Makefile", "README.md"):
-        measured = _cov_flags(_read(path))
+    invocations = {
+        "ci.yml": _ci_step_command("Run tests with coverage"),
+        "Makefile": _make_recipe("test"),
+        "README.md": _readme_pytest_command(),
+    }
+    for label, command in invocations.items():
+        measured = _cov_flags(command)
         assert measured == _declared_source(), (
-            f"{path} measures {sorted(measured)}; pyproject declares "
+            f"{label} measures {sorted(measured)}; pyproject declares "
             f"{sorted(_declared_source())}"
         )
-
-
-CAP_STUDY = json.loads(
-    (ROOT / "reports" / "cap_factor_study.json").read_text(encoding="utf-8")
-)
 
 
 def test_the_cap_factor_paragraph_quotes_the_study() -> None:
@@ -512,6 +591,36 @@ def test_the_cap_factor_paragraph_quotes_the_study() -> None:
     ]
     missing = [value for value in quoted if value not in card]
     assert not missing, f"MODEL_CARD does not quote the cap study: {missing}"
+
+
+def test_readme_states_the_contract_version_the_results_were_produced_under() -> None:
+    """The contract can be bumped without re-running the benchmark, so the two
+    versions legitimately differ. What must not happen is the README calling the
+    older artefact current: it said "SCHEMA_MAP v3" while the live contract was
+    v4, which is the sealed document contradicting its own seal."""
+    produced_under = BENCH["schema_map_version"]
+    stated = re.search(r"produced under SCHEMA_MAP (v\d+)", _read("README.md"))
+    assert stated is not None, (
+        "README no longer says which contract version the results came from"
+    )
+    assert stated.group(1) == produced_under, (
+        f"README says the results were produced under {stated.group(1)}; "
+        f"benchmarks/results.json records {produced_under}"
+    )
+
+
+def test_the_capped_target_caveat_is_stated_and_quoted() -> None:
+    """The headline R2 is scored against a clipped target. Both the figure and
+    the row count come from the study, so a retrain that changes either fails
+    the docs rather than leaving the caveat describing an older run."""
+    listed = CAP_STUDY["shipped_model_test_r2_listed_target"]
+    censored = CAP_STUDY["test_rows_censored_by_the_cap"]
+    for doc in ("README.md", "MODEL_CARD.md"):
+        text = _read(doc)
+        assert f"{listed:.4f}" in text, f"{doc} does not quote the listed-target R2"
+        assert f"{censored} of {CAP_STUDY['n_test']}" in text, (
+            f"{doc} does not state how many test rows the cap censors"
+        )
 
 
 def test_readme_shap_table_matches_the_artefact() -> None:
