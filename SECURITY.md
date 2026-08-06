@@ -70,7 +70,9 @@ Triage policy:
 1. Alerts originating SOLELY from `requirements-train.txt` are acknowledged
    and will be addressed when the upstream package ships a non-breaking fix.
 2. Alerts originating from `requirements.txt` (runtime) are HIGH priority and
-   will be addressed within the patch window via Dependabot pull request.
+   arrive as a Dependabot pull request, except for the packages pinned to the
+   training environment. Those are held while numpy stays at 1.x, so a fix for
+   one of them is taken by hand, with the retrain it forces.
 3. Alerts where both files share an affected package are treated as runtime
    alerts (HIGH priority).
 

@@ -19,32 +19,26 @@ updates:
       python-patch-updates:
         update-types: ["patch"]
     ignore:
-      # Patch only. numpy is held at 1.26.4 for the fitted artefacts, and any
-      # minor bump can raise a transitive numpy floor past 1.x, which leaves
-      # requirements.txt unsolvable. pip-audit still fails on advisories.
       - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
+        update-types: ["version-update:semver-major"]
 
-      # ── Frozen to the training environment ────────────────────────────
-      # Referenced inside models/*.joblib. A different version changes estimator
-      # internals silently, so moving one means retraining; src/models/predict.py
-      # raises ModelVersionError if a mismatch gets this far.
+      # Frozen at their pins in requirements.txt, each with its reason there.
       - dependency-name: "numpy"
       - dependency-name: "scikit-learn"
       - dependency-name: "pandas"
       - dependency-name: "joblib"
       - dependency-name: "category-encoders"
       - dependency-name: "xgboost"
-
-      # scipy 1.18.0 is the first release requiring numpy>=2.
       - dependency-name: "scipy"
-
-      # ── Frozen by a written decision ──────────────────────────────────
-      # 0.2.x rebinned mutual information; benchmarks/invariants.py would need
-      # its mi_threshold re-measured.
       - dependency-name: "schema-firewall"
+
+      # numpy sits in their dependency tree, so a minor bump can start asking
+      # for numpy 2 and leave requirements.txt with no solution. Everything
+      # else keeps its minor updates, including the security ones.
+      - dependency-name: "lightgbm"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "streamlit"
+        update-types: ["version-update:semver-minor"]
 
   - package-ecosystem: "docker"
     directory: "/"

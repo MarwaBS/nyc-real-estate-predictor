@@ -6,6 +6,32 @@ project uses SemVer for tagged releases.
 
 ## [Unreleased]
 
+### Changed — the gates cover the code they claim to, and two of them can now fail
+
+- **Dependency policy states the constraint instead of the last package that
+  broke it.** numpy is pinned at 1.26.4 for the fitted artefacts, so a package
+  that raises its numpy floor past 1.x leaves `requirements.txt` unsolvable;
+  freezing each culprit by name (scipy, then shap) was always one release
+  behind. `tests/test_dependency_freeze.py` now recomputes, from installed
+  metadata, which runtime pins have numpy in their dependency tree, and fails
+  if one of them can still take a minor bump. Measured: 8 of 20, of which 6
+  were already frozen. Everything else keeps its minor security updates.
+- **mypy, bandit and coverage cover every tracked module.** `run_training.py`
+  produced all six artefacts from outside mypy and bandit, and carried two
+  live type errors; `streamlit_app/` was in neither the coverage source list
+  nor its omit list. Coverage floor 78 to 85 against a measured 87.67%, and
+  the measured module set is now pinned across `ci.yml`, the `Makefile`,
+  `README.md` and `pyproject.toml`.
+- **`working_tree_clean` is checked by running the pipeline, not by reading
+  it.** The old guard compared source positions, which a comment naming the
+  call satisfied. It now stubs the pipeline, runs `main`, and requires both
+  that the sample precedes the first write and that its value reaches the
+  artefact.
+- **The naive baselines are inside a claim scan.** The scan stopped 60
+  characters after the metric, four short of the figure it qualified, so
+  0.177 and 0.301 could be rewritten to anything. It now reads to the end of
+  the line.
+
 ### Changed — every cross-row statistic now fits on the train split only
 
 - **The two disclosed leakage residuals are fixed.** IQR cap bounds, zone

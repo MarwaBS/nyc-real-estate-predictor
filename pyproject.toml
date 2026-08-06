@@ -47,7 +47,9 @@ module = ["tests.*", "notebooks.*"]
 disallow_untyped_defs = false
 
 [tool.coverage.run]
-# Every shipped module, including the script that writes the artefacts.
+# The serving path, the pipeline, and the script that writes the artefacts.
+# scripts/ is left out: CI runs verify_gates.py as a subprocess and the
+# measure_* scripts by hand, so line coverage of them measures nothing.
 source = ["src", "benchmarks", "api", "run_training.py", "streamlit_app"]
 # Every omit needs a reason that is not "it would lower the number".
 omit = [

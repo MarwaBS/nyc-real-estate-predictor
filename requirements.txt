@@ -4,8 +4,8 @@
 # small (~300MB vs ~3GB) and means CI's pip-audit on this file only
 # flags CVEs in code that actually ships to users.
 #
-# Dependabot (see .github/dependabot.yml) manages weekly patch + minor
-# upgrades. Major-version bumps are always isolated PRs.
+# Dependabot proposes weekly patch and minor upgrades. Majors are ignored,
+# and so are minor bumps for the packages with numpy in their tree.
 
 # Core
 pandas==2.2.3  # frozen: fitted into the shipped pickles

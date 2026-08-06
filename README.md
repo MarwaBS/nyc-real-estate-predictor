@@ -410,7 +410,7 @@ XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilize
 ## Testing
 
 ```bash
-# Full test suite with coverage (CI gate: 85%, every shipped module)
+# Full test suite with coverage (CI gate: 85%)
 pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-fail-under=85
 
 # Run only leakage prevention tests
@@ -431,7 +431,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every shipped module), `test` (pytest + 85% coverage gate over the same module set), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every tracked Python file outside `tests/`), `test` (pytest + 85% coverage gate over `src/ + api/ + benchmarks/ + streamlit_app/ + run_training.py`), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -515,7 +515,7 @@ nyc-real-estate-predictor/
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (85% coverage gate over every shipped module) |
+| Testing | pytest (85% coverage gate over src/, api/, benchmarks/, streamlit_app/ and run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

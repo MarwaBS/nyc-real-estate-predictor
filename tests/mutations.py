@@ -263,4 +263,41 @@ MUTATIONS: list[Mutation] = [
         new="",
         gate="tests/test_artifact_manifest.py::test_producer_governs_exactly_this_set",
     ),
+    Mutation(
+        name="tree-state-sampled-but-discarded",
+        # The call stays, so anything reading the source still finds it. Only
+        # the recorded value changes, and it can now report one outcome.
+        path="run_training.py",
+        old="    tree_clean_at_start = _git_working_tree_clean()",
+        new="    _git_working_tree_clean()\n    tree_clean_at_start = True",
+        gate="tests/test_training_provenance.py",
+    ),
+    Mutation(
+        name="baseline-figure-rewritten",
+        # Rephrased as well as falsified: a check anchored on the word next to
+        # the number stops matching and the false figure ships.
+        path="README.md",
+        old="naive borough-median baseline: 0.177",
+        new="naive borough-median baseline of 0.577",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="coverage-scope-narrowed",
+        # Drops a module from measurement. The percentage rises and the floor
+        # passes, so the gate goes greener by covering less.
+        path=".github/workflows/ci.yml",
+        old=" --cov=streamlit_app",
+        new="",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="numpy-reaching-package-unfrozen",
+        path=".github/dependabot.yml",
+        old=(
+            '      - dependency-name: "lightgbm"\n'
+            '        update-types: ["version-update:semver-minor"]\n'
+        ),
+        new="",
+        gate="tests/test_dependency_freeze.py",
+    ),
 ]

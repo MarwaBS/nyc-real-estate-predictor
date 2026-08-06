@@ -10,13 +10,11 @@ is not evidence, it is decoration.
 
 from __future__ import annotations
 
-import ast
-import inspect
 import json
 import os
 import tempfile
-import textwrap
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -30,39 +28,67 @@ def metrics() -> dict:
     return json.loads(ARTEFACT.read_text(encoding="utf-8"))
 
 
-def _first_call_line(source: str, name: str) -> int | None:
-    """Line of the first call to ``name`` in ``source``, or None if never called."""
-    tree = ast.parse(textwrap.dedent(source))
-    return min(
-        (
-            node.lineno
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == name
-        ),
-        default=None,
+STUB_PROTOCOL = {
+    "reg_record": {"selected_model": "stub", "metrics": {}},
+    "clf_record": {
+        "selected_model": "stub",
+        "metrics": {"accuracy": 0.0, "macro_f1": 0.0},
+    },
+    "best_pipeline": None,
+    "splits": {name: (None, None) for name in ("train", "val", "test")},
+    "n_train": 1,
+    "n_val": 1,
+    "n_test": 1,
+    "features": ["f"],
+    "zone_bins": [0.0, 1.0, 2.0, 3.0, float("inf")],
+    "baseline": {"predictor": "stub"},
+}
+
+
+def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runs ``main`` with the pipeline stubbed and asserts two things at run
+    time: the sample happens before ``prepare_data`` writes the cleaned dataset,
+    and the value it returned is the value written.
+
+    Reading the source instead passes on two ordinary edits. Move the call into
+    a helper and its definition still comes first lexically. Keep the call, drop
+    its result and hardcode the flag, and every name is still where it was.
+    """
+    manager = mock.MagicMock()
+    manager.sample.return_value = False
+    manager.run_protocol.return_value = STUB_PROTOCOL
+    manager.calibrate.return_value = {}
+    manager.shap.return_value = []
+    (tmp_path / "models").mkdir()
+
+    with mock.patch.multiple(
+        run_training,
+        _git_working_tree_clean=manager.sample,
+        prepare_data=manager.prepare_data,
+        run_protocol=manager.run_protocol,
+        calibrate_price_interval=manager.calibrate,
+        shap_top10=manager.shap,
+        save_drift_baseline=manager.save_drift,
+        write_manifest=manager.manifest,
+        MODELS_DIR=tmp_path / "models",
+    ):
+        monkeypatch.chdir(tmp_path)
+        run_training.main()
+
+    order = [call[0] for call in manager.mock_calls]
+    assert "sample" in order, "main no longer samples the working tree"
+    assert order.index("sample") < order.index("prepare_data"), (
+        "the working tree is sampled after prepare_data has written the cleaned "
+        "dataset, so the flag can only ever record False"
     )
 
-
-def test_working_tree_clean_is_sampled_before_main_writes_anything() -> None:
-    """``prepare_data`` writes the cleaned dataset, so a sample taken after it
-    can only ever record False.
-
-    Ordering is read from the parsed call graph rather than the source text:
-    a substring search for the call name is satisfied by a comment naming it,
-    so deleting the call and leaving the comment behind kept this green.
-    """
-    source = inspect.getsource(run_training.main)
-
-    sample_at = _first_call_line(source, "_git_working_tree_clean")
-    first_write_at = _first_call_line(source, "prepare_data")
-
-    assert sample_at is not None, "main no longer samples the working tree at all"
-    assert first_write_at is not None, "main no longer calls prepare_data"
-    assert sample_at < first_write_at, (
-        "working_tree_clean is sampled after prepare_data() has already "
-        "written the cleaned dataset, so it can only ever record False"
+    written = json.loads(
+        (tmp_path / "reports" / "training_metrics.json").read_text(encoding="utf-8")
+    )
+    assert written["working_tree_clean"] is False, (
+        "the artefact does not carry the value the sample returned"
     )
 
 

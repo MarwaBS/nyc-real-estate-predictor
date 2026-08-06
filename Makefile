@@ -9,10 +9,10 @@ lint:
 	ruff format --check .
 
 typecheck:
-	mypy src/ api/ benchmarks/ streamlit_app/ run_training.py --ignore-missing-imports
+	mypy src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py --ignore-missing-imports
 
 security:
-	bandit -r src/ api/ benchmarks/ streamlit_app/ run_training.py -n 3 -ll
+	bandit -r src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py -n 3 -ll
 
 ci: lint typecheck security test
 	python scripts/verify_gates.py
