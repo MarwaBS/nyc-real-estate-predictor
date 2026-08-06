@@ -10,10 +10,12 @@ is not evidence, it is decoration.
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 import os
 import tempfile
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -28,27 +30,36 @@ def metrics() -> dict:
     return json.loads(ARTEFACT.read_text(encoding="utf-8"))
 
 
+def _first_call_line(source: str, name: str) -> int | None:
+    """Line of the first call to ``name`` in ``source``, or None if never called."""
+    tree = ast.parse(textwrap.dedent(source))
+    return min(
+        (
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == name
+        ),
+        default=None,
+    )
+
+
 def test_working_tree_clean_is_sampled_before_main_writes_anything() -> None:
-    """The sample must happen before the first write in ``main``, not after.
+    """``prepare_data`` writes the cleaned dataset, so a sample taken after it
+    can only ever record False.
 
-    Threading a True into ``_write_training_metrics`` and asserting True comes
-    out cannot detect this bug: it never exercises the ordering the field
-    depends on. Moving the sample back to where it was -- after prepare_data
-    writes the cleaned dataset -- left that version of this test green and the
-    original defect fully reintroduced.
-
-    So assert the ordering directly, on the source of ``main``: the
-    ``_git_working_tree_clean()`` call must appear before the first call that
-    writes to disk. ``prepare_data`` writes CLEANED_DATASET, which is the
-    earliest write in the run.
+    Ordering is read from the parsed call graph rather than the source text:
+    a substring search for the call name is satisfied by a comment naming it,
+    so deleting the call and leaving the comment behind kept this green.
     """
     source = inspect.getsource(run_training.main)
 
-    sample_at = source.find("_git_working_tree_clean()")
-    first_write_at = source.find("prepare_data()")
+    sample_at = _first_call_line(source, "_git_working_tree_clean")
+    first_write_at = _first_call_line(source, "prepare_data")
 
-    assert sample_at != -1, "main no longer samples the working tree at all"
-    assert first_write_at != -1, "main no longer calls prepare_data"
+    assert sample_at is not None, "main no longer samples the working tree at all"
+    assert first_write_at is not None, "main no longer calls prepare_data"
     assert sample_at < first_write_at, (
         "working_tree_clean is sampled after prepare_data() has already "
         "written the cleaned dataset, so it can only ever record False"
