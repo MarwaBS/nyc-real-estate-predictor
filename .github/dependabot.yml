@@ -1,9 +1,3 @@
-# Dependabot configuration (2026 industrial standard)
-#
-# Weekly grouped updates across pip + docker + github-actions — patch +
-# minor grouped to reduce PR noise, majors always isolated because they
-# tend to be breaking.
-
 version: 2
 
 updates:
@@ -24,28 +18,19 @@ updates:
     groups:
       python-patch-updates:
         update-types: ["patch"]
-      python-minor-updates:
-        update-types: ["minor"]
     ignore:
-      # Major-version bumps are breaking by definition — manage manually
-      # in a dedicated branch after reading the changelog. Otherwise
-      # Dependabot fires off weekly pandas 2->3 / optuna 3->4 / h3 3->4
-      # style PRs that always need rejection. This rule suppresses them.
+      # Patch only. numpy is held at 1.26.4 for the fitted artefacts, and any
+      # minor bump can raise a transitive numpy floor past 1.x, which leaves
+      # requirements.txt unsolvable. pip-audit still fails on advisories.
       - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
       # ── Frozen to the training environment ────────────────────────────
-      # The shipped models are joblib pickles. Unpickling reconstructs
-      # objects from these libraries, so the serving versions must equal the
-      # ones the artefacts were fitted under (README: Python 3.12.13,
-      # numpy 1.26.4, scikit-learn 1.8.0). A minor bump is enough to change
-      # an estimator's internals, and the failure is silent — wrong numbers,
-      # not an exception. The set below is the modules actually referenced
-      # inside models/*.joblib, not a guess.
-      # Moving any of them means retraining and re-validating, which is a
-      # deliberate piece of work, not a dependency PR.
-      # tests/test_artifact_contract.py fails the build if the installed
-      # versions and the pins ever disagree.
+      # Referenced inside models/*.joblib. A different version changes estimator
+      # internals silently, so moving one means retraining; src/models/predict.py
+      # raises ModelVersionError if a mismatch gets this far.
       - dependency-name: "numpy"
       - dependency-name: "scikit-learn"
       - dependency-name: "pandas"
@@ -53,19 +38,12 @@ updates:
       - dependency-name: "category-encoders"
       - dependency-name: "xgboost"
 
-      # ── Frozen to keep the requirements file resolvable ───────────────
-      # numpy is held at 1.26.4 above. scipy 1.18.0 is the first release to
-      # require numpy>=2.0.0, so any bump to it makes requirements.txt
-      # unsolvable and every job dies at `pip install` — which is exactly
-      # what happened to PR #83 and again to #88. scipy 1.17.0 still
-      # supports numpy>=1.26.4, so the ceiling is real but not urgent.
-      # Unfreeze this only together with the numpy 2 migration.
+      # scipy 1.18.0 is the first release requiring numpy>=2.
       - dependency-name: "scipy"
 
       # ── Frozen by a written decision ──────────────────────────────────
-      # requirements.txt explains it at the pin: 0.2.x rebinned mutual
-      # information from quantile to dense-rank, so benchmarks/invariants.py
-      # would need its mi_threshold re-measured before moving.
+      # 0.2.x rebinned mutual information; benchmarks/invariants.py would need
+      # its mi_threshold re-measured.
       - dependency-name: "schema-firewall"
 
   - package-ecosystem: "docker"

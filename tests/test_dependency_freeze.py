@@ -1,14 +1,9 @@
 """A pin marked ``# frozen:`` must be one Dependabot is configured to leave alone.
 
-Two Dependabot PRs (#83, #88) died at ``pip install`` with ResolutionImpossible,
-because numpy was held at 1.x by the major-version ignore while scipy was free to
-take a minor bump to a release that requires numpy>=2. The same PRs also proposed
-scikit-learn and schema-firewall bumps that a comment forbade — comments the bot
-cannot read.
-
-The fix was a per-package ignore list. This test stops that list drifting away
-from the pins it protects, in both directions: a new frozen pin with no ignore
-entry fails, and an ignore entry for a package nobody froze fails too.
+Comments at the pin are not something the bot reads, so the two lists drift and
+a bump lands that the requirements file forbids. Checked in both directions: a
+frozen pin with no ignore entry fails, and an ignore entry for a package nobody
+froze fails too.
 """
 
 from __future__ import annotations
