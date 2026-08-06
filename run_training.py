@@ -500,7 +500,7 @@ def calibrate_price_interval(
     def ratio(X: pd.DataFrame, y_log: pd.Series) -> np.ndarray:
         predicted = np.expm1(np.asarray(regressor.predict(X), dtype=float))
         actual = np.expm1(np.asarray(y_log, dtype=float))
-        return actual / predicted
+        return np.asarray(actual / predicted, dtype=float)
 
     ratios = {name: ratio(X, y) for name, (X, y) in splits.items()}
     # Split-conformal finite-sample correction: quantile level lifted to
@@ -581,7 +581,8 @@ def shap_top10(best_reg: Any, X_test: pd.DataFrame) -> list[dict[str, Any]]:
     )
     importance_df = global_feature_importance(shap_values, feature_names)
     logger.info("Top 10 SHAP features:\n%s", importance_df.head(10).to_string())
-    return importance_df.head(10).to_dict("records")
+    rows = importance_df.head(10).to_dict("records")
+    return [{str(name): value for name, value in row.items()} for row in rows]
 
 
 def _git_commit_sha() -> str | None:

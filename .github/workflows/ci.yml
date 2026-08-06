@@ -39,14 +39,11 @@ jobs:
       - name: ruff format --check
         run: ruff format --check .
       - name: mypy type check
-        # Run against src/ + api/ + benchmarks/ so the benchmark pipeline is
-        # type-checked too; `--ignore-missing-imports` prevents failures from
-        # third-party libs (slowapi, xgboost, etc.) that don't ship stubs.
-        run: mypy src/ api/ benchmarks/ --ignore-missing-imports
+        # Every shipped module. `--ignore-missing-imports` covers libs without stubs.
+        run: mypy src/ api/ benchmarks/ streamlit_app/ run_training.py --ignore-missing-imports
       - name: bandit security scan
-        # Skip the tests tree (B101 asserts are normal in pytest) and the
-        # .venv. Fail on MEDIUM+ findings.
-        run: bandit -r src/ api/ benchmarks/ -n 3 -ll
+        # Same paths; tests excluded, where B101 asserts are normal. MEDIUM+ fails.
+        run: bandit -r src/ api/ benchmarks/ streamlit_app/ run_training.py -n 3 -ll
 
   test:
     runs-on: ubuntu-latest
@@ -59,12 +56,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 78, comfortably under the actual coverage over the full source
-        # set (src/ + api/ + benchmarks/ + run_training.py). The gap gives churn
-        # headroom while losing a module's worth of coverage still fails. The
-        # omit list holds only the network-bound benchmark modules, which the
-        # External Benchmark workflow exercises end-to-end on every push.
-        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-report=xml --cov-fail-under=78
+        # Floor 85 against a measured 87.67%, so 27 statements of headroom. A
+        # whole-tree ratchet, not a per-module guarantee: a module smaller than
+        # that margin can go dark inside it.
+        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
       - name: Verify the gates can fail
         # The step above proves the code passes its tests; this one proves the
         # tests can fail. Without it, a gate that reads a committed artefact CI

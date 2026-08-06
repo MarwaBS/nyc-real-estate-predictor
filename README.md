@@ -410,8 +410,8 @@ XGBoost / LightGBM / Random Forest predicting LOG_PRICE (log-transform stabilize
 ## Testing
 
 ```bash
-# Full test suite with coverage (CI gate: 78%, src/ + benchmarks/ + api/ + run_training.py)
-pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
+# Full test suite with coverage (CI gate: 85%, every shipped module)
+pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-fail-under=85
 
 # Run only leakage prevention tests
 pytest tests/test_no_leakage.py -v
@@ -431,7 +431,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 4 jobs: `lint` (ruff check + ruff format + mypy + bandit, covering `src/ api/ tests/ benchmarks/`), `test` (pytest + 78% coverage gate over `src/ + benchmarks/ + api/ + run_training.py`; currently measuring 88.85%), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 4 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every shipped module), `test` (pytest + 85% coverage gate over the same module set), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
@@ -476,7 +476,7 @@ nyc-real-estate-predictor/
 ├── streamlit_app/
 │   └── app.py                    Interactive NYC map + prediction form
 │
-├── tests/                        Unit + hostile-input firewall suite, 78% coverage gate
+├── tests/                        Unit + hostile-input firewall suite, 85% coverage gate
 │   ├── test_data_cleaner.py
 │   ├── test_features.py
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
@@ -515,7 +515,7 @@ nyc-real-estate-predictor/
 | Encoding | category-encoders (TargetEncoder), sklearn OneHotEncoder |
 | API | FastAPI, Pydantic v2, Uvicorn |
 | UI | Streamlit, Plotly |
-| Testing | pytest (78% coverage gate over src/ + benchmarks/ + api/ + run_training.py; currently measuring 88.85%) |
+| Testing | pytest (85% coverage gate over every shipped module) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
 | CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |

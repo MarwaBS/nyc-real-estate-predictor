@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # Ensure src/ is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -32,7 +33,7 @@ st.markdown(
 # Load models once (cached)
 # ---------------------------------------------------------------------------
 @st.cache_resource
-def load_model():
+def load_model() -> Any | None:
     """Load the regressor through the API's guarded loader, so a cross-version
     artefact is refused here (as the API refuses it) instead of loading and
     raising at predict time. Returns None when the model is absent or rejected;
@@ -46,7 +47,16 @@ def load_model():
         return None
 
 
-def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
+def build_features(
+    beds: float,
+    bath: float,
+    sqft: float,
+    borough: str,
+    prop_type: str,
+    zipcode: str,
+    lat: float,
+    lon: float,
+) -> pd.DataFrame:
     """Build feature DataFrame from user input."""
     total_rooms = beds + bath
     bed_bath_ratio = beds / max(bath, 1.0)

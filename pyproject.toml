@@ -47,15 +47,9 @@ module = ["tests.*", "notebooks.*"]
 disallow_untyped_defs = false
 
 [tool.coverage.run]
-# api/ is in scope: it holds the serving + security controls (auth, rate
-# limiting, /predict). Excluding it meant the coverage gate could go green while
-# the API layer was untested — the exact "gate avoids the breakage" trap.
-source = ["src", "benchmarks", "api", "run_training.py"]
-# Every omit needs a reason that is not "it would lower the number". The
-# previous list held 8 modules that were ALL at 0% — it was exactly the set of
-# files that dragged the average down, and it made a 94.72% headline out of a
-# real 56%. run_training.py, which produces every shipped artefact, was not in
-# `source` at all.
+# Every shipped module, including the script that writes the artefacts.
+source = ["src", "benchmarks", "api", "run_training.py", "streamlit_app"]
+# Every omit needs a reason that is not "it would lower the number".
 omit = [
     "tests/*",
     "notebooks/*",
