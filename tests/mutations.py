@@ -593,4 +593,41 @@ MUTATIONS: list[Mutation] = [
         new="",
         gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
     ),
+    Mutation(
+        name="whole-test-job-skipped",
+        # Job level, where the step-level gate could not see it.
+        path=".github/workflows/ci.yml",
+        old="  test:\n    runs-on: ubuntu-latest",
+        new="  test:\n    if: false\n    runs-on: ubuntu-latest",
+        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
+    ),
+    Mutation(
+        name="whole-lint-job-excused",
+        path=".github/workflows/ci.yml",
+        old="  lint:\n    runs-on: ubuntu-latest",
+        new="  lint:\n    continue-on-error: true\n    runs-on: ubuntu-latest",
+        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
+    ),
+    Mutation(
+        name="readme-tree-drops-a-ci-job",
+        path="README.md",
+        old="5-job CI: lint + test + reproducibility",
+        new="4-job CI: lint + test",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
+    Mutation(
+        name="readme-miscounts-the-test-suite",
+        path="README.md",
+        old="(32 files in total)",
+        new="(30 files in total)",
+        gate="tests/test_gate_scope.py::test_readme_states_the_real_size_of_the_test_suite",
+    ),
+    Mutation(
+        name="benchmark-runner-commented-inside-its-own-block",
+        # The command survives as a comment within the run: scalar.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        run: |\n          # python -m benchmarks.run_benchmark\n          echo skipped\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
 ]

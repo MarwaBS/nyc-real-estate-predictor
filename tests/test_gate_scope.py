@@ -348,23 +348,32 @@ def test_ci_runs_the_whole_mutation_replay() -> None:
 def test_every_mutation_gate_names_a_test_that_exists() -> None:
     """A renamed or moved gate leaves the replay unable to judge its mutation,
     which it reports as survived only after a full run."""
-    defined = set()
-    for path in sorted((ROOT / "tests").glob("test_*.py")):
+    defined: dict[str, set[str]] = {}
+    for path in sorted((ROOT / "tests").rglob("test_*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        defined |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+        defined[path.relative_to(ROOT).as_posix()] = {
+            node.name for node in tree.body if isinstance(node, ast.FunctionDef)
+        }
 
-    missing = sorted(
-        mutation.gate
-        for mutation in MUTATIONS
-        if not (ROOT / mutation.gate.split("::")[0]).exists()
-        or ("::" in mutation.gate and mutation.gate.split("::")[1] not in defined)
-    )
-    assert not missing, f"mutation gates naming no test: {missing}"
+    missing = []
+    for mutation in MUTATIONS:
+        # Against the file the gate names, so a test that moved is caught too.
+        file, _, name = mutation.gate.partition("::")
+        known = defined.get(file)
+        if known is None or (name and name not in known):
+            missing.append(mutation.gate)
+    assert not missing, f"mutation gates naming no test: {sorted(missing)}"
+
+
+#: The only ci.yml job that may carry an `if:`. A full retrain is minutes, so
+#: it runs on pull requests and the weekly cron rather than every push.
+_CONDITIONAL_JOBS = {"reproducibility"}
 
 
 def test_no_ci_step_is_conditional_or_allowed_to_fail() -> None:
-    """`if: false` stops a step executing and `continue-on-error: true` stops
-    it failing the build. The pinned command reads the same either way."""
+    """`if: false` stops it executing and `continue-on-error: true` stops it
+    failing the build. The pinned command reads the same either way, at step
+    level and at job level."""
     workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
     disarmed = [
         f"{job}: {step.get('name') or step.get('uses')}"
@@ -372,28 +381,53 @@ def test_no_ci_step_is_conditional_or_allowed_to_fail() -> None:
         for step in spec.get("steps", [])
         if "if" in step or step.get("continue-on-error")
     ]
-    assert not disarmed, f"ci.yml steps that may not run or may not fail: {disarmed}"
+    disarmed += [
+        job
+        for job, spec in workflow["jobs"].items()
+        if spec.get("continue-on-error")
+        or ("if" in spec and job not in _CONDITIONAL_JOBS)
+    ]
+    assert not disarmed, f"ci.yml may skip or excuse: {disarmed}"
 
 
 def test_readme_names_every_ci_job() -> None:
-    """Both places it describes them: fixing one site left the other wrong."""
+    """All three places it describes them: fixing two left the third wrong."""
     jobs = list(yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"])
     readme = _read("README.md")
-    sentence = re.search(r"CI runs (\d+) jobs:([^\n]*)", readme)
-    row = re.search(r"\| CI \| GitHub Actions:([^\n]*)", readme)
-    assert sentence is not None and row is not None, (
-        "README no longer describes the CI jobs in both places"
-    )
-    assert int(sentence.group(1)) == len(jobs), (
-        f"README says {sentence.group(1)} jobs; ci.yml defines {len(jobs)}"
-    )
-    for label, text in (("sentence", sentence.group(2)), ("table", row.group(1))):
-        unnamed = [job for job in jobs if job not in text]
+    sites = {
+        "sentence": re.search(r"CI runs (\d+) jobs:([^\n]*)", readme),
+        "table": re.search(r"\| CI \| GitHub Actions:()([^\n]*)", readme),
+        "tree": re.search(r"ci\.yml\s+(\d+)-job CI:([^\n]*)", readme),
+    }
+    for label, site in sites.items():
+        assert site is not None, f"README's CI {label} no longer describes the jobs"
+        if site.group(1):
+            assert int(site.group(1)) == len(jobs), (
+                f"README's CI {label} says {site.group(1)}; ci.yml defines {len(jobs)}"
+            )
+        unnamed = [job for job in jobs if job not in site.group(2)]
         assert not unnamed, f"README's CI {label} does not name: {unnamed}"
 
 
+def test_readme_states_the_real_size_of_the_test_suite() -> None:
+    """It said 30 from the commit that introduced it, when it was 31."""
+    stated = re.search(r"\((\d+) files in total\)", _read("README.md"))
+    assert stated is not None, "README no longer states the size of tests/"
+    tracked = subprocess.run(
+        ["git", "ls-files", "tests/*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    direct = [p for p in tracked if p.count("/") == 1]
+    assert int(stated.group(1)) == len(direct), (
+        f"README says {stated.group(1)} files in tests/; git tracks {len(direct)}"
+    )
+
+
 #: Files a runner invokes by path rather than importing.
-_RUNNER_FILES = (".github/workflows", "Dockerfile", "Dockerfile.streamlit", "Makefile")
+_RUNNER_FILES = (".github/workflows", "Dockerfile", "Makefile")
 
 #: Scripts run by hand, each with the committed artefact it writes.
 ARTEFACT_PRODUCERS = {
@@ -419,9 +453,10 @@ def _runner_text() -> str:
             for file in sorted(path.glob("*.yml")):
                 workflow = yaml.safe_load(file.read_text(encoding="utf-8"))
                 parts += [
-                    f"{step.get('run', '')} {step.get('uses', '')}"
+                    line.split("#", 1)[0] + f" {step.get('uses', '')}"
                     for spec in workflow["jobs"].values()
                     for step in spec.get("steps", [])
+                    for line in str(step.get("run", "")).splitlines() or [""]
                 ]
         elif path.exists():
             parts += [

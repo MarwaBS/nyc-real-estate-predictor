@@ -75,7 +75,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Ethical considerations
 
-- **Real-estate price modelling can reinforce existing spatial inequality.** If this model were deployed for pricing or approval decisions, its borough-level F1 disparity would translate into systematically higher uncertainty for Manhattan and Queens, the opposite of the "fair across groups" property we usually want. The model IS NOT deployed for any such decision; the fairness analysis here is diagnostic, not claim of fairness.
+- **Real-estate price modelling can reinforce existing spatial inequality.** If this model were deployed for pricing or approval decisions, its borough-level F1 disparity would translate into systematically higher uncertainty for Staten Island and Queens, the two lowest scores in the table above, which is the opposite of the "fair across groups" property we usually want. The model IS NOT deployed for any such decision; the fairness analysis here is diagnostic, not a claim of fairness.
 - **Dataset age:** the training snapshot predates the 2025 NYC market shifts. Any prediction on current-market data is subject to distribution drift.
 - **Sensitive attributes:** the dataset does not contain race, ethnicity, or income; demographic-fairness analysis is not possible. Borough is the only proxy.
 

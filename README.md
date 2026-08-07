@@ -484,7 +484,7 @@ nyc-real-estate-predictor/
 ├── tests/                        Unit + hostile-input firewall suite, 85% coverage gate
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
 │   ├── test_documented_numbers.py  Published figures vs the artefacts
-│   ├── …                         (30 files in total)
+│   ├── …                         (32 files in total)
 │   └── benchmarks/               Schema-lock + drop-engine hostile-input suite
 │
 ├── docs/decisions/               Architecture Decision Records
@@ -496,7 +496,7 @@ nyc-real-estate-predictor/
 ├── models/                       Flagship artefacts committed + MANIFEST.sha256-pinned;
 │                                 regenerate with run_training.py
 ├── reports/training_metrics.json Committed evidence artefact for §Results
-├── .github/workflows/ci.yml      4-job CI: lint + test + security + docker-build
+├── .github/workflows/ci.yml      5-job CI: lint + test + reproducibility + security + docker-build
 ├── Dockerfile                    Non-root, health check
 ├── docker-compose.yml            API + Streamlit stack
 ├── requirements.txt
