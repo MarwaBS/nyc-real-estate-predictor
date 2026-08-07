@@ -71,9 +71,10 @@ jobs:
         run: python scripts/verify_gates.py
 
   reproducibility:
-    # Weekly only. A full training run takes minutes, and A2 (bit-identical
-    # regeneration) cannot change between pushes that do not touch training.
-    if: github.event_name == 'schedule'
+    # A full training run takes minutes, so it runs weekly and on any change
+    # to the training path, which is what can make the artefacts stop
+    # regenerating byte for byte.
+    if: github.event_name == 'schedule' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

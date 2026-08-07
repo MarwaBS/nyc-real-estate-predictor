@@ -5,9 +5,9 @@ Three environment variables drive the API's security posture:
 
     ENV=dev|staging|prod   default "dev"
     ALLOWED_ORIGINS        comma-separated list; default "*"
-    API_KEY                , if set, /predict requires X-API-Key header
+    API_KEY                if set, /predict requires X-API-Key header
                               matching; if unset, /predict is open (dev mode)
-    PREDICT_RATE_LIMIT     , slowapi-style rate limit for /predict; default
+    PREDICT_RATE_LIMIT     slowapi-style rate limit for /predict; default
                               "60/minute" (wired to the route, overridable)
 
 The `validate_cors_not_wildcard_in_prod` model-validator is the critical

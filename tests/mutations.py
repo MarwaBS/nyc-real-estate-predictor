@@ -336,8 +336,8 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         name="module-left-with-no-production-importer",
-        # A13. Drop the one production import and the module survives on its
-        # own test file alone, which is how the drift helpers stayed.
+        # Drop the one production import and the module survives on its own
+        # test file alone, which is how the drift helpers stayed.
         path="run_training.py",
         old="    from src.models.drift import save_baseline\n",
         new="",

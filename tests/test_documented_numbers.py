@@ -211,8 +211,8 @@ def _study_values() -> set[float]:
     return values
 
 
-#: A metric name, and a decimal figure of three places or more. Matching exactly
-#: three let a false figure ship by writing it at four.
+#: A decimal figure of three places or more. Matching exactly three let a false
+#: figure ship by writing it at four.
 _DECIMAL = re.compile(r"(?<![\d.])(0\.\d{3,})")
 
 
@@ -289,9 +289,7 @@ def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
             # to more places than the artefact carries is still checked.
             if float(value) not in {round(v, places) for v in allowed}:
                 wrong.append(f"{doc}:{i}: {value} is in no artefact")
-    assert not wrong, (
-        "figures beside a metric name that no artefact holds:\n" + "\n".join(wrong)
-    )
+    assert not wrong, "figures no artefact holds:\n" + "\n".join(wrong)
 
 
 @pytest.mark.parametrize("doc", ["README.md", "MODEL_CARD.md"])
@@ -537,14 +535,21 @@ def test_coverage_excludes_only_the_three_justified_lines() -> None:
     }, f"exclude_lines widened to {sorted(config['exclude_lines'])}"
 
 
-def test_no_omit_entry_removes_a_shipped_module() -> None:
-    """`omit` is the other half of the same knob: entries there drop statements
-    and lift the headline with every test still green.
+#: The only shipped files coverage may skip, each with the reason it is skipped
+#: rather than measured. Closed set: widening it is an edit here, in review.
+OMITTED_BY_DESIGN = {
+    "benchmarks/run_benchmark.py": "downloads live NYC.gov data; run end to end by the benchmark workflow",
+    "benchmarks/train_benchmark_model.py": "one-off producer of the committed benchmark model",
+    "benchmarks/datasets/__init__.py": "package marker for the download adapters",
+    "benchmarks/datasets/nyc_rolling_sales_2024.py": "downloads live NYC.gov data",
+}
 
-    Matched per file rather than by top-level name. `streamlit_app/*` and
-    `streamlit_app/app.py` have the same effect, and comparing name strings
-    catches only the first spelling.
-    """
+
+def test_omit_skips_only_the_files_it_names() -> None:
+    """`omit` is the other half of the same knob and the only one of the four
+    that was not pinned to a set. Requiring one measurable file per module left
+    it open: omitting `src/models/*` and `src/data/*` drops 352 statements, the
+    cleaning pipeline and the inference path, and the headline rises."""
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"]
     tracked = subprocess.run(
         ["git", "ls-files", "*.py"],
@@ -553,19 +558,20 @@ def test_no_omit_entry_removes_a_shipped_module() -> None:
         text=True,
         check=True,
     ).stdout.split()
-    for module in sorted(_shipped_modules()):
-        owned = [
-            path
-            for path in tracked
-            if path == f"{module}.py" or path.startswith(f"{module}/")
-        ]
-        kept = [
-            path
-            for path in owned
-            if not any(fnmatch(path, pattern) for pattern in config["omit"])
-            and (ROOT / path).read_text(encoding="utf-8").strip()
-        ]
-        assert kept, f"omit leaves no measurable file under {module}"
+    shipped = [
+        path
+        for path in tracked
+        if path.split("/")[0].removesuffix(".py") in _declared_source()
+    ]
+    skipped = {
+        path
+        for path in shipped
+        if any(fnmatch(path, pattern) for pattern in config["omit"])
+    }
+    assert skipped == set(OMITTED_BY_DESIGN), (
+        f"coverage skips {sorted(skipped)}; the justified set is "
+        f"{sorted(OMITTED_BY_DESIGN)}"
+    )
 
 
 def test_every_invocation_measures_the_declared_module_set() -> None:
@@ -683,7 +689,7 @@ def _imported_modules(source: str) -> set[str]:
 
 
 def test_no_shipped_module_has_zero_importers() -> None:
-    """A13. A module nothing imports and no runner invokes is weight the reader
+    """A module nothing imports and no runner invokes is weight the reader
     still has to carry. The drift comparison helpers sat that way behind a green
     suite, kept alive by their own test file."""
     tracked = subprocess.run(

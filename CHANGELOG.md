@@ -17,7 +17,8 @@ project uses SemVer for tagged releases.
   whose release actually broke the build; and the coverage check compared four
   documents to each other rather than to the tree. All four now fail: the
   sample must happen exactly once and its value must reach the artefact, the
-  scan reads the whole line, the dependency set spans every managed file, and
+  scan reads both sides of the claim, the dependency set spans every managed
+  file, and
   the measured module set is compared to `git ls-files`. mypy and bandit path
   lists are gated the same way.
 - **MODEL_CARD's cap-factor paragraph is pinned to a committed artefact.**
@@ -64,9 +65,10 @@ project uses SemVer for tagged releases.
   artefact.
 - **The naive baselines are inside a claim scan.** The scan looked 60
   characters to the right of the metric name, four short of the figure it
-  qualified, so 0.177 and 0.301 could be rewritten to anything. It now reads
-  the whole line on both sides, and requires every figure beside a metric name
-  to be one the artefacts hold.
+  qualified, so 0.177 and 0.301 could be rewritten to anything. Every
+  fractional figure and every separated count in a live document must now be
+  one the artefacts hold, with the historical exemption matched against the
+  text before the claim rather than the whole line.
 
 ### Changed, every cross-row statistic now fits on the train split only
 
