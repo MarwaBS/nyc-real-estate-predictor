@@ -101,7 +101,6 @@ def _requirement_files() -> list[str]:
     ],
 )
 def test_the_include_spellings_are_followed(line: str) -> None:
-    """Each was checked against `pip install --dry-run` before being listed."""
     match = INCLUDE.match(line)
     assert match is not None and match.group(1) == "extra.txt"
 

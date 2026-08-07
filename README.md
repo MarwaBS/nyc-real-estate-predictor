@@ -521,7 +521,7 @@ nyc-real-estate-predictor/
 | Testing | pytest (85% coverage gate over src/, api/, benchmarks/, streamlit_app/ and run_training.py) |
 | Linting | ruff (check + format), mypy, bandit |
 | Infra | Docker (multi-stage, bookworm-tagged), docker-compose |
-| CI | GitHub Actions: lint (ruff + mypy + bandit) + test (coverage gate) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
+| CI | GitHub Actions: lint (ruff + codespell + mypy + bandit) + test (coverage gate + mutation replay) + reproducibility (byte-identical retrain) + security (pip-audit + CycloneDX SBOM) + docker-build (multi-stage build + Trivy HIGH/CRITICAL scan + smoke-run) |
 | Supply chain | Dependabot (pip + docker + actions), Trivy, CycloneDX SBOM |
 
 ---

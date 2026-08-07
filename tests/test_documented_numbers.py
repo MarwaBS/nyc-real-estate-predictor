@@ -111,10 +111,12 @@ LIVE_DOCS = [
     "pyproject.toml",
 ]
 
-# A line stating that something is gone must be allowed to name it.
+# A line stating that something is gone must be allowed to name it. Leading
+# boundary only: unanchored it matched inside `avoid`, trailing would drop
+# `previously`.
 _HISTORICAL = re.compile(
-    r"earlier|previous|no longer|there is no|was removed|is gone|used to"
-    r"|deleted|void|before 2026|superseded",
+    r"\b(?:earlier|previous|no longer|there is no|was removed|is gone|used to"
+    r"|deleted|before 2026|superseded)",
     re.IGNORECASE,
 )
 
@@ -195,11 +197,13 @@ def test_notebooks_reference_no_deleted_symbol(nb: str) -> None:
 def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
     """Presence checks cannot catch this: the Space page described an XGBoost
     classifier and a label encoder while every number in it was correct."""
+    # Every occurrence: a historical first one shielded a live second.
     offenders = [
         f"{doc}:{i}: {name}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
         for name in DELETED_COMPONENTS
-        if name in line and not _is_historical(line, line.index(name), _SENTENCE_BREAK)
+        for hit in re.finditer(re.escape(name), line)
+        if not _is_historical(line, hit.start(), _SENTENCE_BREAK)
     ]
     assert not offenders, "live docs name deleted components:\n" + "\n".join(offenders)
 
@@ -290,10 +294,9 @@ _UNGATED_FIGURES = {
     0.375,  # the superseded benchmark score, named as never reproducible
     3.12,  # the Python version, stated in the environment tables
     1.33,  # the binomial standard error MODEL_CARD derives in prose
-    78.5,  # SUBLOCALITY's share of the borough derivation chain
-    47.0,  # the same chain's third step, on what the first two left
+    78.5,  # SUBLOCALITY's own share of the borough derivation chain
+    47.0,  # LOCALITY's own share of the same chain
     99.2,  # the chain's combined resolution rate
-    1.5,  # the cap study's MAE gain as a share of the MAE
 }
 
 

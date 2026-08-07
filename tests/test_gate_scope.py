@@ -143,23 +143,75 @@ def test_type_and_security_checks_cover_every_tracked_module(tool: str) -> None:
         )
 
 
-#: Every setting [tool.mypy] may carry, and the only module patterns an
-#: override may name. `exclude` there narrows the check with no command-line
-#: token to see, and `ignore_errors` silences it while still reporting 34 files.
-_MYPY_SETTINGS = {
-    "python_version",
-    "ignore_missing_imports",
-    "disallow_untyped_defs",
-    "warn_return_any",
+#: Every key each tool's pyproject table may carry. Gating one key leaves its
+#: siblings open: `[tool.coverage.report] include` cut 997 statements to 67.
+_TOOL_TABLES = {
+    "ruff": {"target-version", "lint"},
+    "ruff.lint": {"select", "ignore", "per-file-ignores"},
+    "codespell": {"ignore-words-list"},
+    "pytest": {"ini_options"},
+    "pytest.ini_options": {"addopts", "filterwarnings", "markers", "pythonpath"},
+    "mypy": {
+        "python_version",
+        "ignore_missing_imports",
+        "disallow_untyped_defs",
+        "warn_return_any",
+        "overrides",
+    },
+    "coverage": {"run", "report"},
+    "coverage.run": {"source", "omit"},
+    "coverage.report": {"exclude_lines", "show_missing"},
 }
+
+#: Files each tool would read instead of, or before, its pyproject table.
+_COMPETING_CONFIG = (
+    ".coveragerc",
+    "tox.ini",
+    "setup.cfg",
+    "mypy.ini",
+    ".mypy.ini",
+    "pytest.ini",
+    ".pytest.ini",
+    "ruff.toml",
+    ".ruff.toml",
+    ".bandit",
+    "bandit.yaml",
+    ".codespellrc",
+)
+
+
+def _table(path: str) -> dict:
+    node = tomllib.loads(_read("pyproject.toml"))["tool"]
+    for part in path.split("."):
+        node = node[part]
+    return node
+
+
+@pytest.mark.parametrize("path", sorted(_TOOL_TABLES))
+def test_no_tool_table_carries_an_unapproved_key(path: str) -> None:
+    assert set(_table(path)) == _TOOL_TABLES[path], (
+        f"[tool.{path}] carries {sorted(_table(path))}"
+    )
+
+
+def test_pyproject_is_the_only_tool_config() -> None:
+    """Each is read instead of, or ahead of, the tables above, so the gates
+    here would be reading settings that no longer apply."""
+    present = [n for n in _COMPETING_CONFIG if (ROOT / n).exists()]
+    assert not present, f"tool config outside pyproject.toml: {present}"
+
+
+def test_pytest_adds_no_option_that_disarms_a_gate() -> None:
+    """`--no-cov` here makes the coverage floor a no-op with CI still green."""
+    assert _table("pytest.ini_options")["addopts"] == "-ra --import-mode=importlib"
+
+
+#: The only module patterns a mypy override may name.
 _MYPY_OVERRIDABLE = {"tests.*", "notebooks.*"}
 
 
-def test_the_mypy_config_narrows_nothing() -> None:
-    config = tomllib.loads(_read("pyproject.toml"))["tool"]["mypy"]
-    overrides = config.pop("overrides", [])
-    assert set(config) == _MYPY_SETTINGS, f"[tool.mypy] carries {sorted(config)}"
-    for override in overrides:
+def test_no_mypy_override_reaches_shipped_code() -> None:
+    for override in _table("mypy").get("overrides", []):
         assert set(override["module"]) <= _MYPY_OVERRIDABLE, (
             f"a mypy override reaches shipped code: {override['module']}"
         )
@@ -216,17 +268,6 @@ def _omits(pattern: str, path: str) -> bool:
     if not pattern.startswith(("*", "?")):
         pattern = (ROOT / pattern).as_posix()
     return fnmatch(path, pattern) or fnmatch((ROOT / path).as_posix(), pattern)
-
-
-#: The other files coverage would read instead of pyproject.toml.
-_COMPETING_COVERAGE_CONFIG = (".coveragerc", "tox.ini", "setup.cfg")
-
-
-def test_pyproject_is_the_only_coverage_config() -> None:
-    """`.coveragerc` replaces the pyproject section wholesale, so every gate
-    below would be reading settings that no longer apply."""
-    present = [n for n in _COMPETING_COVERAGE_CONFIG if (ROOT / n).exists()]
-    assert not present, f"coverage would read these before pyproject.toml: {present}"
 
 
 def test_omit_skips_only_the_files_it_names() -> None:
@@ -289,8 +330,8 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
 
 
 def test_ci_runs_the_whole_mutation_replay() -> None:
-    """The exact command. A substring check accepted `--name one-mutation` and
-    a trailing `|| true`, which replays 1 of 48 and swallows the exit code."""
+    """The exact command. A substring accepted `--name one`, which replays a
+    single entry, and `|| true`, which swallows the exit code."""
     workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
     runs = [
         step.get("run", "").strip()
@@ -302,16 +343,34 @@ def test_ci_runs_the_whole_mutation_replay() -> None:
     )
 
 
+def test_no_ci_step_is_conditional_or_allowed_to_fail() -> None:
+    """`if: false` stops a step executing and `continue-on-error: true` stops
+    it failing the build. The pinned command reads the same either way."""
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    disarmed = [
+        f"{job}: {step.get('name') or step.get('uses')}"
+        for job, spec in workflow["jobs"].items()
+        for step in spec.get("steps", [])
+        if "if" in step or step.get("continue-on-error")
+    ]
+    assert not disarmed, f"ci.yml steps that may not run or may not fail: {disarmed}"
+
+
 def test_readme_names_every_ci_job() -> None:
-    """It said 4 jobs and listed 4, omitting `reproducibility` entirely."""
+    """Both places it describes them: fixing one site left the other wrong."""
     jobs = list(yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"])
-    sentence = re.search(r"CI runs (\d+) jobs:([^\n]*)", _read("README.md"))
-    assert sentence is not None, "README no longer describes the CI jobs"
+    readme = _read("README.md")
+    sentence = re.search(r"CI runs (\d+) jobs:([^\n]*)", readme)
+    row = re.search(r"\| CI \| GitHub Actions:([^\n]*)", readme)
+    assert sentence is not None and row is not None, (
+        "README no longer describes the CI jobs in both places"
+    )
     assert int(sentence.group(1)) == len(jobs), (
         f"README says {sentence.group(1)} jobs; ci.yml defines {len(jobs)}"
     )
-    unnamed = [job for job in jobs if f"`{job}`" not in sentence.group(2)]
-    assert not unnamed, f"README does not name these CI jobs: {unnamed}"
+    for label, text in (("sentence", sentence.group(2)), ("table", row.group(1))):
+        unnamed = [job for job in jobs if job not in text]
+        assert not unnamed, f"README's CI {label} does not name: {unnamed}"
 
 
 #: Files a runner invokes by path rather than importing.
@@ -332,18 +391,23 @@ def test_every_producer_still_has_the_artefact_it_writes() -> None:
 
 
 def _runner_text() -> str:
-    """What the runners actually execute, comments stripped. Read as raw text,
-    a `# see src/models/drift.py` line kept an orphan module looking alive."""
+    """What the runners execute: workflow `run`/`uses` values, other files with
+    comments stripped. A name in a comment or a step's `name:` invokes nothing."""
     parts = []
     for name in _RUNNER_FILES:
         path = ROOT / name
-        files = sorted(path.glob("*.yml")) if path.is_dir() else [path]
-        for file in files:
-            if not file.exists():
-                continue
+        if path.is_dir():
+            for file in sorted(path.glob("*.yml")):
+                workflow = yaml.safe_load(file.read_text(encoding="utf-8"))
+                parts += [
+                    f"{step.get('run', '')} {step.get('uses', '')}"
+                    for spec in workflow["jobs"].values()
+                    for step in spec.get("steps", [])
+                ]
+        elif path.exists():
             parts += [
                 line.split("#", 1)[0]
-                for line in file.read_text(encoding="utf-8").splitlines()
+                for line in path.read_text(encoding="utf-8").splitlines()
             ]
     return "\n".join(parts)
 

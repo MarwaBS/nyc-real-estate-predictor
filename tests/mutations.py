@@ -521,4 +521,76 @@ MUTATIONS: list[Mutation] = [
         new="CI runs 4 jobs:",
         gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
     ),
+    Mutation(
+        name="coverage-report-include-shrinks-the-tree",
+        # A sibling of exclude_lines in the same table: 997 statements to 67.
+        path="pyproject.toml",
+        old="exclude_lines = [",
+        new='include = ["*/src/utils/*"]\nexclude_lines = [',
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
+    ),
+    Mutation(
+        name="ruff-scope-excluded-in-config",
+        # Reinstates the exclusion deleted in bc0dd71, with no gate reading it.
+        path="pyproject.toml",
+        old='[tool.ruff]\ntarget-version = "py312"',
+        new='[tool.ruff]\nexclude = ["src/models"]\ntarget-version = "py312"',
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
+    ),
+    Mutation(
+        name="coverage-switched-off-in-addopts",
+        # The floor still reads 85 and measures nothing.
+        path="pyproject.toml",
+        old='addopts = "-ra --import-mode=importlib"',
+        new='addopts = "-ra --import-mode=importlib --no-cov"',
+        gate="tests/test_gate_scope.py::test_pytest_adds_no_option_that_disarms_a_gate",
+    ),
+    Mutation(
+        name="coverage-step-never-runs",
+        path=".github/workflows/ci.yml",
+        old="      - name: Run tests with coverage\n",
+        new="      - name: Run tests with coverage\n        if: false\n",
+        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
+    ),
+    Mutation(
+        name="replay-step-cannot-fail-the-build",
+        path=".github/workflows/ci.yml",
+        old="      - name: Verify the gates can fail\n",
+        new="      - name: Verify the gates can fail\n        continue-on-error: true\n",
+        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
+    ),
+    Mutation(
+        name="benchmark-module-named-only-in-a-step-title",
+        # A step name executes nothing; raw text credited it as a runner.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        run: echo skipped\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="false-figure-exempted-by-the-word-avoid",
+        # `void` matched inside `avoid` before the boundary was anchored.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new="To avoid overfitting we report R² = 0.9999 on the 20% test split",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="deleted-component-shielded-by-an-earlier-mention",
+        # The scan took only the first occurrence on the line.
+        path="MODEL_CARD.md",
+        old="There is no classifier, no label encoder and no argmax.",
+        new=(
+            "There is no classifier, no label encoder and no argmax. "
+            "The API decodes with argmax over the tuned optimal_thresholds."
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="readme-stack-table-drops-a-ci-job",
+        path="README.md",
+        old="+ reproducibility (byte-identical retrain) ",
+        new="",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
 ]
