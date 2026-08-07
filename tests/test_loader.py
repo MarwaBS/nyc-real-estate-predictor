@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
-import pandas as pd
 import pytest
 
 from src.data.loader import load_cleaned, load_raw

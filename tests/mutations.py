@@ -369,4 +369,66 @@ MUTATIONS: list[Mutation] = [
         new="",
         gate="tests/test_dependency_freeze.py",
     ),
+    Mutation(
+        name="coverage-floor-decoyed-by-a-comment",
+        # The floor a comment advertises, above the one the step runs.
+        path=".github/workflows/ci.yml",
+        old=(
+            "        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks "
+            "--cov=api --cov=run_training --cov=streamlit_app "
+            "--cov-report=term-missing --cov-report=xml --cov-fail-under=85"
+        ),
+        new=(
+            "        # --cov-fail-under=85\n"
+            "        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks "
+            "--cov=api --cov=run_training --cov=streamlit_app "
+            "--cov-report=term-missing --cov-report=xml --cov-fail-under=10"
+        ),
+        gate="tests/test_gate_scope.py::test_the_stated_coverage_gate_matches_ci",
+    ),
+    Mutation(
+        name="type-check-narrowed-by-a-flag",
+        # Same reach as deleting a path, in a token no path list can see.
+        path=".github/workflows/ci.yml",
+        old="run_training.py --ignore-missing-imports\n",
+        new="run_training.py --ignore-missing-imports --exclude 'src/models/.*'\n",
+        gate="tests/test_gate_scope.py::test_the_tool_commands_carry_no_unapproved_argument",
+    ),
+    Mutation(
+        name="coverage-omit-written-as-an-absolute-pattern",
+        # coverage matches omit against the absolute path, so this drops the
+        # inference path while the repo-relative form matches nothing.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "*/src/models/*",\n    "tests/*",',
+        gate="tests/test_gate_scope.py::test_omit_skips_only_the_files_it_names",
+    ),
+    Mutation(
+        name="served-multiplier-rewritten",
+        # A figure at or above 1: the fractional scan once started at `0.`.
+        path="MODEL_CARD.md",
+        old="0.677x / 1.457x",
+        new="0.677x / 1.99x",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="false-figure-behind-a-historical-clause",
+        # One leading historical sentence used to exempt the rest of the line.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new=(
+            "An earlier revision used a different split. Calibration slope 0.91. "
+            "R² = 0.835 on the 20% test split"
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="gate-replay-step-dropped-from-ci",
+        # Nothing then runs the mutation replay, and verify_gates.py is left with
+        # no importer and no runner. A __main__ guard used to excuse that.
+        path=".github/workflows/ci.yml",
+        old="        run: python scripts/verify_gates.py\n",
+        new="",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
 ]

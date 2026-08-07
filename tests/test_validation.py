@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from src.utils.validation import assert_no_leakage, validate_cleaned_data
+from src.utils.validation import validate_cleaned_data
 
 
 def test_validate_passes_on_clean_data(sample_raw_data: pd.DataFrame) -> None:

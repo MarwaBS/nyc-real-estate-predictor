@@ -1,7 +1,7 @@
 """Every claim a reader can check, compared to the thing it describes.
 
-Published figures against the artefacts, tool config against the tree, and the
-import graph against what ships.
+Published figures against the artefacts. Tool config and the import graph are
+in ``test_gate_scope.py``.
 
 Hand-maintained figures rot: README, MODEL_CARD, CHANGELOG, the ADRs and the
 public Space page have all carried figures from an earlier training run,
@@ -25,18 +25,18 @@ coverage is the headline set, not the whole document.
 
 from __future__ import annotations
 
-import ast
 import json
 import re
-import subprocess
-import tomllib
-from fnmatch import fnmatch
 from pathlib import Path
 
 import pytest
-import yaml
 
-from src.config import ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
+from src.config import (
+    CENTRAL_PARK,
+    MANHATTAN_CENTER,
+    ONEHOT_FEATURES,
+    TARGET_ENCODED_FEATURES,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 METRICS = json.loads((ROOT / "reports" / "training_metrics.json").read_text("utf-8"))
@@ -111,15 +111,26 @@ LIVE_DOCS = [
     "pyproject.toml",
 ]
 
-# A line stating that something is gone must be allowed to name it. Matched
-# against the text PRECEDING the claim, not the whole line: "macro F1 = 0.699
-# ... There is no classifier" is a live claim followed by a historical remark,
-# and a whole-line filter exempted it, the mutation to 0.727 passed.
+# A line stating that something is gone must be allowed to name it.
 _HISTORICAL = re.compile(
     r"earlier|previous|no longer|there is no|was removed|is gone|used to"
     r"|deleted|void|before 2026|superseded",
     re.IGNORECASE,
 )
+
+# Sentence end or table cell wall.
+_CLAUSE_BREAK = re.compile(r"(?<=[.;:])\s|\|")
+
+
+def _is_historical(line: str, start: int) -> bool:
+    """Whether the claim at ``start`` sits in a clause marked historical. That
+    clause alone: a whole-line filter exempted every other claim beside it."""
+    edges = [0] + [m.end() for m in _CLAUSE_BREAK.finditer(line)] + [len(line)]
+    for begin, end in zip(edges, edges[1:], strict=False):
+        if begin <= start < end:
+            return bool(_HISTORICAL.search(line[begin:end]))
+    return False
+
 
 # Components deleted from the codebase. A live doc naming one is describing
 # software that does not exist.
@@ -184,9 +195,8 @@ def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
     offenders = [
         f"{doc}:{i}: {name}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
-        if not _HISTORICAL.search(line)
         for name in DELETED_COMPONENTS
-        if name in line
+        if name in line and not _is_historical(line, line.index(name))
     ]
     assert not offenders, "live docs name deleted components:\n" + "\n".join(offenders)
 
@@ -214,9 +224,9 @@ def _study_values() -> set[float]:
     return values
 
 
-#: A decimal figure of three places or more. Matching exactly three let a false
-#: figure ship by writing it at four.
-_DECIMAL = re.compile(r"(?<![\d.])(0\.\d{3,})")
+#: Any decimal of two places or more. Matching only `0.` left the served
+#: multiplier 1.457 unscanned. The trailing guard drops versions (`1.26.4`).
+_DECIMAL = re.compile(r"(?<![\d.])(\d+\.\d{2,})(?!\.?\d)")
 
 
 def _artefact_floats() -> set[float]:
@@ -243,6 +253,10 @@ def _artefact_floats() -> set[float]:
     values |= {row["mean_abs_shap"] for row in METRICS["classification"]["shap_top10"]}
     values |= {row["val_mae_common"] for row in CAP_STUDY["rows"]}
     values |= {row["val_r2_common"] for row in CAP_STUDY["rows"]}
+    values |= {row["pct_at_cap"] for row in CAP_STUDY["rows"]}
+    values.add(BENCH["leakage_tripwire"]["threshold"])
+    # The Haversine anchors, from the constants the features are built from.
+    values |= {abs(c) for anchor in (MANHATTAN_CENTER, CENTRAL_PARK) for c in anchor}
     values |= {
         figure
         for key, figure in CAP_STUDY.items()
@@ -267,24 +281,23 @@ _UNGATED_FIGURES = {
     0.0006,  # its honest out-of-sample re-measurement, run once, no artefact
     0.0106,  # the standard deviation of that same study
     0.375,  # the superseded benchmark score, named as never reproducible
+    3.12,  # the Python version, stated in the environment tables
+    1.33,  # the binomial standard error MODEL_CARD derives in prose
 }
 
 
 @pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
-    """Every fractional figure in a shipped document, not only those beside a
-    metric name. Requiring the name on the line was walked around by putting the
-    false figure on a table row that names no metric.
+def test_every_two_place_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Every decimal of two places or more, not only those beside a metric name.
 
-    This catches a fabricated or stale figure. It does not catch a real figure
-    quoted against the wrong metric: membership does not know which quantity
-    owns which number.
-    """
+    Two bounds: a figure written to one place, and a real figure quoted against
+    the wrong metric, because membership does not know which quantity owns
+    which number."""
     allowed = _artefact_floats()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
         for match in _DECIMAL.finditer(line):
-            if _HISTORICAL.search(line[: match.start()]):
+            if _is_historical(line, match.start()):
                 continue
             value = match.group(1)
             places = len(value.split(".")[1])
@@ -352,22 +365,6 @@ def test_pyproject_description_names_the_shipped_model() -> None:
         if name != shipped and name in described
     )
     assert not stale, f"pyproject description names non-shipped model(s): {stale}"
-
-
-def test_the_stated_coverage_gate_matches_ci() -> None:
-    """README stated three different gate values (65, 88, 69) at once, all
-    wrong. The CI workflow is the authority."""
-    ci = _read(".github/workflows/ci.yml")
-    gate = re.search(r"--cov-fail-under=(\d+)", ci)
-    assert gate is not None, "ci.yml no longer runs a coverage gate"
-
-    readme = _read("README.md")
-    stated_gates = set(re.findall(r"(\d+)% coverage gate", readme))
-    stated_gates |= set(re.findall(r"CI gate: (\d+)%", readme))
-    stated_cmds = set(re.findall(r"--cov-fail-under=(\d+)", readme))
-    assert stated_gates | stated_cmds <= {gate.group(1)}, (
-        f"CI gates at {gate.group(1)}%; README states {stated_gates | stated_cmds}"
-    )
 
 
 def test_every_relative_link_in_the_docs_resolves() -> None:
@@ -504,15 +501,19 @@ def _artefact_integers() -> set[int]:
 
 
 @pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_count_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+def test_every_separated_count_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
     """Row counts and money figures rot the same way fractions do, and the
     fractional scan does not see them: 4,526 could be rewritten to 9,999 with
-    the suite green."""
+    the suite green.
+
+    Comma-separated only: a bare run of four digits here is usually a year, a
+    port or a colour code, and exempting years would exempt a count written as
+    2024."""
     allowed = _artefact_integers()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
         for match in _SEPARATED_INTEGER.finditer(line):
-            if _HISTORICAL.search(line[: match.start()]):
+            if _is_historical(line, match.start()):
                 continue
             if int(match.group(0).replace(",", "")) not in allowed:
                 wrong.append(f"{doc}:{i}: {match.group(0)} is in no artefact")

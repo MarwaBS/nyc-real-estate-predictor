@@ -6,13 +6,11 @@ once sat beside it had no caller and were deleted rather than maintained."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.drift import compute_feature_stats, save_baseline
+from src.models.drift import compute_feature_stats
 
 
 @pytest.fixture

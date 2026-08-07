@@ -348,7 +348,7 @@ curl -X POST http://localhost:8000/predict \
   -d '{
     "beds": 2, "bath": 2.0, "propertysqft": 1200,
     "borough": "manhattan", "type": "condo", "zipcode": "10022",
-    "latitude": 40.758, "longitude": -73.985
+    "latitude": 40.758, "longitude": -73.9855
   }'
 ```
 
@@ -369,7 +369,7 @@ curl -X POST http://localhost:8000/predict \
 
 | Feature | Method | Notes |
 |---|---|---|
-| DIST_MANHATTAN_CENTER | Haversine to (40.758, -73.985) | hand-rolled, vectorised numpy |
+| DIST_MANHATTAN_CENTER | Haversine to (40.758, -73.9855) | hand-rolled, vectorised numpy |
 | DIST_CENTRAL_PARK | Haversine to (40.783, -73.965) | hand-rolled, vectorised numpy |
 
 H3 hex indexing and KMeans neighborhood clustering were explored during

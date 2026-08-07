@@ -64,10 +64,14 @@ def _minor_ignored() -> set[str]:
     }
 
 
+#: The four spellings pip accepts for pulling in another file.
+INCLUDE = re.compile(r"^\s*(?:-r|--requirement|-c|--constraint)[=\s]+(\S+)")
+
+
 def _requirement_files() -> list[str]:
     """Every requirements file that reaches one `pip install`, followed through
-    `-r` includes rather than listed. A literal list misses a new file the
-    moment someone adds it, and the package moved into it leaves the scan."""
+    includes rather than listed. Following only `-r` let `shap` move behind
+    `--requirement` and lose its freeze."""
     seen: list[str] = []
     stack = list(REQUIREMENTS)
     while stack:
@@ -76,10 +80,25 @@ def _requirement_files() -> list[str]:
             continue
         seen.append(name)
         for line in (REPO_ROOT / name).read_text(encoding="utf-8").splitlines():
-            include = re.match(r"^\s*-r\s+(\S+)", line)
+            include = INCLUDE.match(line)
             if include:
                 stack.append(include.group(1))
     return seen
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "-r extra.txt",
+        "--requirement extra.txt",
+        "--requirement=extra.txt",
+        "-c extra.txt",
+        "--constraint extra.txt",
+    ],
+)
+def test_every_include_spelling_pip_accepts_is_followed(line: str) -> None:
+    match = INCLUDE.match(line)
+    assert match is not None and match.group(1) == "extra.txt"
 
 
 def _managed_pins() -> list[str]:

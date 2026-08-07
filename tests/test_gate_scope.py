@@ -87,15 +87,42 @@ def _readme_pytest_command() -> str:
     return lines[0]
 
 
+def _tool_arguments(command: str, tool: str) -> list[str]:
+    return command.split(f"{tool} ", 1)[1].split()
+
+
+def _is_path(argument: str) -> bool:
+    return argument.endswith("/") or argument.endswith(".py")
+
+
 def _tool_paths(command: str, tool: str) -> set[str]:
-    arguments = command.split(f"{tool} ", 1)[1].split()
-    return {a.rstrip("/") for a in arguments if a.endswith("/") or a.endswith(".py")}
+    return {a.rstrip("/") for a in _tool_arguments(command, tool) if _is_path(a)}
 
 
 TOOL_STEPS = {
     "mypy": ("mypy type check", "typecheck"),
     "bandit": ("bandit security scan", "security"),
 }
+
+#: Every non-path token each command may carry. A path list cannot see a scope
+#: flag: `mypy --exclude 'src/models/.*'` drops the check from 34 files to 27.
+_TOOL_ARGUMENTS = {
+    "mypy": ["--ignore-missing-imports"],
+    "bandit": ["-r", "-n", "3", "-ll"],
+}
+
+
+@pytest.mark.parametrize("tool", sorted(TOOL_STEPS))
+def test_the_tool_commands_carry_no_unapproved_argument(tool: str) -> None:
+    step, target = TOOL_STEPS[tool]
+    for label, command in (
+        ("ci.yml", _ci_step_command(step)),
+        ("Makefile", _make_recipe(target)),
+    ):
+        flags = [a for a in _tool_arguments(command, tool) if not _is_path(a)]
+        assert flags == _TOOL_ARGUMENTS[tool], (
+            f"{label} runs {tool} with {flags}; approved is {_TOOL_ARGUMENTS[tool]}"
+        )
 
 
 @pytest.mark.parametrize("tool", sorted(TOOL_STEPS))
@@ -176,10 +203,15 @@ def test_omit_skips_only_the_files_it_names() -> None:
         for path in tracked
         if path.split("/")[0].removesuffix(".py") in _declared_source()
     ]
+    # coverage matches omit against the absolute path: `*/src/models/*` drops
+    # 158 statements that the repo-relative form cannot match.
     skipped = {
         path
         for path in shipped
-        if any(fnmatch(path, pattern) for pattern in config["omit"])
+        if any(
+            fnmatch(path, pattern) or fnmatch((ROOT / path).as_posix(), pattern)
+            for pattern in config["omit"]
+        )
     }
     assert skipped == set(OMITTED_BY_DESIGN), (
         f"coverage skips {sorted(skipped)}; the justified set is "
@@ -201,10 +233,38 @@ def test_every_invocation_measures_the_declared_module_set() -> None:
         )
 
 
-#: Files a runner invokes by path rather than importing. Derived, not listed:
-#: a module qualifies by carrying a __main__ guard or by being named in a
-#: workflow, Dockerfile or the Makefile.
+def test_the_stated_coverage_gate_matches_ci() -> None:
+    """The floor comes from the step's ``run:`` scalar. Read as text, a
+    `# --cov-fail-under=85` comment satisfied this while the command ran 10."""
+    gate = re.search(
+        r"--cov-fail-under=(\d+)", _ci_step_command("Run tests with coverage")
+    )
+    assert gate is not None, "ci.yml no longer runs a coverage gate"
+
+    readme = _read("README.md")
+    stated = set(re.findall(r"(\d+)% coverage gate", readme))
+    stated |= set(re.findall(r"CI gate: (\d+)%", readme))
+    stated |= set(re.findall(r"--cov-fail-under=(\d+)", readme))
+    assert stated <= {gate.group(1)}, (
+        f"CI gates at {gate.group(1)}%; README states {stated}"
+    )
+
+
+#: Files a runner invokes by path rather than importing.
 _RUNNER_FILES = (".github/workflows", "Dockerfile", "Dockerfile.streamlit", "Makefile")
+
+#: Scripts run by hand, each with the committed artefact it writes.
+ARTEFACT_PRODUCERS = {
+    "benchmarks/train_benchmark_model.py": "models/benchmark_regressor.joblib",
+    "scripts/measure_cap_factor.py": "reports/cap_factor_study.json",
+    "scripts/measure_seed_variance.py": "reports/seed_variance.json",
+}
+
+
+def test_every_producer_still_has_the_artefact_it_writes() -> None:
+    """Otherwise the exemption above outlives the reason for it."""
+    missing = [a for a in ARTEFACT_PRODUCERS.values() if not (ROOT / a).exists()]
+    assert not missing, f"producers exempted for artefacts that are gone: {missing}"
 
 
 def _runner_text() -> str:
@@ -251,10 +311,9 @@ def test_no_shipped_module_has_zero_importers() -> None:
         module = path.removesuffix(".py").replace("/", ".")
         if module.endswith("__init__"):
             continue
-        source = (ROOT / path).read_text(encoding="utf-8")
         # A runner names it either by path (`streamlit run streamlit_app/app.py`)
         # or dotted (`uvicorn api.main:app`).
-        if '__name__ == "__main__"' in source or path in runners or module in runners:
+        if path in runners or module in runners or path in ARTEFACT_PRODUCERS:
             continue
         # Tests are not importers: a module reachable only from its own test
         # file is exactly what this catches.
