@@ -428,7 +428,7 @@ MUTATIONS: list[Mutation] = [
         path=".github/workflows/ci.yml",
         old="        run: python scripts/verify_gates.py\n",
         new="",
-        gate="tests/test_gate_scope.py::test_ci_runs_the_mutation_replay",
+        gate="tests/test_gate_scope.py::test_ci_runs_the_whole_mutation_replay",
     ),
     Mutation(
         name="benchmark-runner-step-dropped",
