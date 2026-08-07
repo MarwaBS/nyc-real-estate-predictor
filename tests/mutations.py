@@ -580,6 +580,16 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
     ),
     Mutation(
+        name="training-parallelised-again",
+        # Thread count then decides the float accumulation order.
+        path="run_training.py",
+        old="            random_state=seed,\n            n_jobs=1,\n        ),\n"
+        '        "xgboost"',
+        new="            random_state=seed,\n            n_jobs=-1,\n        ),\n"
+        '        "xgboost"',
+        gate="tests/test_training_provenance.py::test_every_estimator_is_built_single_threaded",
+    ),
+    Mutation(
         name="shipped-regressor-repointed",
         # The recorded decision and the fitted artefact must not drift apart.
         path="src/config.py",

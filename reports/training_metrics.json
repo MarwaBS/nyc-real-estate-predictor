@@ -1,6 +1,6 @@
 {
-  "run_date": "2026-07-22T04:36:59.586212+00:00",
-  "commit_sha": "50b3e3345b1894ff946f90d1abc577324e807a6e",
+  "run_date": "2026-08-07T23:18:13.963250+00:00",
+  "commit_sha": "e0a8a60eb5e53327ee6d8d23137d4aec7df2b24d",
   "working_tree_clean": true,
   "provenance": {
     "python": "3.12.13",
@@ -221,8 +221,8 @@
     },
     "candidates_val": {
       "random_forest": {
-        "r2": 0.7681659041366928,
-        "rmse": 0.4418878572298988,
+        "r2": 0.7681659041366927,
+        "rmse": 0.4418878572298989,
         "mae_usd": 319657.20348909294
       },
       "xgboost": {

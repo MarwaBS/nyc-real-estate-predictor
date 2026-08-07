@@ -83,12 +83,28 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-      - name: Retrain from the committed data, then re-check every shipped claim
-        # Model bytes are not portable: a pandas quantile moved one ulp here.
-        # The docs claim the reported numbers reproduce, so that is what runs.
+      - name: Train twice, require identical models and the published headline
+        # Two runs on one runner must agree byte for byte. Under n_jobs=1 this
+        # runner also reproduces the committed headline to 0.0000, but the
+        # comparison keeps a 0.01 tolerance so a library bump that moves a float
+        # does not fail; that is a third of one seed's spread (seed_variance).
         run: |
+          cp reports/training_metrics.json committed_metrics.json
           python run_training.py
-          pytest tests/ -q --no-header
+          cp -r models models_first_run
+          python run_training.py
+          diff -r models_first_run models
+          python - <<'PY'
+          import json
+          old = json.load(open("committed_metrics.json"))["regression"]
+          new = json.load(open("reports/training_metrics.json"))["regression"]
+          assert new["selected_model"] == old["selected_model"], (
+              f'shipped {new["selected_model"]}, committed {old["selected_model"]}'
+          )
+          drift = abs(new["metrics"]["r2"] - old["metrics"]["r2"])
+          assert drift <= 0.01, f'test R2 moved {drift:.4f}'
+          print(f'{new["selected_model"]} reproduced, test R2 within {drift:.4f}')
+          PY
 
   security:
     runs-on: ubuntu-latest

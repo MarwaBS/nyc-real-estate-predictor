@@ -10,6 +10,7 @@ is not evidence, it is decoration.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -21,7 +22,27 @@ import pytest
 
 import run_training
 
-ARTEFACT = Path(__file__).resolve().parents[1] / "reports" / "training_metrics.json"
+ROOT = Path(__file__).resolve().parents[1]
+ARTEFACT = ROOT / "reports" / "training_metrics.json"
+
+
+def test_every_estimator_is_built_single_threaded() -> None:
+    """With n_jobs=-1 the thread count decides the order the float sums
+    accumulate. Two Linux runs of one commit scored val R2 0.7740 and 0.7719,
+    and the lower one shipped a different candidate."""
+    tree = ast.parse((ROOT / "run_training.py").read_text(encoding="utf-8"))
+    threads = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.keyword) and node.arg == "n_jobs"
+    ]
+    assert threads, "no n_jobs argument left; the estimators moved"
+    parallel = [
+        ast.unparse(value)
+        for value in threads
+        if not (isinstance(value, ast.Constant) and value.value == 1)
+    ]
+    assert not parallel, f"estimators built with a thread count of {parallel}"
 
 
 @pytest.fixture(scope="module")
