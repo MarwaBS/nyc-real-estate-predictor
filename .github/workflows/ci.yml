@@ -84,10 +84,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Train twice, require identical models and the published headline
-        # Two runs on one runner must agree byte for byte. Across machines they
-        # do not: this runner scored test R2 0.8343 against the committed
-        # 0.8351, so the headline is compared with a tolerance of 0.01, which is
-        # ten times that gap and a third of one seed's spread (seed_variance).
+        # Two runs on one runner must agree byte for byte. Under n_jobs=1 this
+        # runner also reproduces the committed headline to 0.0000, but the
+        # comparison keeps a 0.01 tolerance so a library bump that moves a float
+        # does not fail; that is a third of one seed's spread (seed_variance).
         run: |
           cp reports/training_metrics.json committed_metrics.json
           python run_training.py
