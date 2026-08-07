@@ -424,10 +424,18 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         name="gate-replay-step-dropped-from-ci",
-        # Nothing then runs the mutation replay, and verify_gates.py is left with
-        # no importer and no runner. A __main__ guard used to excuse that.
+        # CI then proves the code passes its tests and nothing else.
         path=".github/workflows/ci.yml",
         old="        run: python scripts/verify_gates.py\n",
+        new="",
+        gate="tests/test_gate_scope.py::test_ci_runs_the_mutation_replay",
+    ),
+    Mutation(
+        name="benchmark-runner-step-dropped",
+        # Leaves run_benchmark.py with no runner and no importer. A __main__
+        # guard used to excuse that on its own.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
         new="",
         gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),

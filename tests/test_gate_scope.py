@@ -250,6 +250,19 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
     )
 
 
+def test_ci_runs_the_mutation_replay() -> None:
+    """Without it CI proves the code passes its tests, not that they can fail."""
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    runs = [
+        step.get("run", "")
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+    ]
+    assert any("scripts/verify_gates.py" in run for run in runs), (
+        "ci.yml no longer runs the mutation replay"
+    )
+
+
 #: Files a runner invokes by path rather than importing.
 _RUNNER_FILES = (".github/workflows", "Dockerfile", "Dockerfile.streamlit", "Makefile")
 
