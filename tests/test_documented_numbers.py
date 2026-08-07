@@ -267,6 +267,12 @@ def _artefact_floats() -> set[float]:
     }
     # The Haversine anchors, from the constants the features are built from.
     values |= {abs(c) for anchor in (MANHATTAN_CENTER, CENTRAL_PARK) for c in anchor}
+    # The val margin the shipped-regressor decision turns on.
+    ranked = sorted(
+        (c["r2"] for c in METRICS["regression"]["candidates_val"].values()),
+        reverse=True,
+    )
+    values.add(round(ranked[0] - ranked[1], 4))
     values |= {
         figure
         for key, figure in CAP_STUDY.items()
@@ -296,6 +302,7 @@ _UNGATED_FIGURES = {
     78.5,  # SUBLOCALITY's own share of the borough derivation chain
     47.0,  # LOCALITY's own share of the same chain
     99.2,  # the chain's combined resolution rate
+    0.8154,  # test R2 from the Linux run that shipped the other candidate
 }
 
 

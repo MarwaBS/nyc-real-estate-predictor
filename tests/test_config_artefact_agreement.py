@@ -23,6 +23,7 @@ from src.config import (
     ONEHOT_FEATURES,
     PRICE_ZONE_BINS,
     RANDOM_SEED,
+    SHIPPED_REGRESSOR,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
     VAL_SIZE,
@@ -33,6 +34,15 @@ METRICS = json.loads(
         Path(__file__).resolve().parents[1] / "reports" / "training_metrics.json"
     ).read_text(encoding="utf-8")
 )
+
+
+def test_the_artefact_ships_the_regressor_config_records() -> None:
+    """Picking the best val R2 per run made the choice platform-dependent: on
+    val, xgboost leads lightgbm by 0.0029 and a Linux runner picked lightgbm."""
+    assert METRICS["regression"]["selected_model"] == SHIPPED_REGRESSOR
+    assert SHIPPED_REGRESSOR in METRICS["regression"]["candidates_val"], (
+        f"{SHIPPED_REGRESSOR} was never scored against the other candidates"
+    )
 
 
 def test_zone_cut_points_match_the_ones_the_model_was_trained_with() -> None:

@@ -242,8 +242,8 @@ def test_coverage_measures_every_shipped_module() -> None:
 
 def test_coverage_excludes_only_the_three_justified_lines() -> None:
     """`exclude_lines` sits above `source` and `omit`, and no gate watched it.
-    Adding "def ", "return" and "if " takes 997 measurable statements to 259
-    and the reported percentage from 89.77% to 99%. The justified set is
+    Adding "def ", "return" and "if " takes 997 measurable statements to 260
+    and the reported percentage from 89.67% to 99%. The justified set is
     closed, so widening it is a visible edit here."""
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["report"]
     assert set(config["exclude_lines"]) == {

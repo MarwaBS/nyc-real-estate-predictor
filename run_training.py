@@ -41,6 +41,7 @@ from src.config import (
     ONEHOT_FEATURES,
     PRICE_ZONE_LABELS,
     RANDOM_SEED,
+    SHIPPED_REGRESSOR,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
     VAL_SIZE,
@@ -323,11 +324,12 @@ def train_regression(
         ),
     }
 
-    best_r2 = -999.0
-    best_name = ""
+    best_name = SHIPPED_REGRESSOR
     best_pipeline = None
     best_val_metrics: dict[str, Any] = {}
     candidates: dict[str, Any] = {}
+    if best_name not in models:
+        raise ValueError(f"{best_name} is not one of the candidates {sorted(models)}")
 
     for name, model in models.items():
         logger.info("--- Training %s regressor ---", name)
@@ -371,9 +373,7 @@ def train_regression(
                 )
                 mlflow.sklearn.log_model(pipeline, f"model_{name}")
 
-        if metrics["r2"] > best_r2:
-            best_r2 = metrics["r2"]
-            best_name = name
+        if name == best_name:
             best_pipeline = pipeline
             best_val_metrics = metrics
 
@@ -386,7 +386,7 @@ def train_regression(
         logger.info(
             "SELECTED %s: val R2=%.4f, test R2=%.4f",
             best_name,
-            best_r2,
+            best_val_metrics["r2"],
             best_metrics["r2"],
         )
         if save_path is not None:

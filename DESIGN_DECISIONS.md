@@ -56,6 +56,15 @@ The system predicts price with a single regressor over `LOG_PRICE`, and the
 
 ## Hyperparameters, derived, not tuned by feel
 
+- **The shipped regressor is recorded, not re-picked each run.** Training used
+  to keep whichever candidate scored best on val. On val xgboost leads lightgbm
+  by 0.0029 R², and that margin is smaller than the gap between two machines: a
+  Linux runner retrained the same seed and shipped lightgbm, with test R² 0.8154
+  instead of 0.8351 and a different SHAP table. So the choice is now
+  `SHIPPED_REGRESSOR` in [`src/config.py`](src/config.py), justified by
+  [`reports/seed_variance.json`](reports/seed_variance.json): over 20 seeds
+  xgboost wins 16, random forest 3, lightgbm 1. Every candidate is still trained
+  and its val score recorded; only the decision is fixed.
 - **IQR cap factor = 3.0.** A measured trade-off, re-derivable with
   [`scripts/measure_cap_factor.py`](scripts/measure_cap_factor.py): on held-out
   val over a common support, factor 1.5 scores marginally better on MAE but

@@ -36,6 +36,13 @@ TEST_SIZE: float = 0.2
 # the already-chosen model.
 VAL_SIZE: float = 0.2
 
+# The regressor that ships, recorded rather than re-picked each run. On val
+# xgboost leads lightgbm by 0.0029 R2, which is smaller than the difference
+# between two machines: a Linux runner retrained the same seed and selected
+# lightgbm. reports/seed_variance.json is the basis for the choice, xgboost
+# winning 16 of 20 seeds against random_forest 3 and lightgbm 1.
+SHIPPED_REGRESSOR: str = "xgboost"
+
 # Price zone thresholds (USD): equal-frequency quartiles of the TRAIN split's
 # capped prices from the shipped run (run_training.build_splits), so serving
 # buckets exactly the way training labelled.

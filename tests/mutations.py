@@ -580,6 +580,14 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
     ),
     Mutation(
+        name="shipped-regressor-repointed",
+        # The recorded decision and the fitted artefact must not drift apart.
+        path="src/config.py",
+        old='SHIPPED_REGRESSOR: str = "xgboost"',
+        new='SHIPPED_REGRESSOR: str = "lightgbm"',
+        gate="tests/test_config_artefact_agreement.py",
+    ),
+    Mutation(
         name="readme-tree-drops-a-ci-job",
         path="README.md",
         old="5-job CI: lint + test + reproducibility",
