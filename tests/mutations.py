@@ -439,4 +439,86 @@ MUTATIONS: list[Mutation] = [
         new="",
         gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),
+    Mutation(
+        name="coverage-floor-set-twice",
+        # pytest honours the last flag, a reader the first.
+        path=".github/workflows/ci.yml",
+        old="--cov-report=xml --cov-fail-under=85",
+        new="--cov-report=xml --cov-fail-under=85 --cov-fail-under=10",
+        gate="tests/test_gate_scope.py::test_the_stated_coverage_gate_matches_ci",
+    ),
+    Mutation(
+        name="mypy-scope-excluded-in-config",
+        # Narrows the check to 27 files with no command-line token to see.
+        path="pyproject.toml",
+        old='[tool.mypy]\npython_version = "3.12"',
+        new='[tool.mypy]\nexclude = ["src/models/.*"]\npython_version = "3.12"',
+        gate="tests/test_gate_scope.py::test_the_mypy_config_narrows_nothing",
+    ),
+    Mutation(
+        name="mypy-errors-silenced-over-shipped-code",
+        # Still reports 34 files checked, and finds nothing in any of them.
+        path="pyproject.toml",
+        old='[[tool.mypy.overrides]]\nmodule = ["tests.*", "notebooks.*"]',
+        new=(
+            "[[tool.mypy.overrides]]\n"
+            'module = ["src.*"]\n'
+            "ignore_errors = true\n\n"
+            "[[tool.mypy.overrides]]\n"
+            'module = ["tests.*", "notebooks.*"]'
+        ),
+        gate="tests/test_gate_scope.py::test_the_mypy_config_narrows_nothing",
+    ),
+    Mutation(
+        name="coverage-omit-written-as-a-relative-path",
+        # coverage makes this absolute; neither plain form matches it.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "./src/models/*",\n    "tests/*",',
+        gate="tests/test_gate_scope.py::test_omit_skips_only_the_files_it_names",
+    ),
+    Mutation(
+        name="benchmark-runner-step-commented-out",
+        # The module name survives in the comment, so raw text still found it.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        # run: python -m benchmarks.run_benchmark\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="replay-narrowed-and-its-exit-code-swallowed",
+        path=".github/workflows/ci.yml",
+        old="        run: python scripts/verify_gates.py\n",
+        new=(
+            "        run: python scripts/verify_gates.py "
+            "--name conformal-correction-removed || true\n"
+        ),
+        gate="tests/test_gate_scope.py::test_ci_runs_the_whole_mutation_replay",
+    ),
+    Mutation(
+        name="false-figure-behind-a-comma-joined-clause",
+        # The marker sits one comma-clause left of the figure.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new=(
+            "R² = 0.835 on the 20% test split, unlike the earlier ensemble, "
+            "which reached 0.9997"
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="one-place-percentage-rewritten",
+        # Below the two-place floor the fractional scan used to start at.
+        path="MODEL_CARD.md",
+        old="99.2% chained",
+        new="11.1% chained",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="readme-undercounts-the-ci-jobs",
+        path="README.md",
+        old="CI runs 5 jobs:",
+        new="CI runs 4 jobs:",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
 ]

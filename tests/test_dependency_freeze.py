@@ -64,8 +64,9 @@ def _minor_ignored() -> set[str]:
     }
 
 
-#: The four spellings pip accepts for pulling in another file.
-INCLUDE = re.compile(r"^\s*(?:-r|--requirement|-c|--constraint)[=\s]+(\S+)")
+#: Pulling in another file: the long forms take = or space, the short forms
+#: also take the filename attached (`-rextra.txt`, which pip does accept).
+INCLUDE = re.compile(r"^\s*(?:(?:--requirement|--constraint)[=\s]+|[-][rc]\s*)(\S+)")
 
 
 def _requirement_files() -> list[str]:
@@ -90,13 +91,17 @@ def _requirement_files() -> list[str]:
     "line",
     [
         "-r extra.txt",
+        "-rextra.txt",
         "--requirement extra.txt",
         "--requirement=extra.txt",
         "-c extra.txt",
+        "-cextra.txt",
         "--constraint extra.txt",
+        "--constraint=extra.txt",
     ],
 )
-def test_every_include_spelling_pip_accepts_is_followed(line: str) -> None:
+def test_the_include_spellings_are_followed(line: str) -> None:
+    """Each was checked against `pip install --dry-run` before being listed."""
     match = INCLUDE.match(line)
     assert match is not None and match.group(1) == "extra.txt"
 

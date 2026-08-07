@@ -78,7 +78,7 @@ def test_documents_name_the_regressor_that_actually_shipped() -> None:
 def test_documents_quote_the_shipped_interval_coverage() -> None:
     coverage = METRICS["regression"]["price_interval"]["coverage_test"]
     as_pct = f"{coverage * 100:.1f}%"
-    for doc in ("MODEL_CARD.md", "deploy/huggingface/README.md"):
+    for doc in ("MODEL_CARD.md", "DESIGN_DECISIONS.md", "deploy/huggingface/README.md"):
         assert as_pct in _read(doc), f"{doc} does not quote coverage {as_pct}"
 
 
@@ -118,14 +118,17 @@ _HISTORICAL = re.compile(
     re.IGNORECASE,
 )
 
-# Sentence end or table cell wall.
-_CLAUSE_BREAK = re.compile(r"(?<=[.;:])\s|\|")
+# Figures break on commas too: without that, one "earlier" exempted a whole
+# comma-joined sentence. Component names do not, because "there is no X, no Y
+# and no Z" is one claim governed by a single marker.
+_FIGURE_BREAK = re.compile(r"(?<=[.;:,])\s|\|")
+_SENTENCE_BREAK = re.compile(r"(?<=[.;:])\s|\|")
 
 
-def _is_historical(line: str, start: int) -> bool:
-    """Whether the claim at ``start`` sits in a clause marked historical. That
-    clause alone: a whole-line filter exempted every other claim beside it."""
-    edges = [0] + [m.end() for m in _CLAUSE_BREAK.finditer(line)] + [len(line)]
+def _is_historical(line: str, start: int, breaks: re.Pattern = _FIGURE_BREAK) -> bool:
+    """Whether the claim at ``start`` sits in a span marked historical. That
+    span alone: a whole-line filter exempted every other claim beside it."""
+    edges = [0] + [m.end() for m in breaks.finditer(line)] + [len(line)]
     for begin, end in zip(edges, edges[1:], strict=False):
         if begin <= start < end:
             return bool(_HISTORICAL.search(line[begin:end]))
@@ -196,7 +199,7 @@ def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
         f"{doc}:{i}: {name}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
         for name in DELETED_COMPONENTS
-        if name in line and not _is_historical(line, line.index(name))
+        if name in line and not _is_historical(line, line.index(name), _SENTENCE_BREAK)
     ]
     assert not offenders, "live docs name deleted components:\n" + "\n".join(offenders)
 
@@ -224,9 +227,8 @@ def _study_values() -> set[float]:
     return values
 
 
-#: Any decimal of two places or more. Matching only `0.` left the served
-#: multiplier 1.457 unscanned. The trailing guard drops versions (`1.26.4`).
-_DECIMAL = re.compile(r"(?<![\d.])(\d+\.\d{2,})(?!\.?\d)")
+#: Any decimal figure. The trailing guard drops versions (`1.26.4`).
+_DECIMAL = re.compile(r"(?<![\d.])(\d+\.\d+)(?!\.?\d)")
 
 
 def _artefact_floats() -> set[float]:
@@ -255,6 +257,11 @@ def _artefact_floats() -> set[float]:
     values |= {row["val_r2_common"] for row in CAP_STUDY["rows"]}
     values |= {row["pct_at_cap"] for row in CAP_STUDY["rows"]}
     values.add(BENCH["leakage_tripwire"]["threshold"])
+    # The interval coverages are published as percentages.
+    values |= {
+        round(METRICS["regression"]["price_interval"][key] * 100, 1)
+        for key in ("coverage_test", "coverage_val")
+    }
     # The Haversine anchors, from the constants the features are built from.
     values |= {abs(c) for anchor in (MANHATTAN_CENTER, CENTRAL_PARK) for c in anchor}
     values |= {
@@ -283,16 +290,21 @@ _UNGATED_FIGURES = {
     0.375,  # the superseded benchmark score, named as never reproducible
     3.12,  # the Python version, stated in the environment tables
     1.33,  # the binomial standard error MODEL_CARD derives in prose
+    78.5,  # SUBLOCALITY's share of the borough derivation chain
+    47.0,  # the same chain's third step, on what the first two left
+    99.2,  # the chain's combined resolution rate
+    1.5,  # the cap study's MAE gain as a share of the MAE
 }
 
 
 @pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_two_place_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
-    """Every decimal of two places or more, not only those beside a metric name.
+def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Every decimal of two places or more, plus one-place percentages.
 
-    Two bounds: a figure written to one place, and a real figure quoted against
-    the wrong metric, because membership does not know which quantity owns
-    which number."""
+    One bound: a real figure quoted against the wrong metric, because
+    membership does not know which quantity owns which number. One-place
+    values that are not percentages are the docs' MB sizes and "2.1 points
+    below", so they are not claims this can judge."""
     allowed = _artefact_floats()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
@@ -301,6 +313,8 @@ def test_every_two_place_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> N
                 continue
             value = match.group(1)
             places = len(value.split(".")[1])
+            if places < 2 and not line[match.end() :].startswith("%"):
+                continue
             # Compared at the precision the document chose, so a figure written
             # to more places than the artefact carries is still checked.
             if float(value) not in {round(v, places) for v in allowed}:

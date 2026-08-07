@@ -143,6 +143,29 @@ def test_type_and_security_checks_cover_every_tracked_module(tool: str) -> None:
         )
 
 
+#: Every setting [tool.mypy] may carry, and the only module patterns an
+#: override may name. `exclude` there narrows the check with no command-line
+#: token to see, and `ignore_errors` silences it while still reporting 34 files.
+_MYPY_SETTINGS = {
+    "python_version",
+    "ignore_missing_imports",
+    "disallow_untyped_defs",
+    "warn_return_any",
+}
+_MYPY_OVERRIDABLE = {"tests.*", "notebooks.*"}
+
+
+def test_the_mypy_config_narrows_nothing() -> None:
+    config = tomllib.loads(_read("pyproject.toml"))["tool"]["mypy"]
+    overrides = config.pop("overrides", [])
+    assert set(config) == _MYPY_SETTINGS, f"[tool.mypy] carries {sorted(config)}"
+    for override in overrides:
+        assert set(override["module"]) <= _MYPY_OVERRIDABLE, (
+            f"a mypy override reaches shipped code: {override['module']}"
+        )
+        assert "ignore_errors" not in override, "a mypy override silences errors"
+
+
 def _declared_source() -> set[str]:
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["run"]
     return {entry.removesuffix(".py") for entry in config["source"]}
@@ -185,6 +208,27 @@ OMITTED_BY_DESIGN = {
 }
 
 
+def _omits(pattern: str, path: str) -> bool:
+    """Whether coverage's omit ``pattern`` would skip repo-relative ``path``.
+
+    coverage makes a pattern absolute unless it opens with a wildcard, so
+    `./src/models/*` matches there while matching neither plain form here."""
+    if not pattern.startswith(("*", "?")):
+        pattern = (ROOT / pattern).as_posix()
+    return fnmatch(path, pattern) or fnmatch((ROOT / path).as_posix(), pattern)
+
+
+#: The other files coverage would read instead of pyproject.toml.
+_COMPETING_COVERAGE_CONFIG = (".coveragerc", "tox.ini", "setup.cfg")
+
+
+def test_pyproject_is_the_only_coverage_config() -> None:
+    """`.coveragerc` replaces the pyproject section wholesale, so every gate
+    below would be reading settings that no longer apply."""
+    present = [n for n in _COMPETING_COVERAGE_CONFIG if (ROOT / n).exists()]
+    assert not present, f"coverage would read these before pyproject.toml: {present}"
+
+
 def test_omit_skips_only_the_files_it_names() -> None:
     """`omit` is the other half of the same knob and the only one of the four
     that was not pinned to a set. Requiring one measurable file per module left
@@ -203,15 +247,10 @@ def test_omit_skips_only_the_files_it_names() -> None:
         for path in tracked
         if path.split("/")[0].removesuffix(".py") in _declared_source()
     ]
-    # coverage matches omit against the absolute path: `*/src/models/*` drops
-    # 158 statements that the repo-relative form cannot match.
     skipped = {
         path
         for path in shipped
-        if any(
-            fnmatch(path, pattern) or fnmatch((ROOT / path).as_posix(), pattern)
-            for pattern in config["omit"]
-        )
+        if any(_omits(pattern, path) for pattern in config["omit"])
     }
     assert skipped == set(OMITTED_BY_DESIGN), (
         f"coverage skips {sorted(skipped)}; the justified set is "
@@ -235,32 +274,44 @@ def test_every_invocation_measures_the_declared_module_set() -> None:
 
 def test_the_stated_coverage_gate_matches_ci() -> None:
     """The floor comes from the step's ``run:`` scalar. Read as text, a
-    `# --cov-fail-under=85` comment satisfied this while the command ran 10."""
-    gate = re.search(
+    `# --cov-fail-under=85` comment satisfied this while the command ran 10.
+    Exactly one flag, because pytest honours the last and a reader the first."""
+    floors = re.findall(
         r"--cov-fail-under=(\d+)", _ci_step_command("Run tests with coverage")
     )
-    assert gate is not None, "ci.yml no longer runs a coverage gate"
+    assert len(floors) == 1, f"ci.yml sets the coverage floor {len(floors)} times"
 
     readme = _read("README.md")
     stated = set(re.findall(r"(\d+)% coverage gate", readme))
     stated |= set(re.findall(r"CI gate: (\d+)%", readme))
     stated |= set(re.findall(r"--cov-fail-under=(\d+)", readme))
-    assert stated <= {gate.group(1)}, (
-        f"CI gates at {gate.group(1)}%; README states {stated}"
-    )
+    assert stated <= set(floors), f"CI gates at {floors[0]}%; README states {stated}"
 
 
-def test_ci_runs_the_mutation_replay() -> None:
-    """Without it CI proves the code passes its tests, not that they can fail."""
+def test_ci_runs_the_whole_mutation_replay() -> None:
+    """The exact command. A substring check accepted `--name one-mutation` and
+    a trailing `|| true`, which replays 1 of 48 and swallows the exit code."""
     workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
     runs = [
-        step.get("run", "")
+        step.get("run", "").strip()
         for job in workflow["jobs"].values()
         for step in job.get("steps", [])
     ]
-    assert any("scripts/verify_gates.py" in run for run in runs), (
-        "ci.yml no longer runs the mutation replay"
+    assert "python scripts/verify_gates.py" in runs, (
+        "no ci.yml step runs the full replay; steps are " + repr(runs)
     )
+
+
+def test_readme_names_every_ci_job() -> None:
+    """It said 4 jobs and listed 4, omitting `reproducibility` entirely."""
+    jobs = list(yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"])
+    sentence = re.search(r"CI runs (\d+) jobs:([^\n]*)", _read("README.md"))
+    assert sentence is not None, "README no longer describes the CI jobs"
+    assert int(sentence.group(1)) == len(jobs), (
+        f"README says {sentence.group(1)} jobs; ci.yml defines {len(jobs)}"
+    )
+    unnamed = [job for job in jobs if f"`{job}`" not in sentence.group(2)]
+    assert not unnamed, f"README does not name these CI jobs: {unnamed}"
 
 
 #: Files a runner invokes by path rather than importing.
@@ -281,13 +332,19 @@ def test_every_producer_still_has_the_artefact_it_writes() -> None:
 
 
 def _runner_text() -> str:
+    """What the runners actually execute, comments stripped. Read as raw text,
+    a `# see src/models/drift.py` line kept an orphan module looking alive."""
     parts = []
     for name in _RUNNER_FILES:
         path = ROOT / name
-        if path.is_dir():
-            parts += [f.read_text(encoding="utf-8") for f in path.glob("*.yml")]
-        elif path.exists():
-            parts.append(path.read_text(encoding="utf-8"))
+        files = sorted(path.glob("*.yml")) if path.is_dir() else [path]
+        for file in files:
+            if not file.exists():
+                continue
+            parts += [
+                line.split("#", 1)[0]
+                for line in file.read_text(encoding="utf-8").splitlines()
+            ]
     return "\n".join(parts)
 
 
