@@ -281,7 +281,7 @@ MUTATIONS: list[Mutation] = [
         path=".github/workflows/ci.yml",
         old=" --cov=streamlit_app",
         new="",
-        gate="tests/test_documented_numbers.py",
+        gate="tests/test_gate_scope.py",
     ),
     Mutation(
         name="tree-state-resampled-for-the-writer",
@@ -318,14 +318,14 @@ MUTATIONS: list[Mutation] = [
         path="pyproject.toml",
         old='omit = [\n    "tests/*",',
         new='omit = [\n    "streamlit_app/*",\n    "tests/*",',
-        gate="tests/test_documented_numbers.py",
+        gate="tests/test_gate_scope.py",
     ),
     Mutation(
         name="type-check-scope-narrowed",
         path=".github/workflows/ci.yml",
         old=" streamlit_app/ scripts/ run_training.py --ignore-missing-imports",
         new=" run_training.py --ignore-missing-imports",
-        gate="tests/test_documented_numbers.py",
+        gate="tests/test_gate_scope.py",
     ),
     Mutation(
         name="cap-study-figure-rots",
@@ -341,7 +341,7 @@ MUTATIONS: list[Mutation] = [
         path="run_training.py",
         old="    from src.models.drift import save_baseline\n",
         new="",
-        gate="tests/test_documented_numbers.py::test_no_shipped_module_has_zero_importers",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),
     Mutation(
         name="coverage-exclude-lines-widened",
@@ -350,7 +350,7 @@ MUTATIONS: list[Mutation] = [
         path="pyproject.toml",
         old='exclude_lines = [\n    "pragma: no cover",',
         new='exclude_lines = [\n    "def ",\n    "pragma: no cover",',
-        gate="tests/test_documented_numbers.py::test_coverage_excludes_only_the_three_justified_lines",
+        gate="tests/test_gate_scope.py::test_coverage_excludes_only_the_three_justified_lines",
     ),
     Mutation(
         name="doc-link-points-at-nothing",

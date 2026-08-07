@@ -6,11 +6,6 @@ requires-python = ">=3.12"
 
 [tool.ruff]
 target-version = "py312"
-# Anchored to the repo root with a leading slash. Bare names match at ANY
-# depth, so "models" and "data" also excluded src/models/ and src/data/ --
-# eleven modules including cleaner.py, predict.py and pipelines.py were
-# invisible to `ruff check .`, hiding 17 errors behind a green lint job.
-exclude = ["/mlruns", "/models", "/data", "/output", "/Resources"]
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "N", "UP", "B", "SIM"]
