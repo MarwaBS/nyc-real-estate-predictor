@@ -1,4 +1,4 @@
-# SCHEMA_MAP.md — NYC.gov Rolling Sales 2024 → Model Feature Contract
+# SCHEMA_MAP.md, NYC.gov Rolling Sales 2024 → Model Feature Contract
 
 **Version:** v4
 **Status:** Active
@@ -8,25 +8,25 @@ between NYC.gov Rolling Sales 2024 and the feature space used by the
 **not** govern training data or the flagship model.
 
 > **v3 rationale.** Three changes over v2, all defensive: (1) a blank
-> `SALE PRICE` (NaN) is now dropped explicitly and FIRST — NaN compares
+> `SALE PRICE` (NaN) is now dropped explicitly and FIRST, NaN compares
 > False against every numeric threshold, so v2 let blank-price rows
 > survive the price filters and produce a `log1p(NaN)` target; (2)
 > `YEAR BUILT` missing (NaN) is dropped alongside `= 0`, with its role
 > made explicit (record-quality filter, not a feature); (3) the §4 table
-> now lists EVERY rule the drop engine enforces, in priority order — v2's
+> now lists EVERY rule the drop engine enforces, in priority order, v2's
 > table omitted the `invalid_borough` and `missing_zip` rules that the
 > reference implementation applied. Feature mapping is unchanged.
 >
 > **v2 rationale.** The flagship model uses listing features (`BEDS`, `BATH`,
 > coordinate-derived distances, `SUBLOCALITY`) that NYC.gov transaction records
 > simply do not contain, so it cannot be validated externally. v2 introduces a
-> lean model trained only on the three features both datasets genuinely share —
-> **borough, property square footage, ZIP** — so the benchmark scores real,
-> unseen NYC.gov 2024 sales. Scope is narrowed to **1–3 family dwellings**: for
+> lean model trained only on the three features both datasets genuinely share -
+> **borough, property square footage, ZIP**, so the benchmark scores real,
+> unseen NYC.gov 2024 sales. Scope is narrowed to **1-3 family dwellings**: for
 > condos/coops NYC.gov reports the *building's* gross square footage, not the
 > unit's, which is not comparable to the per-unit Kaggle `PROPERTYSQFT`.
-> (v1 filtered on a `BUILDING CLASS CATEGORY` `R`-prefix that matched nothing —
-> NYC categories start with a digit — so every row was dropped and the model's
+> (v1 filtered on a `BUILDING CLASS CATEGORY` `R`-prefix that matched nothing -
+> NYC categories start with a digit, so every row was dropped and the model's
 > features never matched the data. v2 fixes both.)
 
 ---
@@ -112,27 +112,27 @@ Enforcement: `benchmarks/invariants.py::check_no_forbidden_columns` plus
 
 Rows are dropped **only** for structural validity. No filter may depend on
 the target distribution. The table below is EXHAUSTIVE and in priority
-order — each dropped row is assigned the first matching reason, and the
+order, each dropped row is assigned the first matching reason, and the
 reference implementation (`benchmarks/mapping.py::_run_drop_engine`)
 enforces exactly these rules in exactly this order:
 
 | # | Condition                                              | Drop reason (results.json key) |
 |---|--------------------------------------------------------|--------------------------------|
-| 1 | `SALE PRICE` is blank/NaN                              | `missing_sale_price` — a blank price would otherwise survive every numeric threshold (NaN compares False) and poison the log-target |
-| 2 | `SALE PRICE` ≤ 0                                       | `sale_price_non_positive` — invalid / non-arms-length |
-| 3 | `SALE PRICE` < 10,000 or > 100,000,000                 | `sale_price_out_of_range` — outlier / commercial artefact |
-| 4 | `GROSS SQUARE FEET` is NaN or ≤ 0                      | `missing_gross_sqft` — missing structural feature |
-| 5 | `YEAR BUILT` is NaN or = 0                             | `missing_year_built` — record-quality filter: not a model feature, but a sale row with no build year is a low-confidence record |
-| 6 | `BOROUGH` not in {1..5}                                | `invalid_borough` — unmappable to a borough name |
-| 7 | `ZIP CODE` is NaN or ≤ 0                               | `missing_zip` — missing structural feature |
-| 8 | `BUILDING CLASS CATEGORY` is not a 1–3 family dwelling | `not_family_dwelling` — out of scope (condos/coops/commercial — see v2 rationale) |
+| 1 | `SALE PRICE` is blank/NaN                              | `missing_sale_price`, a blank price would otherwise survive every numeric threshold (NaN compares False) and poison the log-target |
+| 2 | `SALE PRICE` ≤ 0                                       | `sale_price_non_positive`, invalid / non-arms-length |
+| 3 | `SALE PRICE` < 10,000 or > 100,000,000                 | `sale_price_out_of_range`, outlier / commercial artefact |
+| 4 | `GROSS SQUARE FEET` is NaN or ≤ 0                      | `missing_gross_sqft`, missing structural feature |
+| 5 | `YEAR BUILT` is NaN or = 0                             | `missing_year_built`, record-quality filter: not a model feature, but a sale row with no build year is a low-confidence record |
+| 6 | `BOROUGH` not in {1..5}                                | `invalid_borough`, unmappable to a borough name |
+| 7 | `ZIP CODE` is NaN or ≤ 0                               | `missing_zip`, missing structural feature |
+| 8 | `BUILDING CLASS CATEGORY` is not a 1-3 family dwelling | `not_family_dwelling`, out of scope (condos/coops/commercial, see v2 rationale) |
 
 All dropped rows must be counted per reason and logged in
 `benchmarks/results.json → drop_reasons`; the orchestrator hard-fails if
 `sum(drop_reasons) != n_dropped` or if any retained row carries a
 non-finite log-price target.
 
-No filtering may depend on feature–target correlation or on a target
+No filtering may depend on feature-target correlation or on a target
 percentile.
 
 ---
@@ -201,7 +201,7 @@ match `benchmarks/run_benchmark.py` exactly):
 - `commit_sha`
 - `schema_map_version`
 - `schema_map_sha256` (LF-normalised; verified against the registry BEFORE
-  the run starts — a mismatch aborts the run, it is never recorded as data)
+  the run starts, a mismatch aborts the run, it is never recorded as data)
 - `data_source` (URL) + `data_manifest` (per-file source URL + SHA-256)
 - `n_raw`, `n_dropped`, `n_scored`
 - `drop_reasons` (dict; keys = §4 reasons; values = counts; must sum to
@@ -210,7 +210,7 @@ match `benchmarks/run_benchmark.py` exactly):
 - `leakage` (per-detector triggered/message)
 - `inference` (status + feature reconciliation)
 - `health_checks` (pass/fail per check)
-- `performance` (`r2_log_space`, `n_scored` — the regression-only v2+
+- `performance` (`r2_log_space`, `n_scored`, the regression-only v2+
   contract; there is no classifier in the lean benchmark, hence no F1)
 - `leakage_tripwire` (threshold + triggered bool)
 - `reproducibility` (what enforces it; no cross-architecture claim)
@@ -245,7 +245,7 @@ Any change to this file requires:
 
 Enforced twice: by `test_schema_map_sha_matches_registered_version` in CI, and at
 RUN TIME by `benchmarks.invariants.verify_schema_map_lock`, which the
-orchestrator calls before downloading anything — a benchmark cannot
+orchestrator calls before downloading anything, a benchmark cannot
 execute, locally or in CI, against a contract whose hash is not sealed
 in the registry. Edits are caught mechanically:
 `test_schema_map_sha_matches_registered_version` fails on any change that

@@ -7,7 +7,7 @@ held, which were stressed, and what the run taught about system limits.
 
 ---
 
-## 2026-04-20 — Run 1 (SCHEMA_MAP v1, sealed SHA-256 `a4135469…4314d`)
+## 2026-04-20, Run 1 (SCHEMA_MAP v1, sealed SHA-256 `a4135469…4314d`)
 
 ### Observed metrics (raw)
 
@@ -19,7 +19,7 @@ held, which were stressed, and what the run taught about system limits.
 | Name-based leakage    | not triggered |
 | Semantic leakage      | not triggered |
 | Leakage tripwire      | not triggered |
-| Model inference       | failed — schema mismatch |
+| Model inference       | failed, schema mismatch |
 | R² / F1               | unobservable |
 
 Drop-reason breakdown:
@@ -49,7 +49,7 @@ on the current data), with the leakage
 gate still passing.
 
 Actual: zero kept rows; no predictions produced; leakage gate still
-passed. Wider gap than anticipated, but not a system break — see
+passed. Wider gap than anticipated, but not a system break, see
 invariants below.
 
 ### Invariants that held
@@ -63,9 +63,9 @@ invariants below.
 - **Target independence.** Neither name-based nor three-method
   (Pearson + Spearman + normalised MI) checks fired. Semantic leakage
   check on an empty feature frame trivially passes, so the signal here
-  is weak — not a validation of the MI detector under real load.
+  is weak, not a validation of the MI detector under real load.
 - **Pipeline reliability.** Five HTTP fetches, five Excel parses, one
-  concatenation, one mapping application, one inference attempt —
+  concatenation, one mapping application, one inference attempt -
   completed without unhandled exceptions (the inference failure was
   captured as structured output, not a crash).
 
@@ -101,7 +101,7 @@ benchmark run.
    15 features as of this run, including `BEDS`, `BATH`,
    `DIST_MANHATTAN_CENTER`,
    `DIST_CENTRAL_PARK`, `DIST_NEAREST_SUBWAY`, and `SUBLOCALITY`.
-   NYC.gov Rolling Sales 2024 publishes transaction data only — it
+   NYC.gov Rolling Sales 2024 publishes transaction data only, it
    does not include room counts, coordinates, or neighbourhood
    sub-divisions. This is a **schema-level distribution shift**, not
    a value-level one. Cleaning cannot recover it. A future benchmark
@@ -135,15 +135,15 @@ locked.
 
 ### Decision
 
-Firewall validation: **success**. The benchmark's stated claim —
+Firewall validation: **success**. The benchmark's stated claim -
 *"a leakage-guarded, schema-locked pipeline produces reproducible,
-auditable behaviour under real-world distribution shift"* — holds on
+auditable behaviour under real-world distribution shift"*, holds on
 the real 2024 NYC.gov data. The structural weaknesses surfaced by
 this run are the benchmark doing its job, not the benchmark failing.
 
 ---
 
-## 2026-07-19 — Run (SCHEMA_MAP v3) — score regression traced to training data
+## 2026-07-19, Run (SCHEMA_MAP v3), score regression traced to training data
 
 ### Observed metrics (raw)
 
@@ -166,7 +166,7 @@ Actual: **0.250, a 0.125 absolute / 33% relative fall.**
 
 Not a benchmark defect. `benchmarks/train_benchmark_model.py` trains from
 `output/cleaned_house_dataset.csv`, and that file previously had no producer
-anywhere in the repo — it could not be regenerated from committed code. It
+anywhere in the repo, it could not be regenerated from committed code. It
 held a `PRICE` of 2,147,483,647 (an integer-overflow sentinel that this
 pipeline's IQR cap makes impossible) and `BOROUGH`/`ZIPCODE` columns
 `clean_pipeline` never created, because `normalize_borough`/`normalize_zipcode`
@@ -188,7 +188,7 @@ Stressed: none new.
 ### What this taught about system limits
 
 The benchmark's sealed contract governs the *scoring* path end to end, and it
-did its job — every invariant held while the number moved. It does not, and
+did its job, every invariant held while the number moved. It does not, and
 cannot, attest to the provenance of the training data the scored model was fit
 on. A schema lock downstream of an unreproducible upstream artefact seals a
 pipeline whose inputs are unverified. The gap is now closed by

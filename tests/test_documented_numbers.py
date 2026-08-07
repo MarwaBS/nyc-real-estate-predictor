@@ -705,6 +705,60 @@ def test_no_shipped_module_has_zero_importers() -> None:
     assert not orphans, f"shipped modules nothing imports or runs: {orphans}"
 
 
+#: Counts and money figures a live doc states that no artefact holds. Closed
+#: set: an approximation, an illustrative quantity, and a data constant.
+_UNGATED_INTEGERS = {
+    4_500,  # "4,500+ listings", rounded down from the cleaned count
+    1_000,  # illustrative ZIP cardinality in the leakage-scope note
+    2_147_483_647,  # the int32 overflow sentinel the cleaner drops
+}
+
+_SEPARATED_INTEGER = re.compile(r"(?<![\d.])\d{1,3}(?:,\d{3})+(?![\d])")
+
+
+def _artefact_integers() -> set[int]:
+    provenance = METRICS["provenance"]
+    counts = {provenance[k] for k in ("n_train", "n_val", "n_test")}
+    values = set(counts) | {sum(counts)}
+    values |= {
+        BENCH["n_scored"],
+        BENCH["n_dropped"],
+        BENCH["n_scored"] + BENCH["n_dropped"],
+    }
+    values |= set(BENCH["drop_reasons"].values())
+    values |= {CAP_STUDY["n_train"], CAP_STUDY["n_test"]}
+    values |= {row["train_rows_at_cap"] for row in CAP_STUDY["rows"]}
+    values |= {int(abs(b)) for b in CAP_STUDY["train_fit_price_bounds"]}
+    values.add(int(CAP_STUDY["common_support_ceiling"]))
+    # Zone cut-points appear both in full and in thousands.
+    for cut in provenance["price_zone_bins"]:
+        values |= {int(cut), int(cut) // 1_000}
+    raw = (ROOT / "Resources" / "NY-House-Dataset.csv").read_text(
+        encoding="utf-8", errors="ignore"
+    )
+    # Raw rows: the committed CSV's data lines, header excluded.
+    values.add(len([line for line in raw.splitlines() if line.strip()]) - 1)
+    return values | _UNGATED_INTEGERS
+
+
+@pytest.mark.parametrize("doc", LIVE_DOCS)
+def test_every_count_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Row counts and money figures rot the same way fractions do, and the
+    fractional scan does not see them: 4,526 could be rewritten to 9,999 with
+    the suite green."""
+    allowed = _artefact_integers()
+    wrong = []
+    for i, line in enumerate(_read(doc).splitlines(), 1):
+        if _HISTORICAL.search(line):
+            continue
+        wrong += [
+            f"{doc}:{i}: {value} is in no artefact"
+            for value in _SEPARATED_INTEGER.findall(line)
+            if int(value.replace(",", "")) not in allowed
+        ]
+    assert not wrong, "counts no artefact holds:\n" + "\n".join(wrong)
+
+
 def test_readme_shap_table_matches_the_artefact() -> None:
     """README once carried the previous model's SHAP values (BATH 0.446 …)
     under a false 'read from the artefact' heading. The doc gates covered R²

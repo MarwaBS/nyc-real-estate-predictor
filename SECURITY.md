@@ -45,16 +45,16 @@ You can expect an initial acknowledgement within 72 hours.
 GitHub's Dependabot scans the full dependency tree of every `requirements*.txt`
 file in the repo. This project deliberately splits dependencies into:
 
-- **`requirements.txt`** — runtime: what ships in the production Docker image
+- **`requirements.txt`**, runtime: what ships in the production Docker image
   (pandas, numpy, scikit-learn, xgboost, lightgbm, fastapi, slowapi, streamlit, etc.).
-- **`requirements-train.txt`** — training-only: `shap` (the training-time SHAP
+- **`requirements-train.txt`**, training-only: `shap` (the training-time SHAP
   pass) and `mlflow` (experiment tracking). These are required to RE-TRAIN the
   model but are NEVER copied into the production image (see `Dockerfile` and
   `deploy/huggingface/Dockerfile`). torch, catboost, optuna and imbalanced-learn
   were removed with the multi-task net and the extended training path.
 
 Most Dependabot alerts on this repo's default branch originate from
-`requirements-train.txt` — mlflow carries the bulk of the pending CVEs.
+`requirements-train.txt`, mlflow carries the bulk of the pending CVEs.
 **None of these reach the production serving path.** They are training-time
 tools run by hand in a developer's environment. No workflow installs
 `requirements-train.txt`, and neither Dockerfile copies it, so they never reach

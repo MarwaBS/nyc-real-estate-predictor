@@ -19,13 +19,13 @@ because that path is what drifted.
 1. A Hugging Face account. Sign up free at <https://huggingface.co/join> if you don't have one.
 2. Git installed locally.
 
-## Step 1 — Create a Hugging Face access token
+## Step 1, Create a Hugging Face access token
 
 Profile → **Settings → Access Tokens** → **New token**, **write** scope.
 Save it in the GitHub repo as the `HF_TOKEN` secret
 (Settings → Secrets and variables → Actions). `deploy.yml` reads it from there.
 
-## Step 2 — Create the Space
+## Step 2, Create the Space
 
 <https://huggingface.co/new-space> → SDK **Docker**, hardware **CPU basic**,
 visibility **Public**. Leave it empty; the first push from `main` fills it.
