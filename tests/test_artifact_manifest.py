@@ -60,7 +60,7 @@ def _artifact_bytes(path: Path) -> bytes:
     Same rationale as ``benchmarks.invariants.schema_map_sha256``: a
     Windows checkout with ``core.autocrlf`` would otherwise hash different
     bytes than the LF bytes git stores (this exact mismatch failed the
-    first CI run of this gate — the manifest had been generated from a
+    first CI run of this gate, the manifest had been generated from a
     CRLF working copy). Binary artifacts are hashed raw: normalising a
     pickle would corrupt the comparison.
     """
@@ -76,14 +76,14 @@ def test_every_serving_artifact_matches_its_manifest_hash() -> None:
         assert path.exists(), f"{name} is in the manifest but not in models/"
         actual = hashlib.sha256(_artifact_bytes(path)).hexdigest()
         assert actual == expected, (
-            f"{name}: sha256 {actual} != manifest {expected} — the committed "
+            f"{name}: sha256 {actual} != manifest {expected}, the committed "
             f"artifact changed without a manifest update (or vice versa). "
             f"Regenerate the manifest only as part of a deliberate retrain."
         )
 
 
 def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
-    """The committed file must be exactly what run_training step 9 emits —
+    """The committed file must be exactly what run_training step 9 emits -
     same hashes in a different order passed the per-line checks while the
     next retrain would rewrite the file with a pure-reorder diff."""
     lines = [
@@ -99,7 +99,7 @@ def test_drift_baseline_failure_fails_the_run_before_the_manifest(
     tmp_path, monkeypatch
 ) -> None:
     """The manifest step hashes whatever drift_baseline.json bytes exist, so
-    a baseline write that fails must abort the run — surviving it would
+    a baseline write that fails must abort the run, surviving it would
     certify the previous run's baseline as this run's output."""
     monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
     stale = tmp_path / "drift_baseline.json"

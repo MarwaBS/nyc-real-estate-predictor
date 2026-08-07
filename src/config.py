@@ -1,4 +1,4 @@
-"""Centralized configuration — paths and constants; loads .env for the
+"""Centralized configuration, paths and constants; loads .env for the
 consumers that read the environment (mlflow, api/settings.py)."""
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 RAW_DATASET = DATA_RAW_DIR / "NY-House-Dataset.csv"
 CLEANED_DATASET = PROJECT_ROOT / "output" / "cleaned_house_dataset.csv"
 
-# Ensure output dirs exist (best-effort — read-only runtimes like HF Spaces skip silently)
+# Ensure output dirs exist (best-effort, read-only runtimes like HF Spaces skip silently)
 for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
     with contextlib.suppress(PermissionError, OSError):
         _dir.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ VAL_SIZE: float = 0.2
 PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000, float("inf")]
 PRICE_ZONE_LABELS: list[str] = ["Low", "Medium", "High", "Very High"]
 
-# Feature lists — CRITICAL: no PRICE_PER_SQFT (data leakage)
+# Feature lists, CRITICAL: no PRICE_PER_SQFT (data leakage)
 NUMERIC_FEATURES: list[str] = [
     "BEDS",
     "BATH",

@@ -63,7 +63,7 @@ def _locate_header_row(content: bytes) -> int:
             )
         except ImportError:
             # A missing Excel engine is an environment problem, not a
-            # header-detection failure — never mask it behind the generic
+            # header-detection failure, never mask it behind the generic
             # "could not locate header" error below.
             raise
         except (ValueError, IndexError) as exc:

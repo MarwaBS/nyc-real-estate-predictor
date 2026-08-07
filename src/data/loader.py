@@ -1,4 +1,4 @@
-"""Data loading — single entry point for all dataset I/O."""
+"""Data loading, single entry point for all dataset I/O."""
 
 from __future__ import annotations
 

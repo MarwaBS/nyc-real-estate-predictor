@@ -60,13 +60,6 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_features.py",
     ),
     Mutation(
-        name="drift-threshold-disabled",
-        path="src/models/drift.py",
-        old="    threshold: float = 0.15,\n) -> dict[str, dict[str, float]]:",
-        new="    threshold: float = 0.9,\n) -> dict[str, dict[str, float]]:",
-        gate="tests/test_drift.py",
-    ),
-    Mutation(
         name="price-zone-bins-shifted",
         path="src/config.py",
         old="PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000,",
@@ -340,6 +333,15 @@ MUTATIONS: list[Mutation] = [
         old="0.2792 at 3.0",
         new="0.2892 at 3.0",
         gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="module-left-with-no-production-importer",
+        # A13. Drop the one production import and the module survives on its
+        # own test file alone, which is how the drift helpers stayed.
+        path="run_training.py",
+        old="    from src.models.drift import save_baseline\n",
+        new="",
+        gate="tests/test_documented_numbers.py::test_no_shipped_module_has_zero_importers",
     ),
     Mutation(
         name="doc-link-points-at-nothing",

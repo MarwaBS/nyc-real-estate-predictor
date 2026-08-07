@@ -143,10 +143,10 @@ def test_health_reports_healthy_when_full_stack_loads(
 
 @pytest.mark.skipif(
     not _models_present(),
-    reason="serving artifacts missing (partial checkout) — they are committed and pinned by models/MANIFEST.sha256",
+    reason="serving artifacts missing (partial checkout), they are committed and pinned by models/MANIFEST.sha256",
 )
 def test_predict_returns_200_with_valid_input() -> None:
-    """With models present, /predict returns a real 200 and the documented shape —
+    """With models present, /predict returns a real 200 and the documented shape -
     a hard success assertion, not the old 'either 200 or 503'."""
     response = client.post("/predict", json=VALID_PAYLOAD)
     assert response.status_code == 200, response.text
@@ -175,7 +175,7 @@ def test_predict_returns_200_with_valid_input() -> None:
     # the unrounded prediction while predicted_price is rounded to the nearest
     # $100, so the two disagree by up to one rounding unit (~5e-5 relative on a
     # $1.8M prediction). 1e-3 sits well above that and far below any real
-    # drift — the fabricated 0.5/2.0 band above misses by 200x.
+    # drift, the fabricated 0.5/2.0 band above misses by 200x.
     predicted = body["price"]["predicted_price"]
     band = body["price"]["price_range"]
     assert band["low"] / predicted == pytest.approx(
@@ -206,7 +206,7 @@ def test_predict_returns_503_when_models_absent(
 
 
 def test_predict_requires_api_key_returns_401() -> None:
-    """With API_KEY configured, a request missing X-API-Key is rejected 401 —
+    """With API_KEY configured, a request missing X-API-Key is rejected 401 -
     auth runs before model load, so this holds with or without models present."""
     with reloaded_app(API_KEY="s3cret") as m:
         resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
@@ -254,7 +254,7 @@ def test_predict_rejects_invalid_zipcode() -> None:
 
 
 def test_predict_rejects_out_of_range_beds() -> None:
-    """The le=20 bound must hold — an unbounded count feeds the model a value
+    """The le=20 bound must hold, an unbounded count feeds the model a value
     far outside anything it trained on."""
     response = client.post(
         "/predict",

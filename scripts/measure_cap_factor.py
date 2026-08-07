@@ -3,7 +3,7 @@
 For each candidate factor: fit bounds on the TRAIN split, cap, train the
 Random Forest candidate, and score val on a COMMON evaluation support
 (rows under the tightest cap's ceiling) so every variant faces an identical
-target distribution — scored on all rows, the uncapped variant "wins" purely
+target distribution, scored on all rows, the uncapped variant "wins" purely
 through variance inflation from a single $195M listing.
 
     python scripts/measure_cap_factor.py

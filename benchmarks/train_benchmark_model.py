@@ -5,14 +5,14 @@ distances, SUBLOCALITY) that do **not** exist in NYC.gov Rolling Sales
 transaction records, so it cannot be validated against that external source.
 
 This lean model trains on only the three features that the Kaggle training
-data and NYC.gov Rolling Sales genuinely share — **borough**, **property
-square footage**, and **ZIP** — so :mod:`benchmarks.run_benchmark` can score
+data and NYC.gov Rolling Sales genuinely share, **borough**, **property
+square footage**, and **ZIP**, so :mod:`benchmarks.run_benchmark` can score
 real, unseen NYC.gov 2024 sales and report an honest out-of-distribution R².
 
 It is deliberately lower-accuracy than the flagship: the point is *honest
 external validation on real data*, not peak in-distribution accuracy. The
 artefact is written to ``models/benchmark_regressor.joblib`` and is
-COMMITTED (0.6 MB) — it is what makes the benchmark reproducible by CI and
+COMMITTED (0.6 MB), it is what makes the benchmark reproducible by CI and
 by strangers. It MUST be trained under the pinned environment
 (requirements.txt: Python 3.12, numpy 1.26.4, scikit-learn 1.8.0): an
 artefact pickled under unpinned numpy fails to load in CI, and the
@@ -67,7 +67,7 @@ def build_benchmark_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
     Returns ``(X, y)`` where ``X`` has exactly :data:`BENCHMARK_FEATURES`
     and ``y`` is ``log1p(PRICE)``. Rows missing any shared feature or with a
-    non-positive price are dropped — the model only learns from complete,
+    non-positive price are dropped, the model only learns from complete,
     valid examples.
     """
     # The cleaned CSV is uncapped; cap here, fitted on this whole frame. The

@@ -1,4 +1,4 @@
-"""NYC Real Estate Price Prediction — Streamlit Dashboard."""
+"""NYC Real Estate Price Prediction, Streamlit Dashboard."""
 
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ with col2:
         reg = load_model()
 
         if reg is None:
-            st.error("Model unavailable — train it first: `python run_training.py`")
+            st.error("Model unavailable, train it first: `python run_training.py`")
         else:
             features = build_features(
                 beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude

@@ -1,4 +1,4 @@
-"""Geospatial utilities — haversine distances to fixed reference points.
+"""Geospatial utilities, haversine distances to fixed reference points.
 
 Scope is deliberately exactly what the model consumes: the two landmark
 distances. No clustering or station lookup, which would need bundled data or
@@ -38,7 +38,7 @@ def haversine_vectorized(
     lat2: float,
     lon2: float,
 ) -> pd.Series:
-    """Vectorized haversine — returns distances in km for a full column."""
+    """Vectorized haversine, returns distances in km for a full column."""
     earth_radius = 6_371.0
     lat1_r = np.radians(lat1)
     lat2_r = math.radians(lat2)

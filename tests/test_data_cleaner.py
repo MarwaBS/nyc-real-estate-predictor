@@ -170,7 +170,7 @@ def test_cap_outliers_clips_extreme_values() -> None:
 def test_fit_cap_bounds_defaults_to_the_factor_the_measurement_chose() -> None:
     """3.0 is a measured trade-off (scripts/measure_cap_factor.py); the shipped
     path (run_protocol) calls fit_cap_bounds without factor=, so the DEFAULT is
-    what shapes the training distribution — and must be pinned exactly."""
+    what shapes the training distribution, and must be pinned exactly."""
     prices = pd.Series([100.0, 200.0, 300.0, 400.0, 500.0, 10_000_000.0])
     q1, q3 = prices.quantile(0.25), prices.quantile(0.75)
 
@@ -182,7 +182,7 @@ def test_fit_cap_bounds_defaults_to_the_factor_the_measurement_chose() -> None:
 
 def test_normalize_type_strips_the_listing_suffix() -> None:
     """Raw TYPE values are "condo for sale"-shaped while the API sends bare
-    "condo" — without the strip, training and serving one-hot different
+    "condo", without the strip, training and serving one-hot different
     categories for the same property type."""
     df = pd.DataFrame({"TYPE": ["condo for sale", "house for rent", "co-op"]})
     result = normalize_type(df)

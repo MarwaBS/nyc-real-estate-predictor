@@ -1,7 +1,7 @@
-"""End-to-end training orchestrator — load data, engineer features, train models, save artifacts.
+"""End-to-end training orchestrator, load data, engineer features, train models, save artifacts.
 
 Besides the model artefacts (committed and MANIFEST-pinned), every run
-writes ``reports/training_metrics.json`` — the committed evidence artefact
+writes ``reports/training_metrics.json``, the committed evidence artefact
 behind the README's headline numbers. It records the metrics of the
 selected models together with provenance (commit SHA, library versions,
 seed, split sizes) so the README quotes a file, not a memory.
@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 def prepare_data() -> pd.DataFrame:
     """Load and clean the raw snapshot; write the cleaned (uncapped) CSV.
 
-    Everything cross-row — cap bounds, zone cut-points, category vocabulary —
+    Everything cross-row, cap bounds, zone cut-points, category vocabulary -
     is fitted later, on the train split only, inside :func:`run_protocol`.
     """
     logger.info("Step 1: loading raw data and cleaning it")
@@ -122,7 +122,7 @@ def build_splits(df_clean: pd.DataFrame, seed: int) -> dict[str, Any]:
     Split FIRST, then fit every cross-row statistic (cap bounds, zone
     cut-points, category vocabulary) on the train rows only and apply it
     everywhere. The split stratifies on pooled price quartiles purely as a
-    balancing key — the served zone labels come from train-derived cut-points.
+    balancing key, the served zone labels come from train-derived cut-points.
     """
     df = df_clean.reset_index(drop=True)
 
@@ -260,7 +260,7 @@ def run_protocol(
 
 
 def get_feature_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Extract only feature columns — no targets, no leaky features."""
+    """Extract only feature columns, no targets, no leaky features."""
     all_features = NUMERIC_FEATURES + ONEHOT_FEATURES + TARGET_ENCODED_FEATURES
     available = [c for c in all_features if c in df.columns]
     missing = set(all_features) - set(available)
@@ -384,7 +384,7 @@ def train_regression(
             y_test, best_pipeline.predict(X_test), log_target=True
         )
         logger.info(
-            "SELECTED %s — val R2=%.4f, test R2=%.4f",
+            "SELECTED %s, val R2=%.4f, test R2=%.4f",
             best_name,
             best_r2,
             best_metrics["r2"],
@@ -482,7 +482,7 @@ def calibrate_price_interval(
     The multipliers are the empirical quantiles of ``actual / predicted`` on the
     ``calibrate_on`` split; coverage is reported once on every split. That key
     both selects the data and labels the artefact, so the label cannot disagree
-    with the data quantiled. The guard is name-based — it does not inspect the
+    with the data quantiled. The guard is name-based, it does not inspect the
     data to tell splits apart.
     """
     if calibrate_on not in splits:
@@ -507,7 +507,7 @@ def calibrate_price_interval(
     # ceil((n+1)(1-alpha))/n, where the plain empirical level under-covers a
     # fresh draw by construction. np.quantile interpolates linearly rather
     # than taking the exact order statistic, and the lower tail is the
-    # complement of the upper — both approximations are accepted because the
+    # complement of the upper, both approximations are accepted because the
     # measured coverage is gated within 2 SE of target by the test suite.
     n_cal = len(ratios[calibrate_on])
     corrected_hi = min(math.ceil((n_cal + 1) * hi_q) / n_cal, 1.0)
@@ -540,7 +540,7 @@ def save_drift_baseline(X_train: pd.DataFrame) -> None:
     save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
 
 
-# Every committed artefact whose bytes back a published number — the benchmark
+# Every committed artefact whose bytes back a published number, the benchmark
 # pair included, because README quotes their R2(log) (see the manifest test).
 GOVERNED_ARTIFACTS: tuple[str, ...] = (
     "benchmark_baseline.json",
@@ -601,7 +601,7 @@ def _git_commit_sha() -> str | None:
 
 
 def _git_working_tree_clean() -> bool | None:
-    """True when `git status --porcelain` is empty — part of provenance.
+    """True when `git status --porcelain` is empty, part of provenance.
 
     A metrics artefact generated from a dirty tree cannot be tied to its
     commit_sha's source, so the flag is recorded rather than assumed.
@@ -637,7 +637,7 @@ def _write_training_metrics(
     zone_bins: list[float],
     baseline: dict[str, Any],
 ) -> None:
-    """Write ``reports/training_metrics.json`` — the committed artefact the
+    """Write ``reports/training_metrics.json``, the committed artefact the
     README's headline numbers must quote.
 
     ``tree_clean_at_start`` is passed in rather than sampled here: see
@@ -663,7 +663,7 @@ def _write_training_metrics(
             "selection_split": "val",
             "reported_split": "test",
             "features": features,
-            # The cut-points the zone labels were built from — derived from
+            # The cut-points the zone labels were built from, derived from
             # the TRAIN prices of this run. test_config_artefact_agreement
             # fails the build if config drifts from these.
             "price_zone_bins": [b for b in zone_bins if b != float("inf")],
@@ -689,7 +689,7 @@ def _write_training_metrics(
 
 def main() -> None:
     """Run the full training pipeline."""
-    logger.info("NYC PRICE PREDICTION — TRAINING PIPELINE")
+    logger.info("NYC PRICE PREDICTION, TRAINING PIPELINE")
 
     # Sampled first: prepare_data writes the cleaned dataset, so anything
     # after this point sees a tree this script dirtied.

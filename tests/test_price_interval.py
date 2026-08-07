@@ -106,7 +106,7 @@ def test_calibrate_price_interval_rejects_an_unknown_split() -> None:
 
 class _FlatDollarRegressor:
     """Predicts a flat $1 so each ratio is just the actual. log1p(1.0), not
-    0.0 — expm1(0) is 0 and every ratio would be infinite."""
+    0.0, expm1(0) is 0 and every ratio would be infinite."""
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         return np.full(len(X), np.log1p(1.0))
@@ -115,7 +115,7 @@ class _FlatDollarRegressor:
 def test_the_interval_uses_the_conformal_level_not_the_plain_quantile() -> None:
     """The finite-sample correction is what the 2 SE coverage bound rests on.
 
-    The expected level is found by search, not by re-evaluating ceil((n+1)q) —
+    The expected level is found by search, not by re-evaluating ceil((n+1)q) -
     that would put the same expression on both sides of the assertion.
     """
     rng = np.random.default_rng(0)
@@ -151,7 +151,7 @@ def test_the_shipped_interval_targets_the_coverage_the_code_asks_for(
     assert PRICE_INTERVAL_TARGET == 0.80
     assert interval["target_coverage"] == PRICE_INTERVAL_TARGET, (
         "run_training.PRICE_INTERVAL_TARGET differs from the target recorded "
-        "in models/price_interval.json — the shipped interval was calibrated "
+        "in models/price_interval.json, the shipped interval was calibrated "
         "to a different coverage than the code now asks for. Retrain."
     )
 
@@ -181,7 +181,7 @@ def test_measured_coverage_is_close_to_the_target_it_advertises(
 
 
 def test_multipliers_bracket_the_prediction(interval: dict) -> None:
-    """low < 1 < high — an interval that excludes its own point estimate is
+    """low < 1 < high, an interval that excludes its own point estimate is
     incoherent, and a symmetric one would misdescribe a log-target model whose
     residuals are asymmetric in dollar space."""
     assert 0.0 < interval["low_multiplier"] < 1.0 < interval["high_multiplier"]

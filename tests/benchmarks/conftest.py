@@ -2,12 +2,12 @@
 
 Provides a synthetic NYC.gov Rolling Sales sample frame that matches the
 column names the real 2024 dataset uses, without depending on an external
-download. Every valid row respects the sealed SCHEMA_MAP contract (1–3
+download. Every valid row respects the sealed SCHEMA_MAP contract (1-3
 family dwellings, where NYC.gov's GROSS SQUARE FEET is the home's own
 footage and therefore comparable to the Kaggle PROPERTYSQFT the benchmark
-model learned from); every drop reason in the drop engine — including the
+model learned from); every drop reason in the drop engine, including the
 v3 NaN rules (blank SALE PRICE / blank YEAR BUILT, which real NYC.gov rows
-do contain) — is exercised by at least one row.
+do contain), is exercised by at least one row.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pytest
 
 # Deterministic bulk rows appended to the curated fixture. schema-firewall
 # >= 0.1.1 refuses leakage checks below 100 finite paired samples (small-n
-# MI estimates are noise), so the fixture must yield >= 100 KEPT rows —
+# MI estimates are noise), so the fixture must yield >= 100 KEPT rows -
 # the curated set alone keeps only 15. The curated rows still carry all
 # the drop-reason / borough coverage; these add statistical mass only.
 _BULK_VALID_ROWS = 150
@@ -28,13 +28,13 @@ _BULK_VALID_ROWS = 150
 def nyc_rolling_sales_fixture() -> pd.DataFrame:
     """Synthetic sample mirroring the NYC.gov Rolling Sales 2024 schema.
 
-    Not the real dataset — the real download happens at run time. This
+    Not the real dataset, the real download happens at run time. This
     fixture exists only to drive the hostile-input test suite with
     deterministic, schema-accurate rows covering every drop reason
     under SCHEMA_MAP.md v3 and every borough.
     """
     rows = [
-        # ── Valid 1–3 family dwellings — all five boroughs ──
+        # ── Valid 1-3 family dwellings, all five boroughs ──
         {
             "BOROUGH": 1,
             "BUILDING CLASS CATEGORY": "01 ONE FAMILY DWELLINGS",
@@ -220,7 +220,7 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
             "ZIP CODE": 11377,
             "SALE PRICE": 680_000,
         },
-        # ── Drop (v3): SALE PRICE blank/NaN — real NYC.gov rows leave it
+        # ── Drop (v3): SALE PRICE blank/NaN, real NYC.gov rows leave it
         # empty; NaN compares False against every numeric threshold, so
         # without an explicit rule this row would survive the price
         # filters and produce a log1p(NaN) target ──
@@ -243,7 +243,7 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
             "ZIP CODE": 10309,
             "SALE PRICE": 510_000,
         },
-        # ── Drop: not a 1–3 family dwelling (condo / coop / commercial) ──
+        # ── Drop: not a 1-3 family dwelling (condo / coop / commercial) ──
         {
             "BOROUGH": 1,
             "BUILDING CLASS CATEGORY": "13 CONDOS - ELEVATOR APARTMENTS",
@@ -284,7 +284,7 @@ def nyc_rolling_sales_fixture() -> pd.DataFrame:
 
     # Bulk valid rows: seeded, so the fixture stays byte-deterministic
     # across runs (the mapping-determinism tests depend on that). Price is
-    # a noisy function of sqft + a per-borough level — realistic enough
+    # a noisy function of sqft + a per-borough level, realistic enough
     # that the honest features correlate with the target WITHOUT
     # determining it, which is exactly the regime the leakage gate must
     # accept (its false-positive behaviour is as load-bearing as its

@@ -1,10 +1,10 @@
-"""Inference — load a saved model and predict on new data.
+"""Inference, load a saved model and predict on new data.
 
 Loading is version-guarded: a model trained under a different
 scikit-learn version than the one running is REFUSED, not loaded with a
 warning. This is the runtime fix for the postmortem'd incident where
 sklearn 1.5.2 deserialised a 1.8.0-trained pipeline into garbage and the
-pipeline kept serving ($2 Manhattan condos) — the failure mode is silent
+pipeline kept serving ($2 Manhattan condos), the failure mode is silent
 corruption, so the guard must be a hard stop, not a log line.
 """
 
@@ -44,7 +44,7 @@ class ModelVersionError(RuntimeError):
 # by another version emits a plain UserWarning starting with this text. The
 # trained-with version is not recoverable post-unpickle, so matching the
 # warning is the only hook; if upstream rewords it the guard degrades to a
-# warning again — the pinned CI never emits it either way.
+# warning again, the pinned CI never emits it either way.
 _XGB_CROSS_VERSION = r".*If you are loading a serialized model"
 
 
@@ -68,7 +68,7 @@ def _load_model(path: Path) -> Any:
             raise ModelVersionError(
                 f"refusing to load {path.name}: {exc}. The artefact must be "
                 f"retrained under the pinned library versions "
-                f"(see requirements.txt) — loading across versions can "
+                f"(see requirements.txt), loading across versions can "
                 f"silently corrupt predictions."
             ) from exc
 
@@ -94,7 +94,7 @@ def get_price_interval() -> dict[str, Any]:
         path = MODELS_DIR / "price_interval.json"
         if not path.exists():
             raise FileNotFoundError(
-                f"{path} is missing — the served price interval is calibrated "
+                f"{path} is missing, the served price interval is calibrated "
                 f"during training. Run: python run_training.py"
             )
         _price_interval = json.loads(path.read_text(encoding="utf-8"))
@@ -115,7 +115,7 @@ def price_range(price: float) -> dict[str, float]:
 
 
 def predict_listings(features: pd.DataFrame) -> list[dict[str, Any]]:
-    """The single inference path — the API and dashboard both call this.
+    """The single inference path, the API and dashboard both call this.
 
     Applies the serving cap (so an unseen category gets the trained "other"
     encoding, not the encoder's unseen default), predicts once, and returns per
@@ -123,7 +123,7 @@ def predict_listings(features: pd.DataFrame) -> list[dict[str, Any]]:
     in. One implementation, so no serving surface can drift on capping,
     rounding or zoning. The band is derived from the rounded price so low/high
     reproduce from the figure shown beside them; the zone is derived from the
-    unrounded price. There is no classifier — the zone is the predicted price
+    unrounded price. There is no classifier, the zone is the predicted price
     bucketed through the shared decode, so it cannot disagree with that price.
     """
     reg = get_regressor()

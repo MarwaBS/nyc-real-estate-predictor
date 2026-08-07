@@ -2,9 +2,9 @@
 
 The published macro-F1 was 0.724 because per-class thresholds were fitted
 against the test labels and the resulting score reported as a hold-out
-number; candidate selection read the same labels. Both are the same defect —
+number; candidate selection read the same labels. Both are the same defect -
 a quantity chosen to maximise a test-set score cannot also be an unbiased
-estimate of it — and both are structural, so they are pinned structurally.
+estimate of it, and both are structural, so they are pinned structurally.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def test_train_regression_reports_test_not_the_split_it_selected_on(
     """Behavioural, not a signature check: val targets are learnable from the
     features, test targets are noise. A reported R2 computed on whichever split
     drove selection would inherit val's high score instead of tracking test's
-    near-zero one — which a renamed variable cannot fake."""
+    near-zero one, which a renamed variable cannot fake."""
     monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
     rng = np.random.default_rng(0)
     n = 240
@@ -54,7 +54,7 @@ def test_train_regression_reports_test_not_the_split_it_selected_on(
     test_r2 = record["metrics"]["r2"]
     assert val_r2 > 0.8, f"val should be learnable, got {val_r2}"
     assert test_r2 < 0.3, (
-        f"reported R2 is {test_r2} on random test targets — it is not being "
+        f"reported R2 is {test_r2} on random test targets, it is not being "
         f"scored on the test split"
     )
 
@@ -64,7 +64,7 @@ def test_training_pipeline_has_no_threshold_tuning() -> None:
 
     Threshold tuning did exactly that and published the result. Measured
     out-of-sample (fit on half the test set, scored on the other half, 20
-    stratified splits) it was worth +0.0006 +/- 0.0106 — noise — so it is
+    stratified splits) it was worth +0.0006 +/- 0.0106, noise, so it is
     gone rather than moved to val.
     """
     src = inspect.getsource(run_training)

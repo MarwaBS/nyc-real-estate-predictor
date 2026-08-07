@@ -146,7 +146,7 @@ def test_served_band_reproduces_from_the_rounded_price(
     The prediction is pinned so the difference crosses a $100 boundary: an
     unrounded price near $1,000,049 (log1p) rounds to $1,000,000, and at the
     high multiplier the two bases round to endpoints $100 apart. A test whose
-    price happens not to straddle a boundary passes on the bug — the exact
+    price happens not to straddle a boundary passes on the bug, the exact
     knife-edge this file has been burned by before."""
     import src.models.predict as pred_mod
 
@@ -171,7 +171,7 @@ def test_served_band_reproduces_from_the_rounded_price(
     assert result["price_range"]["high"] == round(
         shown * interval["high_multiplier"], -2
     )
-    # And this is provably NOT the unrounded band — the defect being pinned.
+    # And this is provably NOT the unrounded band, the defect being pinned.
     assert result["price_range"]["high"] != round(
         unrounded * interval["high_multiplier"], -2
     )
@@ -197,7 +197,7 @@ def test_version_mismatch_is_refused(tmp_path: Path, monkeypatch) -> None:
     InconsistentVersionWarning and keep serving silently-corrupt
     predictions ($2 Manhattan condos). The loader now promotes that
     warning to ModelVersionError. Simulated by monkeypatching joblib.load
-    to emit the warning — producing a genuinely cross-version pickle would
+    to emit the warning, producing a genuinely cross-version pickle would
     require a second sklearn install.
     """
     import warnings
@@ -210,7 +210,7 @@ def test_version_mismatch_is_refused(tmp_path: Path, monkeypatch) -> None:
     artefact.write_bytes(b"placeholder")
 
     def _fake_load(path):
-        # InconsistentVersionWarning has a keyword-only constructor — emit a
+        # InconsistentVersionWarning has a keyword-only constructor, emit a
         # properly-constructed instance, exactly as sklearn's unpickler does.
         warnings.warn(
             InconsistentVersionWarning(

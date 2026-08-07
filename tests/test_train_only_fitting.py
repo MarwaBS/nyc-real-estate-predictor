@@ -3,7 +3,7 @@
 Cap bounds, zone cut-points and the category vocabulary all shape the training
 target or the model's input contract; fitting any of them on pooled data lets
 val/test rows leak into training. Each test recomputes the statistic from the
-train rows build_splits selected and requires exact agreement — a pooled fit
+train rows build_splits selected and requires exact agreement, a pooled fit
 lands on different quantiles/counts and fails.
 """
 

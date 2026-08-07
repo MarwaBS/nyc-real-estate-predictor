@@ -56,8 +56,9 @@ file in the repo. This project deliberately splits dependencies into:
 Most Dependabot alerts on this repo's default branch originate from
 `requirements-train.txt` — mlflow carries the bulk of the pending CVEs.
 **None of these reach the production serving path.** They are training-time
-tools used in a developer's local environment or in CI's scheduled retraining
-workflow, not in the public-facing inference container.
+tools run by hand in a developer's environment. No workflow installs
+`requirements-train.txt`, and neither Dockerfile copies it, so they never reach
+the public-facing inference container.
 
 Triage policy:
 

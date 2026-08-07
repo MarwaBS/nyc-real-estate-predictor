@@ -110,7 +110,7 @@ LIVE_DOCS = [
 # A line stating that something is gone must be allowed to name it. Matched
 # against the text PRECEDING the claim, not the whole line: "macro F1 = 0.699
 # ... There is no classifier" is a live claim followed by a historical remark,
-# and a whole-line filter exempted it — the mutation to 0.727 passed.
+# and a whole-line filter exempted it, the mutation to 0.727 passed.
 _HISTORICAL = re.compile(
     r"earlier|previous|no longer|there is no|was removed|is gone|used to"
     r"|deleted|void|before 2026|superseded",
@@ -129,7 +129,7 @@ DELETED_COMPONENTS = [
     "argmax",
 ]
 
-# Symbols a notebook must not import or reference — deleted functions and the
+# Symbols a notebook must not import or reference, deleted functions and the
 # never-shipped feature ideas explored in early EDA. A notebook that names one
 # either fails to import or demonstrates an architecture the repo abandoned.
 DELETED_NOTEBOOK_SYMBOLS = [
@@ -160,10 +160,10 @@ NOTEBOOKS = sorted(
 @pytest.mark.parametrize("nb", NOTEBOOKS)
 def test_notebooks_reference_no_deleted_symbol(nb: str) -> None:
     """Notebooks are committed portfolio artefacts a reviewer will open, but CI
-    does not execute them — so a stale import of a deleted symbol ships unseen.
+    does not execute them, so a stale import of a deleted symbol ships unseen.
     ``02_eda_features`` did exactly that: it imported ``add_neighborhood_clusters``
     and recreated the ``DIST_NEAREST_SUBWAY`` proxy the feature module documents
-    as removed. Markdown cells are scanned too — a deleted feature advertised in
+    as removed. Markdown cells are scanned too, a deleted feature advertised in
     prose is the same stale claim as one imported in code."""
     cells = json.loads((ROOT / nb).read_text(encoding="utf-8"))["cells"]
     text = "\n".join(
@@ -190,7 +190,7 @@ def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
 def _study_values() -> set[float]:
     """Seed-study and baseline quantities quoted beside the point estimates.
     They are different quantities with their own gates, so the contradiction
-    scans must not flag them — the claim window can straddle a compound
+    scans must not flag them, the claim window can straddle a compound
     sentence like "test R2 0.814 ± 0.028, zones macro F1 0.717 ± 0.020"."""
     values = {
         round(SEED_VARIANCE[k][s], 3)
@@ -593,6 +593,20 @@ def test_the_cap_factor_paragraph_quotes_the_study() -> None:
     assert not missing, f"MODEL_CARD does not quote the cap study: {missing}"
 
 
+def test_the_benchmark_artefact_names_a_registered_contract_version() -> None:
+    """The contract may move ahead of the artefact, but the version the artefact
+    records must still be one the registry seals, with the hash it was sealed
+    under. Otherwise the recorded provenance points at nothing."""
+    registry = json.loads(_read("benchmarks/SCHEMA_MAP_VERSIONS.json"))["versions"]
+    version = BENCH["schema_map_version"]
+    assert version in registry, (
+        f"results.json records {version}, absent from the registry"
+    )
+    assert registry[version] == BENCH["schema_map_sha256"], (
+        f"results.json records a {version} hash the registry does not seal"
+    )
+
+
 def test_readme_states_the_contract_version_the_results_were_produced_under() -> None:
     """The contract can be bumped without re-running the benchmark, so the two
     versions legitimately differ. What must not happen is the README calling the
@@ -623,6 +637,63 @@ def test_the_capped_target_caveat_is_stated_and_quoted() -> None:
         )
 
 
+#: Files a runner invokes by path rather than importing. Derived, not listed:
+#: a module qualifies by carrying a __main__ guard or by being named in a
+#: workflow, Dockerfile or the Makefile.
+_RUNNER_FILES = (".github/workflows", "Dockerfile", "Dockerfile.streamlit", "Makefile")
+
+
+def _runner_text() -> str:
+    parts = []
+    for name in _RUNNER_FILES:
+        path = ROOT / name
+        if path.is_dir():
+            parts += [f.read_text(encoding="utf-8") for f in path.glob("*.yml")]
+        elif path.exists():
+            parts.append(path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
+def test_no_shipped_module_has_zero_importers() -> None:
+    """A13. A module nothing imports and no runner invokes is dead weight that
+    still has to be read, typed, linted and kept true. `check_drift` and its
+    helpers sat that way behind a passing test suite."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    shipped = [f for f in tracked if not f.startswith(("tests/", "notebooks/"))]
+    # Tests are not importers. A module reachable only from its own test file is
+    # exactly the case this exists to catch: the suite keeps it alive and
+    # nothing ships it.
+    importers = "\n".join((ROOT / f).read_text(encoding="utf-8") for f in shipped)
+    runners = _runner_text()
+
+    orphans = []
+    for path in shipped:
+        module = path.removesuffix(".py").replace("/", ".")
+        leaf = module.rsplit(".", 1)[-1]
+        if leaf == "__init__":
+            continue
+        source = (ROOT / path).read_text(encoding="utf-8")
+        if '__name__ == "__main__"' in source or path in runners:
+            continue
+        # `import a.b.c`, `from a.b import c`, or `python -m a.b.c`
+        if re.search(
+            rf"(?<![\w.]){re.escape(module)}(?![\w])", importers.replace(path, "")
+        ):
+            continue
+        if re.search(
+            rf"(?<![\w.]){re.escape(leaf)}(?![\w])", importers.replace(path, "")
+        ):
+            continue
+        orphans.append(path)
+    assert not orphans, f"shipped modules nothing imports or runs: {orphans}"
+
+
 def test_readme_shap_table_matches_the_artefact() -> None:
     """README once carried the previous model's SHAP values (BATH 0.446 …)
     under a false 'read from the artefact' heading. The doc gates covered R²
@@ -645,11 +716,11 @@ def test_readme_shap_table_matches_the_artefact() -> None:
 
 def test_the_stated_feature_count_matches_the_fitted_model() -> None:
     """MODEL_CARD claimed 14 features (10 numeric) against an artefact holding
-    12 (8 numeric) — the count was not updated when two were removed."""
+    12 (8 numeric), the count was not updated when two were removed."""
     features = METRICS["provenance"]["features"]
     card = _read("MODEL_CARD.md")
     stated = re.search(
-        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*—\s*(\d+)\s*numeric", card
+        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*[-—]\s*(\d+)\s*numeric", card
     )
     assert stated is not None, "MODEL_CARD no longer states a feature count"
 
@@ -692,7 +763,7 @@ def test_seed_variance_claims_match_the_recorded_study() -> None:
 
 def test_the_shipped_seed_metrics_sit_inside_the_recorded_spread() -> None:
     """The headline artefact must be a draw from the distribution the study
-    describes — a stale study file would let the two drift apart."""
+    describes, a stale study file would let the two drift apart."""
     r2 = METRICS["regression"]["metrics"]["r2"]
     spread = SEED_VARIANCE["test_r2"]
     assert spread["min"] - 1e-9 <= r2 <= spread["max"] + 1e-9

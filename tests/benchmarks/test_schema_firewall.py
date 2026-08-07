@@ -38,7 +38,7 @@ VERSIONS_PATH = REPO_ROOT / "benchmarks" / "SCHEMA_MAP_VERSIONS.json"
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 1. Name-based leakage — parametrised over every forbidden column
+# 1. Name-based leakage, parametrised over every forbidden column
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -52,7 +52,7 @@ def test_forbidden_column_rejected(nyc_rolling_sales_fixture, forbidden_col):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 2. Semantic leakage — renamed target, caught by Pearson / Spearman / MI
+# 2. Semantic leakage, renamed target, caught by Pearson / Spearman / MI
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -100,7 +100,7 @@ def test_high_cardinality_categorical_is_out_of_scope(nyc_rolling_sales_fixture)
     """A HIGH-cardinality categorical is deliberately NOT MI-checked: at finite n
     it is statistically indistinguishable from a strong legitimate location
     predictor. A unique-per-row object token (which trivially 'determines' the
-    target) must NOT trip the gate — this pins the documented scope so it can't
+    target) must NOT trip the gate, this pins the documented scope so it can't
     silently flip to false-positiving on legitimate ZIP/location signal."""
     x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
     x = x.copy()
@@ -114,7 +114,7 @@ def test_target_independence_catches_nonmonotone_transform(
     """A NON-MONOTONE transform of the target must be caught by MI alone.
 
     ``(target - mean)**2`` folds the target around its mean: Pearson AND
-    Spearman both land near zero, so the correlation gate is blind — only
+    Spearman both land near zero, so the correlation gate is blind, only
     the MI pillar can catch it. Under the old mi_threshold=0.8 (a guess
     made against 0.1.0's uncalibrated scale) this leak sailed through at
     a measured mi_norm of 0.631. Pins the leak side of the 0.45
@@ -133,7 +133,7 @@ def test_target_independence_passes_honest_features(nyc_rolling_sales_fixture):
 
     Pins the false-positive side of the 0.45 calibration: borough is a
     genuinely predictive categorical (it sets the price level, measured
-    mi_norm 0.207) and must stay under the threshold — a gate that fires
+    mi_norm 0.207) and must stay under the threshold, a gate that fires
     on honest strong features would train the benchmark to bypass it.
     """
     x, target, _report = apply_schema_map(nyc_rolling_sales_fixture)
@@ -153,7 +153,7 @@ def test_mapping_is_deterministic(nyc_rolling_sales_fixture):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 4. Statelessness — subset invariance (single-row vs full-frame)
+# 4. Statelessness, subset invariance (single-row vs full-frame)
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -175,7 +175,7 @@ def test_mapping_is_stateless_across_subsets(nyc_rolling_sales_fixture):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 5. Target identity — label shuffle must not change features
+# 5. Target identity, label shuffle must not change features
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -199,7 +199,7 @@ def test_mapping_ignores_target_identity(nyc_rolling_sales_fixture):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 6. Column-name indexing — not positional
+# 6. Column-name indexing, not positional
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -227,7 +227,7 @@ def test_drop_reasons_equal_dropped_rows(nyc_rolling_sales_fixture):
 
 def test_nan_sale_price_is_dropped_not_poisoning_target(nyc_rolling_sales_fixture):
     """v3 regression guard: a blank SALE PRICE must become an explicit
-    `missing_sale_price` drop — NaN compares False against every numeric
+    `missing_sale_price` drop, NaN compares False against every numeric
     threshold, so v2 silently kept these rows and produced log1p(NaN)
     targets that the hand-rolled R² propagated without complaint."""
     _, target, report = apply_schema_map(nyc_rolling_sales_fixture)
@@ -268,7 +268,7 @@ def test_filter_independent_of_target_distribution(nyc_rolling_sales_fixture):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 9. Version registry — SCHEMA_MAP.md SHA matches the pinned entry
+# 9. Version registry, SCHEMA_MAP.md SHA matches the pinned entry
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -277,7 +277,7 @@ def test_schema_map_sha_matches_registered_version():
 
     The hash is LF-normalised (benchmarks.invariants.schema_map_sha256) so
     this check passes identically on a Windows CRLF checkout and the Linux
-    CI runner — a determinism firewall must not itself be
+    CI runner, a determinism firewall must not itself be
     platform-nondeterministic.
     """
     file_sha = schema_map_sha256(SCHEMA_MAP_PATH)
@@ -316,7 +316,7 @@ def test_verify_schema_map_lock_rejects_unsealed_edit(tmp_path, monkeypatch):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 10. Prediction health / collapse detectors — distribution-free
+# 10. Prediction health / collapse detectors, distribution-free
 # ─────────────────────────────────────────────────────────────────────
 
 

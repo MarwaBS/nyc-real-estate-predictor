@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
 REQUIREMENTS = ("requirements.txt", "requirements-train.txt", "requirements-dev.txt")
 
-#: ``name==version  # frozen: why`` — the marker carries its own reason.
+#: ``name==version  # frozen: why``, the marker carries its own reason.
 FROZEN = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*==\s*[^\s#]+\s*#\s*frozen:\s*(\S.*)$")
 
 
@@ -133,7 +133,7 @@ def test_the_scan_finds_the_frozen_pins():
     """A renamed marker would leave the two checks below comparing empty sets."""
     pins = _frozen_pins()
     assert len(pins) >= 8, (
-        f"only {len(pins)} frozen pins found — the marker or the files moved"
+        f"only {len(pins)} frozen pins found, the marker or the files moved"
     )
     assert all(reason for reason in pins.values()), "a frozen pin carries no reason"
 
@@ -141,7 +141,7 @@ def test_the_scan_finds_the_frozen_pins():
 @pytest.mark.parametrize("package", sorted(_frozen_pins()))
 def test_every_frozen_pin_is_ignored_by_dependabot(package: str):
     assert package in _pip_ignored(), (
-        f"{package} is pinned '# frozen:' but Dependabot may still bump it — "
+        f"{package} is pinned '# frozen:' but Dependabot may still bump it, "
         f"add '- dependency-name: \"{package}\"' to the pip ignore list"
     )
 

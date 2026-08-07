@@ -60,7 +60,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 85, measured 90.23%, so there is room for 53 more uncovered
+        # Floor 85, measured 89.77%, so there is room for 47 more uncovered
         # statements. The number is a total over the whole tree, so a module
         # smaller than that can lose all its tests and still pass.
         run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
@@ -69,6 +69,26 @@ jobs:
         # tests can fail. Without it, a gate that reads a committed artefact CI
         # never regenerates stays green on broken code.
         run: python scripts/verify_gates.py
+
+  reproducibility:
+    # Weekly only. A full training run takes minutes, and A2 (bit-identical
+    # regeneration) cannot change between pushes that do not touch training.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Retrain and require byte-identical model artefacts
+        # reports/ carries run_date and commit_sha, which move by design; the
+        # models are the claim.
+        run: |
+          python run_training.py
+          git diff --exit-code -- models/
 
   security:
     runs-on: ubuntu-latest

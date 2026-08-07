@@ -17,7 +17,7 @@ CUT_POINTS = list(PRICE_ZONE_BINS[1:-1])
 
 
 def _pandas_zone(prices: list[float]) -> list[str]:
-    """The training labeller itself, as the reference — not a reimplementation."""
+    """The training labeller itself, as the reference, not a reimplementation."""
     return [
         str(z)
         for z in pd.cut(

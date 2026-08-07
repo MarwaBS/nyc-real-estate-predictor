@@ -44,7 +44,7 @@ def test_zone_cut_points_match_the_ones_the_model_was_trained_with() -> None:
     finite = [b for b in PRICE_ZONE_BINS if b != float("inf")]
     assert METRICS["provenance"]["price_zone_bins"] == finite, (
         "src/config.py PRICE_ZONE_BINS differs from the bins recorded in "
-        "reports/training_metrics.json — the shipped zone metrics were "
+        "reports/training_metrics.json, the shipped zone metrics were "
         "computed under different cut-points. Retrain."
     )
 

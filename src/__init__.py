@@ -1,1 +1,1 @@
-"""NYC Real Estate Price Prediction — production ML+DL pipeline."""
+"""NYC Real Estate Price Prediction, production ML+DL pipeline."""

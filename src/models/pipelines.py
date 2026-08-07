@@ -1,4 +1,4 @@
-"""sklearn Pipeline + ColumnTransformer definitions — reproducible preprocessing."""
+"""sklearn Pipeline + ColumnTransformer definitions, reproducible preprocessing."""
 
 from __future__ import annotations
 
