@@ -317,7 +317,7 @@ def test_every_invocation_measures_the_declared_module_set() -> None:
 
 
 def test_the_stated_coverage_gate_matches_ci() -> None:
-    """README carried 70% in one place and 80% in two while CI ran 80. The
+    """README once carried 70% and 80% at the same time while CI ran 80. The
     floor comes from the step's ``run:`` scalar, since a `# --cov-fail-under=85`
     comment satisfied a text read while the command ran 10. Exactly one flag,
     because pytest honours the last and a reader the first."""
