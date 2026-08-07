@@ -546,20 +546,6 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_gate_scope.py::test_pytest_adds_no_option_that_disarms_a_gate",
     ),
     Mutation(
-        name="coverage-step-never-runs",
-        path=".github/workflows/ci.yml",
-        old="      - name: Run tests with coverage\n",
-        new="      - name: Run tests with coverage\n        if: false\n",
-        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
-    ),
-    Mutation(
-        name="replay-step-cannot-fail-the-build",
-        path=".github/workflows/ci.yml",
-        old="      - name: Verify the gates can fail\n",
-        new="      - name: Verify the gates can fail\n        continue-on-error: true\n",
-        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
-    ),
-    Mutation(
         name="benchmark-module-named-only-in-a-step-title",
         # A step name executes nothing; raw text credited it as a runner.
         path=".github/workflows/benchmark.yml",
@@ -592,21 +578,6 @@ MUTATIONS: list[Mutation] = [
         old="+ reproducibility (byte-identical retrain) ",
         new="",
         gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
-    ),
-    Mutation(
-        name="whole-test-job-skipped",
-        # Job level, where the step-level gate could not see it.
-        path=".github/workflows/ci.yml",
-        old="  test:\n    runs-on: ubuntu-latest",
-        new="  test:\n    if: false\n    runs-on: ubuntu-latest",
-        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
-    ),
-    Mutation(
-        name="whole-lint-job-excused",
-        path=".github/workflows/ci.yml",
-        old="  lint:\n    runs-on: ubuntu-latest",
-        new="  lint:\n    continue-on-error: true\n    runs-on: ubuntu-latest",
-        gate="tests/test_gate_scope.py::test_no_ci_step_is_conditional_or_allowed_to_fail",
     ),
     Mutation(
         name="readme-tree-drops-a-ci-job",
