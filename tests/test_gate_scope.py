@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.mutations import MUTATIONS
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -341,6 +343,23 @@ def test_ci_runs_the_whole_mutation_replay() -> None:
     assert "python scripts/verify_gates.py" in runs, (
         "no ci.yml step runs the full replay; steps are " + repr(runs)
     )
+
+
+def test_every_mutation_gate_names_a_test_that_exists() -> None:
+    """A renamed or moved gate leaves the replay unable to judge its mutation,
+    which it reports as survived only after a full run."""
+    defined = set()
+    for path in sorted((ROOT / "tests").glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        defined |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+    missing = sorted(
+        mutation.gate
+        for mutation in MUTATIONS
+        if not (ROOT / mutation.gate.split("::")[0]).exists()
+        or ("::" in mutation.gate and mutation.gate.split("::")[1] not in defined)
+    )
+    assert not missing, f"mutation gates naming no test: {missing}"
 
 
 def test_no_ci_step_is_conditional_or_allowed_to_fail() -> None:

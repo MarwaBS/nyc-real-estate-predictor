@@ -453,7 +453,7 @@ MUTATIONS: list[Mutation] = [
         path="pyproject.toml",
         old='[tool.mypy]\npython_version = "3.12"',
         new='[tool.mypy]\nexclude = ["src/models/.*"]\npython_version = "3.12"',
-        gate="tests/test_gate_scope.py::test_the_mypy_config_narrows_nothing",
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
     ),
     Mutation(
         name="mypy-errors-silenced-over-shipped-code",
@@ -467,7 +467,7 @@ MUTATIONS: list[Mutation] = [
             "[[tool.mypy.overrides]]\n"
             'module = ["tests.*", "notebooks.*"]'
         ),
-        gate="tests/test_gate_scope.py::test_the_mypy_config_narrows_nothing",
+        gate="tests/test_gate_scope.py::test_no_mypy_override_reaches_shipped_code",
     ),
     Mutation(
         name="coverage-omit-written-as-a-relative-path",
