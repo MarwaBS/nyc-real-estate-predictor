@@ -301,25 +301,29 @@ def train_regression(
         # min_samples_leaf=10 both bounds the artifact under GitHub's 100 MB
         # limit and gives each leaf a mean over >=10 comparable sales; unbounded,
         # the 500 trees average one leaf per sample and produce a 129 MB file.
+        # n_jobs=1 everywhere: with -1 the thread count decides the order the
+        # float sums accumulate, so two runs of one commit differ. On a Linux
+        # runner that moved val R2 between 0.7740 and 0.7719, enough to flip
+        # which candidate scored highest.
         "random_forest": RandomForestRegressor(
             n_estimators=500,
             min_samples_leaf=10,
             random_state=seed,
-            n_jobs=-1,
+            n_jobs=1,
         ),
         "xgboost": XGBRegressor(
             max_depth=6,
             n_estimators=500,
             learning_rate=0.1,
             random_state=seed,
-            n_jobs=-1,
+            n_jobs=1,
         ),
         "lightgbm": LGBMRegressor(
             num_leaves=63,
             n_estimators=500,
             learning_rate=0.1,
             random_state=seed,
-            n_jobs=-1,
+            n_jobs=1,
             verbose=-1,
         ),
     }
