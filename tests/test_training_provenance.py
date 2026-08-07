@@ -10,11 +10,12 @@ is not evidence, it is decoration.
 
 from __future__ import annotations
 
-import inspect
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -28,30 +29,101 @@ def metrics() -> dict:
     return json.loads(ARTEFACT.read_text(encoding="utf-8"))
 
 
-def test_working_tree_clean_is_sampled_before_main_writes_anything() -> None:
-    """The sample must happen before the first write in ``main``, not after.
+STUB_PROTOCOL = {
+    "reg_record": {"selected_model": "stub", "metrics": {}},
+    "clf_record": {
+        "selected_model": "stub",
+        "metrics": {"accuracy": 0.0, "macro_f1": 0.0},
+    },
+    "best_pipeline": None,
+    "splits": {name: (None, None) for name in ("train", "val", "test")},
+    "n_train": 1,
+    "n_val": 1,
+    "n_test": 1,
+    "features": ["f"],
+    "zone_bins": [0.0, 1.0, 2.0, 3.0, float("inf")],
+    "baseline": {"predictor": "stub"},
+}
 
-    Threading a True into ``_write_training_metrics`` and asserting True comes
-    out cannot detect this bug: it never exercises the ordering the field
-    depends on. Moving the sample back to where it was -- after prepare_data
-    writes the cleaned dataset -- left that version of this test green and the
-    original defect fully reintroduced.
 
-    So assert the ordering directly, on the source of ``main``: the
-    ``_git_working_tree_clean()`` call must appear before the first call that
-    writes to disk. ``prepare_data`` writes CLEANED_DATASET, which is the
-    earliest write in the run.
+def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runs ``main`` with the pipeline stubbed and asserts two things at run
+    time: the sample happens before ``prepare_data`` writes the cleaned dataset,
+    and the value it returned is the value written.
+
+    Reading the source instead passes on two ordinary edits. Move the call into
+    a helper and its definition still comes first lexically. Keep the call, drop
+    its result and hardcode the flag, and every name is still where it was.
     """
-    source = inspect.getsource(run_training.main)
+    manager = mock.MagicMock()
+    # A distinct answer per call. A constant return_value cannot tell the first
+    # sample from a second one handed to the writer after the models are on disk,
+    # which is the same defect wearing a different shape.
+    manager.sample.side_effect = [False, True, True, True]
+    manager.run_protocol.return_value = STUB_PROTOCOL
+    manager.calibrate.return_value = {}
+    manager.shap.return_value = []
+    (tmp_path / "models").mkdir()
 
-    sample_at = source.find("_git_working_tree_clean()")
-    first_write_at = source.find("prepare_data()")
+    with mock.patch.multiple(
+        run_training,
+        _git_working_tree_clean=manager.sample,
+        prepare_data=manager.prepare_data,
+        run_protocol=manager.run_protocol,
+        calibrate_price_interval=manager.calibrate,
+        shap_top10=manager.shap,
+        save_drift_baseline=manager.save_drift,
+        write_manifest=manager.manifest,
+        MODELS_DIR=tmp_path / "models",
+    ):
+        monkeypatch.chdir(tmp_path)
+        run_training.main()
 
-    assert sample_at != -1, "main no longer samples the working tree at all"
-    assert first_write_at != -1, "main no longer calls prepare_data"
-    assert sample_at < first_write_at, (
-        "working_tree_clean is sampled after prepare_data() has already "
-        "written the cleaned dataset, so it can only ever record False"
+    order = [call[0] for call in manager.mock_calls]
+    assert order.count("sample") == 1, (
+        f"the working tree is sampled {order.count('sample')} times; a second "
+        "sample reads a tree this run has already written to"
+    )
+    assert order.index("sample") < order.index("prepare_data"), (
+        "the working tree is sampled after prepare_data has written the cleaned "
+        "dataset, so the flag can only ever record False"
+    )
+
+    written = json.loads(
+        (tmp_path / "reports" / "training_metrics.json").read_text(encoding="utf-8")
+    )
+    assert written["working_tree_clean"] is False, (
+        "the artefact does not carry the value the sample returned"
+    )
+
+
+def test_the_working_tree_sampler_reports_both_states(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering test above replaces this function with a mock, so nothing
+    else executes it. Hardcoding its body to ``return True`` left the whole
+    suite green while the flag could only report the good outcome."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "test")
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "initial")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_training._git_working_tree_clean() is True, (
+        "a committed tree with no edits must read clean"
+    )
+    tracked.write_text("two\n", encoding="utf-8")
+    assert run_training._git_working_tree_clean() is False, (
+        "an edited tracked file must read dirty"
     )
 
 

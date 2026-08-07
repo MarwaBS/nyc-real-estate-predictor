@@ -1,4 +1,4 @@
-"""NYC Real Estate Price Prediction — Streamlit Dashboard."""
+"""NYC Real Estate Price Prediction, Streamlit Dashboard."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # Ensure src/ is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -32,7 +33,7 @@ st.markdown(
 # Load models once (cached)
 # ---------------------------------------------------------------------------
 @st.cache_resource
-def load_model():
+def load_model() -> Any:
     """Load the regressor through the API's guarded loader, so a cross-version
     artefact is refused here (as the API refuses it) instead of loading and
     raising at predict time. Returns None when the model is absent or rejected;
@@ -46,7 +47,16 @@ def load_model():
         return None
 
 
-def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
+def build_features(
+    beds: float,
+    bath: float,
+    sqft: float,
+    borough: str,
+    prop_type: str,
+    zipcode: str,
+    lat: float,
+    lon: float,
+) -> pd.DataFrame:
     """Build feature DataFrame from user input."""
     total_rooms = beds + bath
     bed_bath_ratio = beds / max(bath, 1.0)
@@ -68,6 +78,9 @@ def build_features(beds, bath, sqft, borough, prop_type, zipcode, lat, lon):
                 "BOROUGH": borough.lower(),
                 "TYPE": prop_type.lower(),
                 "ZIPCODE": zipcode,
+                # No dashboard field for it: the encoder folds an unseen value
+                # into "other", so this surface predicts without a shipped
+                # feature the API accepts.
                 "SUBLOCALITY": "unknown",
             }
         ]
@@ -134,7 +147,7 @@ with col2:
         reg = load_model()
 
         if reg is None:
-            st.error("Model unavailable — train it first: `python run_training.py`")
+            st.error("Model unavailable, train it first: `python run_training.py`")
         else:
             features = build_features(
                 beds, bath, sqft, borough, prop_type, zipcode, latitude, longitude
@@ -150,10 +163,13 @@ with col2:
             st.metric("Price Zone", record["price_zone"])
             st.metric("Estimated Price", f"${record['predicted_price']:,.0f}")
             band = record["price_range"]
-            target = get_price_interval()["target_coverage"]
+            interval = get_price_interval()
+            target = interval["target_coverage"]
+            measured = interval["coverage_test"]
             st.caption(
-                f"{target:.0%} of listings fall in ${band['low']:,.0f} - "
-                f"${band['high']:,.0f}"
+                f"Calibrated for {target:.0%} coverage; measured "
+                f"{measured:.1%} on the test split. "
+                f"${band['low']:,.0f} - ${band['high']:,.0f}"
             )
 
     else:

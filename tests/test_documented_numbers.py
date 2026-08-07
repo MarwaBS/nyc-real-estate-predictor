@@ -1,9 +1,11 @@
-"""Published headline numbers must match the artefacts they claim to quote.
+"""Every claim a reader can check, compared to the thing it describes.
 
-Hand-maintained figures rot: README, MODEL_CARD, CHANGELOG, the ADRs and the
-public Space page have all carried figures from an earlier training run,
-including a regressor named as LightGBM when the shipped model was XGBoost.
-Nothing recomputed them, so nothing failed when they went stale.
+Published figures against the artefacts. Tool config and the import graph are
+in ``test_gate_scope.py``.
+
+Hand-maintained figures rot. MODEL_CARD named the regressor as LightGBM while
+the shipped artefact was XGBoost. README carried the previous model's SHAP
+table. Nothing recomputed either, so nothing failed when they went stale.
 
 This reads the numbers back out of the prose and compares them to
 ``reports/training_metrics.json`` and ``benchmarks/results.json``. It is
@@ -28,11 +30,17 @@ from pathlib import Path
 
 import pytest
 
-from src.config import ONEHOT_FEATURES, TARGET_ENCODED_FEATURES
+from src.config import (
+    CENTRAL_PARK,
+    MANHATTAN_CENTER,
+    ONEHOT_FEATURES,
+    TARGET_ENCODED_FEATURES,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 METRICS = json.loads((ROOT / "reports" / "training_metrics.json").read_text("utf-8"))
 BENCH = json.loads((ROOT / "benchmarks" / "results.json").read_text("utf-8"))
+CAP_STUDY = json.loads((ROOT / "reports" / "cap_factor_study.json").read_text("utf-8"))
 
 
 def _read(relative: str) -> str:
@@ -54,7 +62,7 @@ def test_documents_name_the_regressor_that_actually_shipped() -> None:
     """MODEL_CARD named LightGBM while the artefact was XGBoost."""
     shipped = METRICS["regression"]["selected_model"]
     card = _read("MODEL_CARD.md")
-    claimed = re.search(r"\*\*Regressor\*\*\s*[-—]\s*`([^`]+)`", card)
+    claimed = re.search(r"\*\*Regressor\*\*\s*-\s*`([^`]+)`", card)
     assert claimed is not None, "MODEL_CARD no longer states a regressor"
 
     # Normalised: the artefact says "random_forest", prose says "Random Forest".
@@ -69,7 +77,7 @@ def test_documents_name_the_regressor_that_actually_shipped() -> None:
 def test_documents_quote_the_shipped_interval_coverage() -> None:
     coverage = METRICS["regression"]["price_interval"]["coverage_test"]
     as_pct = f"{coverage * 100:.1f}%"
-    for doc in ("MODEL_CARD.md", "deploy/huggingface/README.md"):
+    for doc in ("MODEL_CARD.md", "DESIGN_DECISIONS.md", "deploy/huggingface/README.md"):
         assert as_pct in _read(doc), f"{doc} does not quote coverage {as_pct}"
 
 
@@ -102,19 +110,31 @@ LIVE_DOCS = [
     "pyproject.toml",
 ]
 
-# A line stating that something is gone must be allowed to name it. Matched
-# against the text PRECEDING the claim, not the whole line: "macro F1 = 0.699
-# ... There is no classifier" is a live claim followed by a historical remark,
-# and a whole-line filter exempted it — the mutation to 0.727 passed.
+# A line stating that something is gone must be allowed to name it. Leading
+# boundary only: unanchored it matched inside `avoid`, trailing would drop
+# `previously`.
 _HISTORICAL = re.compile(
-    r"earlier|previous|no longer|there is no|was removed|is gone|used to"
-    r"|deleted|void|before 2026|superseded"
-    # A measurement of a rejected variant is a different quantity, not a
-    # contradicted claim — the cap-factor derivation reports one for each
-    # candidate factor.
-    r"|uncapped|variant",
+    r"\b(?:earlier|previous|no longer|there is no|was removed|is gone|used to"
+    r"|deleted|before 2026|superseded)",
     re.IGNORECASE,
 )
+
+# Figures break on commas too: without that, one "earlier" exempted a whole
+# comma-joined sentence. Component names do not, because "there is no X, no Y
+# and no Z" is one claim governed by a single marker.
+_FIGURE_BREAK = re.compile(r"(?<=[.;:,])\s|\|")
+_SENTENCE_BREAK = re.compile(r"(?<=[.;:])\s|\|")
+
+
+def _is_historical(line: str, start: int, breaks: re.Pattern = _FIGURE_BREAK) -> bool:
+    """Whether the claim at ``start`` sits in a span marked historical. That
+    span alone: a whole-line filter exempted every other claim beside it."""
+    edges = [0] + [m.end() for m in breaks.finditer(line)] + [len(line)]
+    for begin, end in zip(edges, edges[1:], strict=False):
+        if begin <= start < end:
+            return bool(_HISTORICAL.search(line[begin:end]))
+    return False
+
 
 # Components deleted from the codebase. A live doc naming one is describing
 # software that does not exist.
@@ -128,7 +148,7 @@ DELETED_COMPONENTS = [
     "argmax",
 ]
 
-# Symbols a notebook must not import or reference — deleted functions and the
+# Symbols a notebook must not import or reference, deleted functions and the
 # never-shipped feature ideas explored in early EDA. A notebook that names one
 # either fails to import or demonstrates an architecture the repo abandoned.
 DELETED_NOTEBOOK_SYMBOLS = [
@@ -159,10 +179,10 @@ NOTEBOOKS = sorted(
 @pytest.mark.parametrize("nb", NOTEBOOKS)
 def test_notebooks_reference_no_deleted_symbol(nb: str) -> None:
     """Notebooks are committed portfolio artefacts a reviewer will open, but CI
-    does not execute them — so a stale import of a deleted symbol ships unseen.
+    does not execute them, so a stale import of a deleted symbol ships unseen.
     ``02_eda_features`` did exactly that: it imported ``add_neighborhood_clusters``
     and recreated the ``DIST_NEAREST_SUBWAY`` proxy the feature module documents
-    as removed. Markdown cells are scanned too — a deleted feature advertised in
+    as removed. Markdown cells are scanned too, a deleted feature advertised in
     prose is the same stale claim as one imported in code."""
     cells = json.loads((ROOT / nb).read_text(encoding="utf-8"))["cells"]
     text = "\n".join(
@@ -176,21 +196,22 @@ def test_notebooks_reference_no_deleted_symbol(nb: str) -> None:
 def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
     """Presence checks cannot catch this: the Space page described an XGBoost
     classifier and a label encoder while every number in it was correct."""
+    # Every occurrence: a historical first one shielded a live second.
     offenders = [
         f"{doc}:{i}: {name}"
         for i, line in enumerate(_read(doc).splitlines(), 1)
-        if not _HISTORICAL.search(line)
         for name in DELETED_COMPONENTS
-        if name in line
+        for hit in re.finditer(re.escape(name), line)
+        if not _is_historical(line, hit.start(), _SENTENCE_BREAK)
     ]
     assert not offenders, "live docs name deleted components:\n" + "\n".join(offenders)
 
 
 def _study_values() -> set[float]:
     """Seed-study and baseline quantities quoted beside the point estimates.
-    They are different quantities with their own gates, so the contradiction
-    scans must not flag them — the claim window can straddle a compound
-    sentence like "test R2 0.814 ± 0.028, zones macro F1 0.717 ± 0.020"."""
+    They have their own gates, so the contradiction scans must not flag them.
+    A claim window can straddle a compound sentence like "test R2 0.814 ±
+    0.028, zones macro F1 0.717 ± 0.020"."""
     values = {
         round(SEED_VARIANCE[k][s], 3)
         for k in (
@@ -209,51 +230,105 @@ def _study_values() -> set[float]:
     return values
 
 
-def _claimed_values(text: str, keyword: str) -> list[tuple[int, float]]:
-    """Every number stated within 60 characters after `keyword`, with its line."""
-    found = []
-    for i, line in enumerate(text.splitlines(), 1):
-        for m in re.finditer(keyword, line, re.IGNORECASE):
-            if _HISTORICAL.search(line[: m.start()]):
+#: Any decimal figure. The trailing guard drops versions (`1.26.4`).
+_DECIMAL = re.compile(r"(?<![\d.])(\d+\.\d+)(?!\.?\d)")
+
+
+def _artefact_floats() -> set[float]:
+    """Every fractional quantity the artefacts hold, unrounded."""
+    values = {
+        METRICS["regression"]["metrics"]["r2"],
+        METRICS["regression"]["selection_metrics_val"]["r2"],
+        METRICS["classification"]["metrics"]["macro_f1"],
+        METRICS["classification"]["metrics"]["accuracy"],
+        METRICS["regression"]["price_interval"]["coverage_test"],
+        abs(BENCH["performance"]["r2_log_space"]),
+        # The leaked PRICE_PER_SQFT figure ADR-001 exists to document. Named
+        # deliberately and repeatedly, so it is allowed by value.
+        0.997,
+    }
+    values |= _study_values()
+    values |= set(METRICS["classification"]["fairness_by_borough"].values())
+    values |= {
+        figure
+        for entry in METRICS["classification"]["borough_floor"].values()
+        for key, figure in entry.items()
+        if key != "n"
+    }
+    values |= {row["mean_abs_shap"] for row in METRICS["classification"]["shap_top10"]}
+    values |= {row["val_mae_common"] for row in CAP_STUDY["rows"]}
+    values |= {row["val_r2_common"] for row in CAP_STUDY["rows"]}
+    values |= {row["pct_at_cap"] for row in CAP_STUDY["rows"]}
+    values.add(BENCH["leakage_tripwire"]["threshold"])
+    # The interval coverages are published as percentages.
+    values |= {
+        round(METRICS["regression"]["price_interval"][key] * 100, 1)
+        for key in ("coverage_test", "coverage_val")
+    }
+    # The Haversine anchors, from the constants the features are built from.
+    values |= {abs(c) for anchor in (MANHATTAN_CENTER, CENTRAL_PARK) for c in anchor}
+    # The val margin the shipped-regressor decision turns on.
+    ranked = sorted(
+        (c["r2"] for c in METRICS["regression"]["candidates_val"].values()),
+        reverse=True,
+    )
+    values.add(round(ranked[0] - ranked[1], 4))
+    values |= {
+        figure
+        for key, figure in CAP_STUDY.items()
+        if isinstance(figure, float) and key != "shipped_factor"
+    }
+    values |= {
+        figure
+        for key, figure in METRICS["regression"]["price_interval"].items()
+        if isinstance(figure, (int, float))
+    }
+    # The cap paragraph's gain is the difference between two figures above.
+    mae = {row["factor"]: row["val_mae_common"] for row in CAP_STUDY["rows"]}
+    values.add(round(mae[CAP_STUDY["shipped_factor"]] - mae[1.5], 4))
+    return values | set(_UNGATED_FIGURES)
+
+
+#: Figures the docs state that no artefact holds. The set is closed: each is a
+#: one-off measurement or a superseded value the prose names as such, and adding
+#: one means editing this list, which is a visible act in review.
+_UNGATED_FIGURES = {
+    0.014,  # the retracted threshold-tuning gain, named as in-sample
+    0.0006,  # its honest out-of-sample re-measurement, run once, no artefact
+    0.0106,  # the standard deviation of that same study
+    0.375,  # the superseded benchmark score, named as never reproducible
+    3.12,  # the Python version, stated in the environment tables
+    1.33,  # the binomial standard error MODEL_CARD derives in prose
+    78.5,  # SUBLOCALITY's own share of the borough derivation chain
+    47.0,  # LOCALITY's own share of the same chain
+    99.2,  # the chain's combined resolution rate
+    0.8154,  # test R2 from the Linux run that shipped the other candidate
+}
+
+
+@pytest.mark.parametrize("doc", LIVE_DOCS)
+def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Every decimal of two places or more, plus one-place percentages.
+
+    One bound: a real figure quoted against the wrong metric, because
+    membership does not know which quantity owns which number. One-place
+    values that are not percentages are the docs' MB sizes and "2.1 points
+    below", so they are not claims this can judge."""
+    allowed = _artefact_floats()
+    wrong = []
+    for i, line in enumerate(_read(doc).splitlines(), 1):
+        for match in _DECIMAL.finditer(line):
+            if _is_historical(line, match.start()):
                 continue
-            window = line[m.end() : m.end() + 60]
-            found.extend(
-                (i, float(v)) for v in re.findall(r"\*{0,2}(0\.\d{3})\*{0,2}", window)
-            )
-    return found
-
-
-@pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_live_macro_f1_claim_matches_the_artefact(doc: str) -> None:
-    """Asserting the true value appears somewhere passes while a contradictory
-    figure sits three lines away — which is how 0.727 survived beside 0.699."""
-    shipped = round(METRICS["classification"]["metrics"]["macro_f1"], 3)
-    wrong = [
-        f"{doc}:{line}: macro F1 {value} (artefact: {shipped})"
-        for line, value in _claimed_values(_read(doc), r"macro[- ]?F1")
-        if value != shipped and value not in _study_values()
-    ]
-    assert not wrong, "contradicted macro F1 claims:\n" + "\n".join(wrong)
-
-
-@pytest.mark.parametrize("doc", LIVE_DOCS)
-def test_every_live_test_r2_claim_matches_the_artefact(doc: str) -> None:
-    """The external benchmark's R2(log) is a different quantity, so only the
-    in-distribution values are compared."""
-    shipped = round(METRICS["regression"]["metrics"]["r2"], 3)
-    val = round(METRICS["regression"]["selection_metrics_val"]["r2"], 3)
-    bench = round(BENCH["performance"]["r2_log_space"], 3)
-    # 0.997 is the leaked PRICE_PER_SQFT figure ADR-001 exists to document. It
-    # is named deliberately and repeatedly, so it is allowed by value rather
-    # than by loosening the historical-phrasing filter every line must pass.
-    # The seed study's mean/std/baseline values are gated separately.
-    allowed = {shipped, val, bench, 0.997} | _study_values()
-    wrong = [
-        f"{doc}:{line}: R2 {value} (artefact test {shipped} / val {val})"
-        for line, value in _claimed_values(_read(doc), r"R[²2]")
-        if value not in allowed
-    ]
-    assert not wrong, "contradicted R2 claims:\n" + "\n".join(wrong)
+            value = match.group(1)
+            places = len(value.split(".")[1])
+            if places < 2 and not line[match.end() :].startswith("%"):
+                continue
+            # Compared at the precision the document chose, so a figure written
+            # to more places than the artefact carries is still checked.
+            if float(value) not in {round(v, places) for v in allowed}:
+                wrong.append(f"{doc}:{i}: {value} is in no artefact")
+    assert not wrong, "figures no artefact holds:\n" + "\n".join(wrong)
 
 
 @pytest.mark.parametrize("doc", ["README.md", "MODEL_CARD.md"])
@@ -285,7 +360,7 @@ def test_reader_facing_docs_declare_the_shipped_model(doc: str) -> None:
     converged. Each reader-facing surface instead carries one machine-readable
     field, compared to the artefact by string equality."""
     shipped = METRICS["regression"]["selected_model"]
-    claimed = re.search(r"\*\*Shipped model\*\*\s*[-—]\s*`([^`]+)`", _read(doc))
+    claimed = re.search(r"\*\*Shipped model\*\*\s*-\s*`([^`]+)`", _read(doc))
     assert claimed is not None, f"{doc} no longer declares a **Shipped model** field"
 
     def normalise(text: str) -> str:
@@ -315,44 +390,156 @@ def test_pyproject_description_names_the_shipped_model() -> None:
     assert not stale, f"pyproject description names non-shipped model(s): {stale}"
 
 
-def test_no_tracked_file_references_private_projects() -> None:
-    """Comments cross-referencing the author's private repositories expose
-    their names to every reader and explain nothing a local comment couldn't."""
-    private_names = re.compile(r"resume.?forge", re.IGNORECASE)
-    this_file = Path(__file__).resolve()
-    offenders = []
-    for pattern in ("**/*.py", "**/*.md", "**/*.yml", "**/*.toml", "**/*.cfg"):
-        for path in ROOT.glob(pattern):
-            if any(
-                part in {".venv312", ".venv", ".git", "node_modules"}
-                for part in path.parts
-            ):
+def test_every_relative_link_in_the_docs_resolves() -> None:
+    """A renamed or deleted file leaves the prose pointing at nothing, and the
+    reader finds out instead of CI. External URLs are out of scope: they fail
+    for reasons that have nothing to do with this commit."""
+    broken = []
+    for doc in sorted(ROOT.rglob("*.md")):
+        if any(part.startswith(".venv") or part == ".git" for part in doc.parts):
+            continue
+        text = doc.read_text(encoding="utf-8")
+        for match in re.finditer(r"\[[^\]]*\]\(([^)#\s]+)\)", text):
+            target = match.group(1)
+            if target.startswith(("http://", "https://", "mailto:")):
                 continue
-            if path.resolve() == this_file:  # the regex above matches itself
-                continue
-            if private_names.search(path.read_text(encoding="utf-8", errors="ignore")):
-                offenders.append(str(path.relative_to(ROOT)))
-    for name in (".gitignore", ".trivyignore", "Dockerfile", "Makefile"):
-        if (ROOT / name).exists() and private_names.search(
-            (ROOT / name).read_text(encoding="utf-8", errors="ignore")
-        ):
-            offenders.append(name)
-    assert not offenders, f"private project referenced in: {sorted(offenders)}"
+            if not (doc.parent / target).exists():
+                line = text[: match.start()].count("\n") + 1
+                broken.append(f"{doc.relative_to(ROOT).as_posix()}:{line} -> {target}")
+    assert not broken, "markdown links pointing at nothing:\n" + "\n".join(broken)
 
 
-def test_the_stated_coverage_gate_matches_ci() -> None:
-    """README stated three different gate values (65, 88, 69) at once, all
-    wrong. The CI workflow is the authority."""
-    ci = _read(".github/workflows/ci.yml")
-    gate = re.search(r"--cov-fail-under=(\d+)", ci)
-    assert gate is not None, "ci.yml no longer runs a coverage gate"
+def test_the_cap_factor_paragraph_quotes_the_study() -> None:
+    """MODEL_CARD's cap paragraph is the longest derivation in the doc set and
+    had no producer: its dollar figures were the pooled fit, left behind when
+    cap bounds moved to a train-only fit, and its MAE figures were from an
+    earlier run of the study."""
+    card = _read("MODEL_CARD.md")
+    low, high = CAP_STUDY["train_fit_price_bounds"]
+    quoted = [
+        f"${high:,.0f}",
+        f"−${abs(low):,.0f}",
+        f"${CAP_STUDY['common_support_ceiling']:,.0f}",
+    ]
+    quoted += [f"{row['val_mae_common']:.4f}" for row in CAP_STUDY["rows"]]
+    # Only the two factors the paragraph weighs against each other: the
+    # percentages are what it uses to justify keeping 3.0 over 1.5.
+    compared = {CAP_STUDY["shipped_factor"], 1.5}
+    quoted += [
+        f"{row['pct_at_cap']}%"
+        for row in CAP_STUDY["rows"]
+        if row["factor"] in compared
+    ]
+    missing = [value for value in quoted if value not in card]
+    assert not missing, f"MODEL_CARD does not quote the cap study: {missing}"
 
-    readme = _read("README.md")
-    stated_gates = set(re.findall(r"(\d+)% coverage gate", readme))
-    stated_cmds = set(re.findall(r"--cov-fail-under=(\d+)", readme))
-    assert stated_gates | stated_cmds <= {gate.group(1)}, (
-        f"CI gates at {gate.group(1)}%; README states {stated_gates | stated_cmds}"
+
+def test_the_benchmark_artefact_names_a_registered_contract_version() -> None:
+    """The contract may move ahead of the artefact, but the version the artefact
+    records must still be one the registry seals, with the hash it was sealed
+    under. Otherwise the recorded provenance points at nothing."""
+    registry = json.loads(_read("benchmarks/SCHEMA_MAP_VERSIONS.json"))["versions"]
+    version = BENCH["schema_map_version"]
+    assert version in registry, (
+        f"results.json records {version}, absent from the registry"
     )
+    assert registry[version] == BENCH["schema_map_sha256"], (
+        f"results.json records a {version} hash the registry does not seal"
+    )
+
+
+def test_readme_states_the_contract_version_the_results_were_produced_under() -> None:
+    """The contract can be bumped without re-running the benchmark, so README
+    must name the version the results were produced under, not the live one.
+    The registry seals v4 today while results.json still records v3."""
+    produced_under = BENCH["schema_map_version"]
+    stated = re.search(r"produced under SCHEMA_MAP (v\d+)", _read("README.md"))
+    assert stated is not None, (
+        "README no longer says which contract version the results came from"
+    )
+    assert stated.group(1) == produced_under, (
+        f"README says the results were produced under {stated.group(1)}; "
+        f"benchmarks/results.json records {produced_under}"
+    )
+
+
+def test_the_capped_target_caveat_is_stated_and_quoted() -> None:
+    """The headline R2 is scored against a clipped target. The study is tied to
+    the training artefact first: on its own it can drift with the prose and stay
+    green, because its own figures feed the doc scan."""
+    assert CAP_STUDY["shipped_model_test_r2_capped_target"] == round(
+        METRICS["regression"]["metrics"]["r2"], 4
+    ), "the study scored a different model than the one that shipped"
+    assert CAP_STUDY["n_test"] == METRICS["provenance"]["n_test"], (
+        "the study used a different test split than the shipped run"
+    )
+
+    listed = CAP_STUDY["shipped_model_test_r2_listed_target"]
+    censored = CAP_STUDY["test_rows_censored_by_the_cap"]
+    for doc in ("README.md", "MODEL_CARD.md"):
+        text = _read(doc)
+        assert f"{listed:.4f}" in text, f"{doc} does not quote the listed-target R2"
+        assert f"{censored} of {CAP_STUDY['n_test']}" in text, (
+            f"{doc} does not state how many test rows the cap censors"
+        )
+
+
+#: Counts and money figures a live doc states that no artefact holds. Closed
+#: set: an approximation, an illustrative quantity, and a data constant.
+_UNGATED_INTEGERS = {
+    4_500,  # "4,500+ listings", rounded down from the cleaned count
+    1_000,  # illustrative ZIP cardinality in the leakage-scope note
+    2_147_483_647,  # the int32 overflow sentinel the cleaner drops
+    18_314,  # rows behind the superseded 0.375 benchmark score
+    1_130,  # "~1,130 listings each", the quartile size rounded
+}
+
+_SEPARATED_INTEGER = re.compile(r"(?<![\d.])\d{1,3}(?:,\d{3})+(?![\d])")
+
+
+def _artefact_integers() -> set[int]:
+    provenance = METRICS["provenance"]
+    counts = {provenance[k] for k in ("n_train", "n_val", "n_test")}
+    values = set(counts) | {sum(counts)}
+    values |= {
+        BENCH["n_scored"],
+        BENCH["n_dropped"],
+        BENCH["n_scored"] + BENCH["n_dropped"],
+    }
+    values |= set(BENCH["drop_reasons"].values())
+    values |= {CAP_STUDY["n_train"], CAP_STUDY["n_test"]}
+    values |= {row["train_rows_at_cap"] for row in CAP_STUDY["rows"]}
+    values |= {int(abs(b)) for b in CAP_STUDY["train_fit_price_bounds"]}
+    values.add(int(CAP_STUDY["common_support_ceiling"]))
+    # Zone cut-points appear both in full and in thousands.
+    for cut in provenance["price_zone_bins"]:
+        values |= {int(cut), int(cut) // 1_000}
+    raw = (ROOT / "Resources" / "NY-House-Dataset.csv").read_text(
+        encoding="utf-8", errors="ignore"
+    )
+    # Raw rows: the committed CSV's data lines, header excluded.
+    values.add(len([line for line in raw.splitlines() if line.strip()]) - 1)
+    return values | _UNGATED_INTEGERS
+
+
+@pytest.mark.parametrize("doc", LIVE_DOCS)
+def test_every_separated_count_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
+    """Row counts and money figures rot the same way fractions do, and the
+    fractional scan does not see them: 4,526 could be rewritten to 9,999 with
+    the suite green.
+
+    Comma-separated only: a bare run of four digits here is usually a year, a
+    port or a colour code, and exempting years would exempt a count written as
+    2024."""
+    allowed = _artefact_integers()
+    wrong = []
+    for i, line in enumerate(_read(doc).splitlines(), 1):
+        for match in _SEPARATED_INTEGER.finditer(line):
+            if _is_historical(line, match.start()):
+                continue
+            if int(match.group(0).replace(",", "")) not in allowed:
+                wrong.append(f"{doc}:{i}: {match.group(0)} is in no artefact")
+    assert not wrong, "counts no artefact holds:\n" + "\n".join(wrong)
 
 
 def test_readme_shap_table_matches_the_artefact() -> None:
@@ -377,11 +564,11 @@ def test_readme_shap_table_matches_the_artefact() -> None:
 
 def test_the_stated_feature_count_matches_the_fitted_model() -> None:
     """MODEL_CARD claimed 14 features (10 numeric) against an artefact holding
-    12 (8 numeric) — the count was not updated when two were removed."""
+    12 (8 numeric), the count was not updated when two were removed."""
     features = METRICS["provenance"]["features"]
     card = _read("MODEL_CARD.md")
     stated = re.search(
-        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*—\s*(\d+)\s*numeric", card
+        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*-\s*(\d+)\s*numeric", card
     )
     assert stated is not None, "MODEL_CARD no longer states a feature count"
 
@@ -408,6 +595,13 @@ def test_seed_variance_claims_match_the_recorded_study() -> None:
         text = _read(doc)
         assert r2_claim in text, f"{doc} does not quote test R² {r2_claim}"
         assert f1_claim in text, f"{doc} does not quote zones F1 {f1_claim}"
+
+    # _study_values() exempts these from the contradiction scans.
+    readme = _read("README.md")
+    for key in ("baseline_test_r2", "baseline_zones_macro_f1"):
+        spread = SEED_VARIANCE[key]
+        claim = f"{spread['mean']:.3f} ± {spread['std']:.3f}"
+        assert claim in readme, f"README does not quote the {key} spread {claim}"
     # The selection-count claim must match too.
     counts = SEED_VARIANCE["selected_model_counts"]
     winner = max(counts, key=lambda k: counts[k])
@@ -417,7 +611,7 @@ def test_seed_variance_claims_match_the_recorded_study() -> None:
 
 def test_the_shipped_seed_metrics_sit_inside_the_recorded_spread() -> None:
     """The headline artefact must be a draw from the distribution the study
-    describes — a stale study file would let the two drift apart."""
+    describes, a stale study file would let the two drift apart."""
     r2 = METRICS["regression"]["metrics"]["r2"]
     spread = SEED_VARIANCE["test_r2"]
     assert spread["min"] - 1e-9 <= r2 <= spread["max"] + 1e-9

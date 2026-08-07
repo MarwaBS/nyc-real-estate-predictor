@@ -25,7 +25,7 @@ def test_haversine_manhattan_to_brooklyn() -> None:
 
 
 def test_haversine_vectorized_matches_scalar() -> None:
-    """Element-for-element agreement — training uses the vectorized form, the
+    """Element-for-element agreement, training uses the vectorized form, the
     API the scalar one, so any divergence is train/serve skew."""
     lats = pd.Series([40.758, 40.689, 40.9, 40.5])
     lons = pd.Series([-73.985, -73.984, -73.7, -74.2])
@@ -56,7 +56,7 @@ def test_geo_module_carries_no_dead_features() -> None:
     subway lookup were removed because no model ever consumed their
     output (the ColumnTransformer dropped the columns and station data
     was never bundled). If someone reintroduces them, they must wire
-    them into a model feature list — not just into this module."""
+    them into a model feature list, not just into this module."""
     import src.utils.geo as geo
 
     for dead in (
@@ -65,6 +65,6 @@ def test_geo_module_carries_no_dead_features() -> None:
         "nearest_station_distance",
     ):
         assert not hasattr(geo, dead), (
-            f"{dead} reappeared in src.utils.geo — either wire it into the "
+            f"{dead} reappeared in src.utils.geo, either wire it into the "
             f"model feature contract or keep it out of the production path"
         )

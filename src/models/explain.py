@@ -1,4 +1,4 @@
-"""Model explainability — SHAP values, feature importance, per-prediction explanations."""
+"""Model explainability: SHAP values, feature importance, per-prediction explanations."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def compute_shap_values(
         # TreeExplainer raises assorted, version-dependent errors on an
         # unsupported model; any failure degrades to the model-agnostic
         # KernelExplainer rather than losing the explanation.
-        logger.info("TreeExplainer failed — falling back to KernelExplainer")
+        logger.info("TreeExplainer failed, falling back to KernelExplainer")
         explainer = shap.KernelExplainer(model.predict, shap.sample(X_sample, 100))
         shap_values = explainer.shap_values(X_sample)
 

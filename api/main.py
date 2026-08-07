@@ -1,4 +1,4 @@
-"""FastAPI prediction service — /predict, /health, /docs."""
+"""FastAPI prediction service: /predict, /health, /docs."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Settings are constructed (and validated) at import time. A prod deploy with
 # ALLOWED_ORIGINS="*" or unset raises ValueError here and the app fails to
-# start — which is what we want. Dev/staging keep permissive defaults.
+# start, which is what we want. Dev/staging keep permissive defaults.
 _settings = get_settings()
 
 app = FastAPI(
@@ -37,7 +37,7 @@ app = FastAPI(
     description="Predict price zones and property values for NYC real estate.",
 )
 
-# CORS — env-driven. Wildcard in prod is rejected at settings load-time.
+# CORS, env-driven. Wildcard in prod is rejected at settings load-time.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.origins_list or ["*"],
@@ -57,7 +57,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 
 
 # ---------------------------------------------------------------------------
-# Auth dependency — optional X-API-Key header, enabled only when API_KEY is set
+# Auth dependency, optional X-API-Key header, enabled only when API_KEY is set
 # ---------------------------------------------------------------------------
 def _verify_api_key(x_api_key: str | None) -> None:
     """Timing-safe X-API-Key check.
@@ -86,7 +86,7 @@ def _verify_api_key(x_api_key: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Lazy model loading — keeps startup cheap for /health and /docs
+# Lazy model loading, keeps startup cheap for /health and /docs
 # ---------------------------------------------------------------------------
 _regressor: Any = None
 
@@ -139,8 +139,8 @@ def predict(
 
     Rate-limited per client IP at the configured ``PREDICT_RATE_LIMIT``;
     requests beyond it receive HTTP 429 from slowapi's handler. The rate is
-    deployment-configurable, so no specific request count is quoted here —
-    this docstring is rendered into the public /docs page, where a hardcoded
+    deployment-configurable, so no specific request count is quoted here.
+    This docstring is rendered into the public /docs page, where a hardcoded
     number would misdescribe every deployment that overrides the default.
     The ``request`` parameter is required by slowapi's decorator contract.
 
@@ -169,7 +169,7 @@ def predict(
             detail="Models not yet trained. Run: make train",
         ) from exc
     except Exception:
-        # Do NOT leak the exception message — it can disclose internal paths,
+        # Do NOT leak the exception message, it can disclose internal paths,
         # model-file names, or SQL fragments. logger.exception records the full
         # trace server-side; the client gets a generic message. `from None`
         # suppresses the exception chain for clean serialization.
@@ -182,7 +182,7 @@ def predict(
 
 @app.get("/health", response_model=HealthResponse)
 def health(response: Response) -> HealthResponse:
-    """Health check — reports serving-stack availability. Not auth-gated.
+    """Health check, reports serving-stack availability. Not auth-gated.
 
     A failed probe returns **503**, not 200 with a false flag in the body.
     The status code must track whether the service can actually predict:

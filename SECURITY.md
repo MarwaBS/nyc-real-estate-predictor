@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Only the `main` branch is actively maintained. Security patches are applied to
-the latest tagged release only.
+Only the `main` branch is actively maintained. There are no tagged releases;
+patches land on `main`.
 
 ## Reporting a vulnerability
 
@@ -28,7 +28,7 @@ You can expect an initial acknowledgement within 72 hours.
 - Leakage of secrets via error messages or logs
 - Container-image CVEs scanned by Trivy in CI (see `.trivyignore` for managed
   risks)
-- Supply-chain findings from `pip-audit` + CycloneDX SBOM artifacts
+- Supply-chain findings from `pip-audit` + CycloneDX SBOM artefacts
 
 **Out of scope:**
 - Issues requiring physical access to a user's machine
@@ -39,41 +39,41 @@ You can expect an initial acknowledgement within 72 hours.
   Streamlit demo runs behind its hosting platform's own ingress controls
   (`slowapi` does not apply to Streamlit).
 
-## Handling of known managed risks
-
-The `.trivyignore` file (if present) lists CVE IDs this project has triaged and
-accepted as managed risk. Each entry has inline rationale. These are not
-vulnerabilities we are hiding — they are vulnerabilities in dependencies whose
-fix requires a breaking migration that is scheduled but not yet executed.
 
 ## Dependabot alerts on training-only dependencies
 
 GitHub's Dependabot scans the full dependency tree of every `requirements*.txt`
 file in the repo. This project deliberately splits dependencies into:
 
-- **`requirements.txt`** — runtime: what ships in the production Docker image
+- **`requirements.txt`**, runtime: what ships in the production Docker image
   (pandas, numpy, scikit-learn, xgboost, lightgbm, fastapi, slowapi, streamlit, etc.).
-- **`requirements-train.txt`** — training-only: `shap` (the training-time SHAP
+- **`requirements-train.txt`**, training-only: `shap` (the training-time SHAP
   pass) and `mlflow` (experiment tracking). These are required to RE-TRAIN the
   model but are NEVER copied into the production image (see `Dockerfile` and
   `deploy/huggingface/Dockerfile`). torch, catboost, optuna and imbalanced-learn
   were removed with the multi-task net and the extended training path.
 
 Most Dependabot alerts on this repo's default branch originate from
-`requirements-train.txt` — mlflow carries the bulk of the pending CVEs.
+`requirements-train.txt`, mlflow carries the bulk of the pending CVEs.
 **None of these reach the production serving path.** They are training-time
-tools used in a developer's local environment or in CI's scheduled retraining
-workflow, not in the public-facing inference container.
+tools. CI installs them, because `requirements-dev.txt`
+pulls in `requirements-train.txt`, but neither Dockerfile copies that file, so
+they never reach the public-facing inference container.
 
 Triage policy:
 
 1. Alerts originating SOLELY from `requirements-train.txt` are acknowledged
    and will be addressed when the upstream package ships a non-breaking fix.
-2. Alerts originating from `requirements.txt` (runtime) are HIGH priority and
-   will be addressed within the patch window via Dependabot pull request.
+2. Alerts originating from `requirements.txt` (runtime) are HIGH priority.
+   Dependabot opens the pull request, except for the packages whose minor
+   updates are frozen while numpy stays at 1.x (the list is in
+   `.github/dependabot.yml`, recomputed by `tests/test_dependency_freeze.py`).
+   Those still receive patch updates; a fix that needs a minor bump is taken by
+   hand. `streamlit` is in that set, and its last CVE fix was a minor bump.
 3. Alerts where both files share an affected package are treated as runtime
    alerts (HIGH priority).
 
 This file documents the policy so reviewers understand why the alert count
-is non-zero despite the runtime surface being CVE-clean (verified by the
-CI `security` job running `pip-audit -r requirements.txt`).
+is non-zero while the runtime surface carries no unignored pip-audit finding.
+The CI `security` job runs `pip-audit -r requirements.txt`; `PYSEC-2024-277` is
+ignored there, with its rationale at the call site in `ci.yml`.

@@ -1,6 +1,6 @@
-"""External benchmark orchestrator — one-shot run.
+"""External benchmark orchestrator, one-shot run.
 
-Pipeline (every "invariant" below is ENFORCED here at run time — a
+Pipeline (every "invariant" below is ENFORCED here at run time, a
 violation raises and fails the run; nothing is merely recorded):
 
 1. Verify the schema lock: SCHEMA_MAP.md's LF-normalised SHA-256 must
@@ -13,14 +13,14 @@ violation raises and fails the run; nothing is merely recorded):
    ``(X, target, report)`` under the SCHEMA_MAP.md contract, then enforce:
    - drop-log consistency: ``sum(drop_reasons) == n_dropped`` and
      ``n_raw == n_scored + n_dropped`` (raises on violation);
-   - target sanity: every retained log-price is finite (raises — a NaN
+   - target sanity: every retained log-price is finite (raises, a NaN
      target would otherwise silently poison the R²).
-4. Run the leakage invariants — name-based forbidden-column check and
+4. Run the leakage invariants, name-based forbidden-column check and
    semantic (Pearson + Spearman + normalised MI) target-independence.
    Findings are recorded; a triggered detector is visible in
    ``results.json → leakage`` and trips the tripwire bool.
 5. Run inference with the lean benchmark regressor
-   (``models/benchmark_regressor.joblib`` — COMMITTED, 0.6 MB, trained by
+   (``models/benchmark_regressor.joblib``, COMMITTED, 0.6 MB, trained by
    ``benchmarks.train_benchmark_model`` on the three features shared with
    NYC.gov sales: borough, property_sqft, zip_code). Because the artefact
    ships with the repo and the data is a public download, CI and any
@@ -67,9 +67,9 @@ class InferenceError(Exception):
     """The committed benchmark model failed to load or score.
 
     Since the model artefact ships WITH the repo (it is what makes the
-    benchmark stranger-reproducible), any inference failure — missing
+    benchmark stranger-reproducible), any inference failure, missing
     file, unpicklable artefact (e.g. produced under unpinned numpy),
-    feature mismatch — is a structural pipeline defect, never a finding.
+    feature mismatch, is a structural pipeline defect, never a finding.
     Raising turns the CI benchmark job red instead of recording the
     failure as data behind a green badge.
     """
@@ -94,7 +94,7 @@ def _verify_target_finite(target: pd.Series) -> None:
     bad = int((~np.isfinite(target.to_numpy(dtype=float))).sum())
     if bad:
         raise DropLogError(
-            f"{bad} retained row(s) have a non-finite log-price target — "
+            f"{bad} retained row(s) have a non-finite log-price target, "
             f"the drop engine must reject them (missing_sale_price)"
         )
 
@@ -132,7 +132,7 @@ def _run_prediction_health(predictions: np.ndarray) -> dict[str, Any]:
     """Hard gate (benchmark.yml Rule C: "structural health-check failure").
 
     A collapsed / NaN / Inf prediction array is a pipeline defect, never a
-    finding — :class:`HealthError` propagates and fails the run, consistent
+    finding, :class:`HealthError` propagates and fails the run, consistent
     with the lock / drop-log / inference gates. results.json therefore only
     ever records ``passed``: failed runs abort instead of shipping data.
     """
@@ -141,7 +141,7 @@ def _run_prediction_health(predictions: np.ndarray) -> dict[str, Any]:
 
 
 def _git_working_tree_clean() -> bool | None:
-    """True when `git status --porcelain` is empty — part of provenance.
+    """True when `git status --porcelain` is empty, part of provenance.
 
     An artefact generated from a dirty tree cannot be tied to its
     commit_sha's source, so the flag is recorded rather than assumed.
@@ -163,14 +163,14 @@ def _run_inference(X: pd.DataFrame) -> tuple[np.ndarray, dict[str, Any]]:
     """Load the COMMITTED benchmark model and score ``X``.
 
     Inference is load-bearing (the artefact ships with the repo), so every
-    failure mode raises :class:`InferenceError` and fails the run — a
+    failure mode raises :class:`InferenceError` and fails the run, a
     missing or unpicklable model behind a green CI badge is exactly the
     silent-failure class this pipeline exists to prevent.
     """
     if not MODEL_PATH.exists():
         raise InferenceError(
             f"committed benchmark model missing: "
-            f"{MODEL_PATH.relative_to(REPO_ROOT)} — broken checkout or "
+            f"{MODEL_PATH.relative_to(REPO_ROOT)}, broken checkout or "
             f"ignored artefact; run benchmarks.train_benchmark_model under "
             f"the PINNED environment (requirements.txt) and commit it"
         )
@@ -203,7 +203,7 @@ def _run_inference(X: pd.DataFrame) -> tuple[np.ndarray, dict[str, Any]]:
             f"committed benchmark model failed to PREDICT "
             f"({type(exc).__name__}: {exc}); expected features {expected}, "
             f"mapping produced {produced} (missing={missing}, extra={extra}) "
-            f"— the sealed contract and the committed model must agree"
+            f"- the sealed contract and the committed model must agree"
         ) from exc
 
     return preds, {
@@ -240,7 +240,7 @@ def run_benchmark() -> dict[str, Any]:
 
     leakage = _run_leakage_invariants(X, target)
     # Inference is a hard gate: _run_inference raises InferenceError on a
-    # missing/unloadable/mismatched committed model — never a green skip.
+    # missing/unloadable/mismatched committed model, never a green skip.
     predictions, inference = _run_inference(X)
     health = _run_prediction_health(predictions)
 
@@ -253,7 +253,7 @@ def run_benchmark() -> dict[str, Any]:
         # A NaN/inf R² is a pipeline defect, never a finding.
         raise DropLogError(f"non-finite R² computed: {r2!r}")
     # The committed naive baseline, scored on the SAME rows: per-borough
-    # median log-price of the benchmark training frame. Load-bearing — a
+    # median log-price of the benchmark training frame. Load-bearing, a
     # missing baseline artefact fails the run rather than skipping the
     # comparison the README advertises.
     baseline_spec = json.loads(
@@ -282,7 +282,7 @@ def run_benchmark() -> dict[str, Any]:
         "commit_sha": _git_commit_sha(),
         "working_tree_clean": _git_working_tree_clean(),
         "schema_map_version": SCHEMA_MAP_VERSION,
-        # Verified against the registry at step 1 — by the time this is
+        # Verified against the registry at step 1, by the time this is
         # written, the hash is known to equal the sealed entry.
         "schema_map_sha256": verified_sha,
         "data_source": "https://www.nyc.gov/site/finance/property/property-rolling-sales-data.page",
@@ -321,7 +321,7 @@ if __name__ == "__main__":
         )
     )
 
-    # Fail the run on a detected leak — AFTER results.json and the summary are
+    # Fail the run on a detected leak, AFTER results.json and the summary are
     # written, so the evidence survives the failure.
     tripped = [
         name
@@ -332,6 +332,6 @@ if __name__ == "__main__":
         tripped.append("r2_tripwire")
     if tripped:
         raise SystemExit(
-            f"LEAKAGE DETECTED ({', '.join(tripped)}) — see "
+            f"LEAKAGE DETECTED ({', '.join(tripped)}), see "
             f"{RESULTS_PATH.name} for the recorded evidence."
         )

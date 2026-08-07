@@ -1,7 +1,7 @@
 """Measure seed variance of the full training protocol.
 
-Runs :func:`run_training.run_protocol` — the exact pipeline that produces the
-shipped artefacts, candidate selection included — across N seeds and records
+Runs :func:`run_training.run_protocol`, the exact pipeline that produces the
+shipped artefacts, candidate selection included, across N seeds and records
 the spread of the headline metrics next to the naive baseline. Writes
 ``reports/seed_variance.json``, which the README/MODEL_CARD tables are gated
 against.

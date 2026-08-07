@@ -3,125 +3,32 @@
 > **Deploys are automated.** Every push to `main` runs `.github/workflows/deploy.yml`,
 > which overlays the runtime snapshot (code + `deploy/huggingface/` files +
 > `requirements.txt`) onto the Space via `deploy/huggingface/assemble.sh` and pushes
-> it — preserving the Space's `models/` artifacts. A weekly `space-drift` job fails
+> it. `assemble.sh` syncs `models/` rather than preserving what the Space held. A weekly `space-drift` job fails
 > CI if the live Space ever stops matching `main`. The one-time setup it needs:
 > a **write-scoped** HF token saved as the `HF_TOKEN` repository secret
-> (Settings → Secrets and variables → Actions). The manual steps below are the
-> original bootstrap procedure — still valid for creating the Space from scratch
-> or for emergency pushes, but routine deploys must ride `main`, because the
-> hand-deployed Space previously drifted 3 months stale while `main` carried the
-> fixes.
+> (Settings → Secrets and variables → Actions). Only the one-time Space
+> creation is manual; the hand-deploy path is not documented here, because a
+> hand-deployed Space drifted 3 months stale while `main` carried the fixes.
 
-Mirrors the `high-pay-salary-predictor` deploy pattern. ~10 minutes total.
+The Space itself is created once, by hand. Everything after that rides
+`main`; the steps that used to describe the hand-deploy path are gone,
+because that path is what drifted.
 
 ## Prerequisites
 
 1. A Hugging Face account. Sign up free at <https://huggingface.co/join> if you don't have one.
 2. Git installed locally.
-3. A local clone of this project (referred to below as `<PROJECT_DIR>`).
-4. Trained model artifacts in `<PROJECT_DIR>/models/` (`price_regressor_best.joblib`, `price_interval.json`, `drift_baseline.json`). If missing, run `make train` (= `python run_training.py`) — the raw Kaggle CSV is committed at `Resources/NY-House-Dataset.csv`, so nothing needs downloading.
 
-## Step 1 — Create a Hugging Face access token
+## Step 1, Create a Hugging Face access token
 
-You need a **write-scope** token to push to the Space repo.
+Profile → **Settings → Access Tokens** → **New token**, **write** scope.
+Save it in the GitHub repo as the `HF_TOKEN` secret
+(Settings → Secrets and variables → Actions). `deploy.yml` reads it from there.
 
-1. Go to <https://huggingface.co/settings/tokens>.
-2. Click **New token** → name `nyc-real-estate-deploy` → role `Write` → **Generate**.
-3. Copy the token (starts with `hf_`). Save somewhere private — you'll only see it once.
+## Step 2, Create the Space
 
-## Step 2 — Create the Space
-
-1. Go to <https://huggingface.co/new-space>.
-2. Owner: `MarwaBS` (your username).
-3. Space name: `nyc-real-estate-predictor` (matches the GitHub repo name exactly).
-4. License: `mit`.
-5. Space SDK: **Docker**.
-6. Hardware: **CPU basic (free)** — more than enough for XGBoost inference.
-7. Visibility: **Public**.
-8. Click **Create Space**.
-
-## Step 3 — Clone the empty Space repo
-
-```bash
-git clone https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor hf-space-nyc
-cd hf-space-nyc
-```
-
-The clone has only `.gitattributes` and `README.md` (the default HF README — about to be replaced).
-
-## Step 4 — Copy the deployment files into the Space
-
-From `hf-space-nyc/`, copy from your local project clone:
-
-```bash
-# Paths assume you're in the hf-space-nyc directory
-PROJECT="<PROJECT_DIR>"   # substitute the absolute path to your local clone
-
-# 1. HF-specific files — these replace the Space defaults
-cp "$PROJECT/deploy/huggingface/Dockerfile"      ./Dockerfile
-cp "$PROJECT/deploy/huggingface/README.md"       ./README.md
-cp "$PROJECT/deploy/huggingface/start.sh"        ./start.sh
-chmod +x ./start.sh
-
-# 2. Python source + config
-cp -r "$PROJECT/api"            ./api
-cp -r "$PROJECT/src"            ./src
-cp -r "$PROJECT/streamlit_app"  ./streamlit_app
-
-# 3. Trained models — required at runtime
-mkdir -p ./models
-cp "$PROJECT/models/"*.joblib   ./models/
-cp "$PROJECT/models/"*.json     ./models/
-
-# 4. Runtime requirements (the Phase-H slim set, NOT requirements-train.txt)
-cp "$PROJECT/requirements.txt"  ./requirements.txt
-```
-
-Verify the file tree:
-
-```bash
-ls -la
-# expected: Dockerfile, README.md, start.sh, api/, src/, streamlit_app/, models/, requirements.txt
-```
-
-## Step 5 — Push to the Space
-
-```bash
-git add .
-git commit -m "Initial deployment: FastAPI + Streamlit single container"
-git push
-# When prompted for password, paste the HF token from Step 1
-```
-
-## Step 6 — Watch the build
-
-1. Go to <https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor>.
-2. Click the **Logs** tab. The build takes ~3-5 min on first push (pip install + Docker layers).
-3. Once green, the **App** tab shows the Streamlit dashboard.
-
-## Step 7 — Update the GitHub repo README
-
-Add the live demo badge to the GitHub repo's main `README.md`:
-
-```markdown
-[![Live Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Live%20Demo-on%20Hugging%20Face-yellow)](https://huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor)
-```
-
-Commit + push to GitHub.
-
-## Updating the Space after code changes
-
-```bash
-cd hf-space-nyc
-# Sync the changed files from the main project
-cp "<PROJECT_DIR>/api/main.py" ./api/main.py
-# (or whatever changed)
-git commit -am "Update X"
-git push
-# HF rebuilds automatically (~30 s for code-only changes, ~3 min if deps changed)
-```
-
-If you re-trained models, copy the new `models/` artifacts over and push.
+<https://huggingface.co/new-space> → SDK **Docker**, hardware **CPU basic**,
+visibility **Public**. Leave it empty; the first push from `main` fills it.
 
 ## Rollback
 

@@ -1,4 +1,4 @@
-"""Flagship-specific firewall layer — backed by the schema-firewall package.
+"""Flagship-specific firewall layer, backed by the schema-firewall package.
 
 Historically this file implemented the firewall checks in-place. It has
 been refactored to delegate to ``schema-firewall`` (published on PyPI,
@@ -9,13 +9,13 @@ That is deliberate.
 
 Four things remain local:
 
-1. ``SCHEMA_MAP_VERSION`` — pinned to this repository's SCHEMA_MAP.md.
-2. ``FORBIDDEN_COLUMNS`` — the flagship's concrete set, passed to the
+1. ``SCHEMA_MAP_VERSION``, pinned to this repository's SCHEMA_MAP.md.
+2. ``FORBIDDEN_COLUMNS``, the flagship's concrete set, passed to the
    library via a ``SchemaContract``.
-3. ``check_predictions_healthy`` + ``HealthError`` — prediction-array
+3. ``check_predictions_healthy`` + ``HealthError``, prediction-array
    collapse detection is flagship-specific (the public library
    intentionally declines to include it, per its 3-entry-point cap).
-4. ``schema_map_sha256`` + ``verify_schema_map_lock`` — the version
+4. ``schema_map_sha256`` + ``verify_schema_map_lock``, the version
    registry enforcement. The hash is computed over LF-normalised bytes
    so the lock is identical across Windows/Linux checkouts, and the
    orchestrator (not just the test suite) refuses to run against an
@@ -42,7 +42,7 @@ from schema_firewall import (
     check_schema,
 )
 
-SCHEMA_MAP_VERSION = "v3"
+SCHEMA_MAP_VERSION = "v4"
 
 _BENCHMARKS_DIR = Path(__file__).resolve().parent
 SCHEMA_MAP_PATH = _BENCHMARKS_DIR / "SCHEMA_MAP.md"
@@ -52,7 +52,7 @@ VERSIONS_PATH = _BENCHMARKS_DIR / "SCHEMA_MAP_VERSIONS.json"
 class SchemaLockError(Exception):
     """SCHEMA_MAP.md does not match the SHA sealed for SCHEMA_MAP_VERSION.
 
-    Raised by :func:`verify_schema_map_lock` — the run-time enforcement of
+    Raised by :func:`verify_schema_map_lock`, the run-time enforcement of
     the registry. A benchmark run against an unsealed contract is invalid
     by definition (SCHEMA_MAP.md §9), so the orchestrator hard-fails
     instead of recording the mismatching hash as an FYI.
@@ -148,9 +148,9 @@ def check_target_independence(
     exact/renamed target copies and ``expm1(target)`` score 1.0; the
     strongest honest feature (borough, which genuinely sets the price
     level) scores 0.207; independent noise and sqft score 0.0; a
-    non-monotone transform of the target (``(target - mean)**2`` —
+    non-monotone transform of the target (``(target - mean)**2`` -
     invisible to Pearson AND Spearman) scores 0.631. The previous 0.8
-    threshold — a guess made against 0.1.0's uncalibrated scale — silently
+    threshold, a guess made against 0.1.0's uncalibrated scale, silently
     passed that non-monotone leak; 0.45 sits between the strongest honest
     feature and the weakest measured leak with ~0.2 margin on both sides.
     Both sides are pinned by tests; re-measure before changing.
@@ -182,7 +182,7 @@ def check_target_independence(
         if encoded[col].nunique(dropna=True) <= max_encode_cardinality:
             encoded[col] = pd.factorize(encoded[col])[0]
         else:
-            # High-cardinality categorical — out of scope for the MI gate (see
+            # High-cardinality categorical, out of scope for the MI gate (see
             # docstring). Drop it so check_leakage doesn't silently ignore it
             # under the impression it was assessed.
             encoded = encoded.drop(columns=[col])

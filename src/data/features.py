@@ -1,4 +1,4 @@
-"""Feature engineering — all derived features, encoding prep, target creation.
+"""Feature engineering: all derived features, encoding prep, target creation.
 
 CRITICAL DESIGN RULE:
     PRICE_PER_SQFT must NEVER appear in any feature set.
@@ -74,7 +74,7 @@ def add_target_variables(
         include_lowest=True,
     )
 
-    # Log price (regression target — stabilizes variance)
+    # Log price (regression target, stabilizes variance)
     listings["LOG_PRICE"] = np.log1p(listings["PRICE"])
 
     logger.info("Added targets: PRICE_ZONE (4 classes), LOG_PRICE")
@@ -89,7 +89,7 @@ def fit_top_categories(
     """The top-N category vocabulary per column, fitted on the given rows.
 
     Fit/apply are split so the vocabulary can be counted on the TRAIN split
-    only — pooled counts let val/test frequencies decide which categories the
+    only, pooled counts let val/test frequencies decide which categories the
     model learns.
     """
     return {
@@ -113,7 +113,7 @@ def apply_top_categories(df: pd.DataFrame, top: dict[str, set]) -> pd.DataFrame:
 
 
 def learned_capped_categories(pipeline: object) -> dict[str, set]:
-    """Categories a *fitted* pipeline learned, per column — but only for columns
+    """Categories a *fitted* pipeline learned, per column, but only for columns
     that learned an explicit ``"other"`` bucket (i.e. were frequency-capped at
     train time by :func:`fit_top_categories`).
 
@@ -122,7 +122,7 @@ def learned_capped_categories(pipeline: object) -> dict[str, set]:
     encoder's unseen default (TargetEncoder → global mean, OneHot → all-zeros).
     Without it, training caps SUBLOCALITY/ZIPCODE rare values to ``"other"`` but
     serving passes them raw, so the model sees a different encoding than it was
-    trained on — a silent train/serve skew. Derived from the *shipped* artifact so
+    trained on, a silent train/serve skew. Derived from the *shipped* artifact so
     it can never drift from the model. Columns the model did not cap (no
     ``"other"`` learned, e.g. low-cardinality BOROUGH/TYPE) are omitted.
     """
@@ -157,7 +157,7 @@ def learned_capped_categories(pipeline: object) -> dict[str, set]:
 
 def apply_serving_cap(df: pd.DataFrame, known: dict[str, set]) -> pd.DataFrame:
     """Map any value outside its learned category set to ``"other"`` for each
-    capped column — the inference-time mirror of :func:`apply_top_categories`,
+    capped column, the inference-time mirror of :func:`apply_top_categories`,
     keyed off the categories the fitted model actually learned (see
     :func:`learned_capped_categories`)."""
     listings = df.copy()

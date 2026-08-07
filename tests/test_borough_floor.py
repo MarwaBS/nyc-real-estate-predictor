@@ -60,7 +60,7 @@ def test_the_majority_predictor_itself_breaches_the_floor() -> None:
     """A model that only ever answers the majority zone has learned nothing,
     and the floor must say so. This is also the test that pins the METRIC:
     that predictor's macro F1 equals the baseline (breach), but its micro F1
-    equals its accuracy — far above the baseline — so scoring with micro
+    equals its accuracy, far above the baseline, so scoring with micro
     (i.e. accuracy) would silently wave it through.
     """
     y_true = np.array(["Low"] * 70 + ["Medium"] * 15 + ["High"] * 15)

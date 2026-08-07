@@ -1,4 +1,4 @@
-"""Artifact-contract tests — the SHIPPED model artefacts must serve correct zone labels.
+"""Artifact-contract tests, the SHIPPED model artefacts must serve correct zone labels.
 
 These tests load the real ``models/*.joblib`` artefacts, which are committed
 and MANIFEST-pinned, and probe the CAPABILITY:
@@ -34,7 +34,7 @@ def _models_present() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _models_present(),
-    reason="serving artifacts missing (partial checkout) — they are committed and pinned by models/MANIFEST.sha256",
+    reason="serving artifacts missing (partial checkout), they are committed and pinned by models/MANIFEST.sha256",
 )
 
 

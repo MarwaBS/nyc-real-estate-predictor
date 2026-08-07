@@ -90,7 +90,7 @@ def _run_drop_engine(
 ) -> tuple[pd.Series, dict[str, int]]:
     """Apply SCHEMA_MAP.md §4 row filters in a fixed priority order.
 
-    Each dropped row is assigned exactly one reason — the first rule
+    Each dropped row is assigned exactly one reason, the first rule
     in priority order that rejects it. The priority order is itself
     a versioned design choice (it determines the per-reason counts,
     not the final kept set) and is fixed for the sealed version.
@@ -139,12 +139,12 @@ def _run_drop_engine(
     _apply(year_built.isna() | (year_built == 0), "missing_year_built")
     _apply(~borough.isin([1, 2, 3, 4, 5]), "invalid_borough")
     _apply(zip_code.isna() | (zip_code <= 0), "missing_zip")
-    # v2 scope: 1–3 family dwellings only. For condos/coops NYC.gov reports the
+    # v2 scope: 1-3 family dwellings only. For condos/coops NYC.gov reports the
     # *building's* GROSS SQUARE FEET, not the unit's, which is not comparable to
     # the Kaggle PROPERTYSQFT the model learned from. Family dwellings report the
     # home's own square footage, so the external comparison is apples-to-apples.
-    # (v1 filtered on a "R"-prefix that never matched — NYC categories start with
-    # a digit — so it dropped every row; see SCHEMA_MAP.md v2.)
+    # (v1 filtered on a "R"-prefix that never matched, NYC categories start with
+    # a digit, so it dropped every row; see SCHEMA_MAP.md v2.)
     _apply(~bcc.str.contains("FAMILY", case=False, na=False), "not_family_dwelling")
 
     return kept, reasons
@@ -156,9 +156,9 @@ def _run_drop_engine(
 def _build_features(kept_raw: pd.DataFrame) -> pd.DataFrame:
     """Assemble the benchmark feature frame from kept rows.
 
-    Emits exactly the three features shared with the Kaggle training data —
+    Emits exactly the three features shared with the Kaggle training data:
     ``borough`` (Census name), ``property_sqft`` (float), and ``zip_code``
-    (string category) — matching ``benchmarks.train_benchmark_model``'s
+    (string category), matching ``benchmarks.train_benchmark_model``'s
     ``BENCHMARK_FEATURES`` so the lean benchmark regressor scores this frame
     directly. Every column is a row-wise transform of a single raw column:
     no aggregation, no dataset-wide statistic, no target reference. Column

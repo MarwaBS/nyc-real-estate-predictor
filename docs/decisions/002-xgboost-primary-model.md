@@ -1,7 +1,7 @@
 # ADR-002: XGBoost as primary classification model with Optuna tuning
 
 ## Status
-Superseded — see the dated status updates below. Final state (2026-07-20):
+Superseded, see the dated status updates below. Final state (2026-07-20):
 XGBoost selected for regression under the train-split-fitted protocol; the
 classifier ruling is void (no classifier ships).
 
@@ -26,7 +26,7 @@ Use XGBoost as the primary classifier, tuned with Optuna (Bayesian optimization,
 
 The SHIPPED artifacts are NOT produced by this Optuna path. The serving
 pipeline (`run_training.py`, per `MODEL_CARD.md`) uses fixed
-hyperparameters with best-of-candidates selection — the Optuna/stacking
+hyperparameters with best-of-candidates selection, the Optuna/stacking
 work described above lives in the extended training path
 (`src/models/train_classification.py` + `requirements-train.txt`) and is
 runnable, but its output is not what the API and dashboard serve. This
@@ -41,15 +41,15 @@ candidates were compared on test and the winner's test score was published as
 a hold-out result. Selection now happens on a dedicated validation split and
 test is scored once, by the already-chosen model.
 
-The classifier decision is unchanged — XGBoost still wins, now on val
+The classifier decision is unchanged, XGBoost still wins, now on val
 (macro F1 0.713 vs LightGBM 0.683). The **regressor** decision changed:
 LightGBM (val R2 0.790) now wins over Random Forest (0.788) and XGBoost
 (0.782), where XGBoost had won under test-split selection. Random Forest was
-also bounded with `min_samples_leaf=10` — unbounded, its 500 fully-grown
+also bounded with `min_samples_leaf=10`, unbounded, its 500 fully-grown
 trees produced a 129 MB artifact that exceeds GitHub's file limit and could
 not be committed to the registry at all.
 
-## Status update (2026-07-19) — supersedes the 2026-07-18 regressor ruling
+## Status update (2026-07-19), supersedes the 2026-07-18 regressor ruling
 
 The 2026-07-18 entry above is **no longer true of the shipped artifacts** and
 is retained only as the record of what was decided then. It ruled LightGBM the
@@ -71,7 +71,7 @@ Measured on the current data (`reports/training_metrics.json`,
 | XGBoost | 0.7727 |
 
 So that ruling reversed to **Random Forest** under the pooled protocol
-(R2 0.8117 on test, read once) — itself superseded on 2026-07-20 below.
+(R2 0.8117 on test, read once), itself superseded on 2026-07-20 below.
 
 The classifier ruling is void rather than revised. There is no classifier: the
 price zone is the regressor's prediction bucketed through `PRICE_ZONE_BINS`
@@ -79,15 +79,15 @@ price zone is the regressor's prediction bucketed through `PRICE_ZONE_BINS`
 longer describes anything that runs. Zones are scored on test only, at macro
 F1 0.699.
 
-The `min_samples_leaf=10` bound on Random Forest stands — it is what keeps the
+The `min_samples_leaf=10` bound on Random Forest stands, it is what keeps the
 artifact committable regardless of which model wins.
 
-## Status update (2026-07-20) — train-split-fitted protocol
+## Status update (2026-07-20), train-split-fitted protocol
 
 Cap bounds, zone cut-points and the category vocabulary now fit on the train
 split only, and the split stratifies on price quartiles rather than the zone
 label (`run_training.build_splits`). Under that protocol the candidate
-ordering on val is XGBoost 0.7740, LightGBM 0.7711, Random Forest 0.7682 —
+ordering on val is XGBoost 0.7740, LightGBM 0.7711, Random Forest 0.7682 -
 so the selection returns to **XGBoost**, scoring R2 0.8351 on the single
 test read. Selection is seed-sensitive at this data size; the seed-variance
 study in `reports/seed_variance.json` records how often each family wins.

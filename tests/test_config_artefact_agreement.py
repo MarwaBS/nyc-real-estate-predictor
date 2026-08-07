@@ -23,6 +23,7 @@ from src.config import (
     ONEHOT_FEATURES,
     PRICE_ZONE_BINS,
     RANDOM_SEED,
+    SHIPPED_REGRESSOR,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
     VAL_SIZE,
@@ -35,6 +36,15 @@ METRICS = json.loads(
 )
 
 
+def test_the_artefact_ships_the_regressor_config_records() -> None:
+    """Picking the best val R2 per run made the choice platform-dependent: on
+    val, xgboost leads lightgbm by 0.0029 and a Linux runner picked lightgbm."""
+    assert METRICS["regression"]["selected_model"] == SHIPPED_REGRESSOR
+    assert SHIPPED_REGRESSOR in METRICS["regression"]["candidates_val"], (
+        f"{SHIPPED_REGRESSOR} was never scored against the other candidates"
+    )
+
+
 def test_zone_cut_points_match_the_ones_the_model_was_trained_with() -> None:
     """The zone labels are built from these bins; serving buckets with them too.
 
@@ -44,7 +54,7 @@ def test_zone_cut_points_match_the_ones_the_model_was_trained_with() -> None:
     finite = [b for b in PRICE_ZONE_BINS if b != float("inf")]
     assert METRICS["provenance"]["price_zone_bins"] == finite, (
         "src/config.py PRICE_ZONE_BINS differs from the bins recorded in "
-        "reports/training_metrics.json — the shipped zone metrics were "
+        "reports/training_metrics.json, the shipped zone metrics were "
         "computed under different cut-points. Retrain."
     )
 

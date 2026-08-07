@@ -1,7 +1,7 @@
 """setup_logging must reconfigure a root logger that is already configured.
 
 basicConfig without force= silently no-ops when any root handler exists, so
-each test seeds a sentinel handler and a wrong level BEFORE the call — an
+each test seeds a sentinel handler and a wrong level BEFORE the call, an
 assertion that starts from a bare root passes without force= and gates
 nothing.
 """

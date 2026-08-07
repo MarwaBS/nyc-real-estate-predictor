@@ -1,18 +1,22 @@
-.PHONY: test lint typecheck ci train api streamlit
+.PHONY: test lint typecheck security ci train api streamlit
 
 test:
-	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-fail-under=78
+	pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-fail-under=85
 
-# Mirrors CI's lint job exactly — a `make lint` that checks less than CI
-# just moves the failure to the slower feedback loop.
+# `ci` runs what CI's lint + test jobs run, split so each can run alone.
 lint:
 	ruff check .
 	ruff format --check .
+	codespell $$(git ls-files '*.md' '*.py' '*.yml' '*.toml' '*.txt' '*.cfg')
 
 typecheck:
-	mypy src/ api/ benchmarks/ --ignore-missing-imports
+	mypy src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py --ignore-missing-imports
 
-ci: lint typecheck test
+security:
+	bandit -r src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py -n 3 -ll
+
+ci: lint typecheck security test
+	python scripts/verify_gates.py
 
 # The one training entrypoint. Requires the committed raw dataset at
 # Resources/NY-House-Dataset.csv; artifacts land

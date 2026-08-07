@@ -6,27 +6,28 @@ requires-python = ">=3.12"
 
 [tool.ruff]
 target-version = "py312"
-# Anchored to the repo root with a leading slash. Bare names match at ANY
-# depth, so "models" and "data" also excluded src/models/ and src/data/ --
-# eleven modules including cleaner.py, predict.py and pipelines.py were
-# invisible to `ruff check .`, hiding 17 errors behind a green lint job.
-exclude = ["/mlruns", "/models", "/data", "/output", "/Resources"]
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "N", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["F401", "N803", "N806"]
+"tests/**" = ["N803", "N806"]
 "notebooks/**" = ["E402", "F401"]
 # `X` / `X_train` / `X_test` are the universal sklearn naming convention for
 # feature matrices; renaming them to satisfy pep8-naming would make the ML
 # code LESS readable to its audience.
 "benchmarks/**" = ["N803", "N806"]
 "run_training.py" = ["N803", "N806"]
+"scripts/**" = ["N803", "N806"]
 # Same convention, same reason. These were never listed because the exclude
 # above hid src/models/ entirely, so their N803/N806 never surfaced.
 "src/models/**" = ["N803", "N806"]
+
+[tool.codespell]
+# MAPE is the metric; unparseable is a variant codespell rewrites to
+# unparsable. Both are correct here.
+ignore-words-list = "mape,unparseable"
 
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
@@ -47,15 +48,11 @@ module = ["tests.*", "notebooks.*"]
 disallow_untyped_defs = false
 
 [tool.coverage.run]
-# api/ is in scope: it holds the serving + security controls (auth, rate
-# limiting, /predict). Excluding it meant the coverage gate could go green while
-# the API layer was untested — the exact "gate avoids the breakage" trap.
-source = ["src", "benchmarks", "api", "run_training.py"]
-# Every omit needs a reason that is not "it would lower the number". The
-# previous list held 8 modules that were ALL at 0% — it was exactly the set of
-# files that dragged the average down, and it made a 94.72% headline out of a
-# real 56%. run_training.py, which produces every shipped artefact, was not in
-# `source` at all.
+# The serving path, the pipeline, and the script that writes the artefacts.
+# scripts/ is left out: CI runs verify_gates.py as a subprocess and the
+# measure_* scripts by hand, so line coverage of them measures nothing.
+source = ["src", "benchmarks", "api", "run_training.py", "streamlit_app"]
+# Every omit needs a reason that is not "it would lower the number".
 omit = [
     "tests/*",
     "notebooks/*",

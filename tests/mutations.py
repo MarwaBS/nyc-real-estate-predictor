@@ -60,13 +60,6 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_features.py",
     ),
     Mutation(
-        name="drift-threshold-disabled",
-        path="src/models/drift.py",
-        old="    threshold: float = 0.15,\n) -> dict[str, dict[str, float]]:",
-        new="    threshold: float = 0.9,\n) -> dict[str, dict[str, float]]:",
-        gate="tests/test_drift.py",
-    ),
-    Mutation(
         name="price-zone-bins-shifted",
         path="src/config.py",
         old="PRICE_ZONE_BINS: list[float] = [0, 499_000, 825_000, 1_496_000,",
@@ -262,5 +255,358 @@ MUTATIONS: list[Mutation] = [
         old='    "benchmark_baseline.json",\n',
         new="",
         gate="tests/test_artifact_manifest.py::test_producer_governs_exactly_this_set",
+    ),
+    Mutation(
+        name="tree-state-sampled-but-discarded",
+        # The call stays, so anything reading the source still finds it. Only
+        # the recorded value changes, and it can now report one outcome.
+        path="run_training.py",
+        old="    tree_clean_at_start = _git_working_tree_clean()",
+        new="    _git_working_tree_clean()\n    tree_clean_at_start = True",
+        gate="tests/test_training_provenance.py",
+    ),
+    Mutation(
+        name="baseline-figure-rewritten",
+        # Rephrased as well as falsified: a check anchored on the word next to
+        # the number stops matching and the false figure ships.
+        path="README.md",
+        old="naive borough-median baseline: 0.177",
+        new="naive borough-median baseline of 0.577",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="coverage-scope-narrowed",
+        # Drops a module from measurement. The percentage rises and the floor
+        # passes, so the gate goes greener by covering less.
+        path=".github/workflows/ci.yml",
+        old=" --cov=streamlit_app",
+        new="",
+        gate="tests/test_gate_scope.py",
+    ),
+    Mutation(
+        name="tree-state-resampled-for-the-writer",
+        # The early sample stays, so call order still checks out. Only the value
+        # handed to the writer changes, and by then the models are on disk.
+        path="run_training.py",
+        old="    _write_training_metrics(\n        tree_clean_at_start,",
+        new="    _write_training_metrics(\n        _git_working_tree_clean(),",
+        gate="tests/test_training_provenance.py",
+    ),
+    Mutation(
+        name="baseline-figure-moved-left-of-the-metric",
+        # Same falsification as baseline-figure-rewritten, written before the
+        # metric name instead of after it.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177)",
+        new="naive borough-median baseline 0.577; R² = 0.835 on the 20% test split",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="numpy-reaching-train-package-unfrozen",
+        path=".github/dependabot.yml",
+        old=(
+            '      - dependency-name: "shap"\n'
+            '        update-types: ["version-update:semver-minor"]\n'
+        ),
+        new="",
+        gate="tests/test_dependency_freeze.py",
+    ),
+    Mutation(
+        name="coverage-omit-swallows-a-module",
+        # The other half of the same knob: source keeps the module, omit removes
+        # it, and the percentage rises.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "streamlit_app/*",\n    "tests/*",',
+        gate="tests/test_gate_scope.py",
+    ),
+    Mutation(
+        name="type-check-scope-narrowed",
+        path=".github/workflows/ci.yml",
+        old=" streamlit_app/ scripts/ run_training.py --ignore-missing-imports",
+        new=" run_training.py --ignore-missing-imports",
+        gate="tests/test_gate_scope.py",
+    ),
+    Mutation(
+        name="cap-study-figure-rots",
+        path="MODEL_CARD.md",
+        old="0.2792 at 3.0",
+        new="0.2892 at 3.0",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="module-left-with-no-production-importer",
+        # Drop the one production import and the module survives on its own
+        # test file alone, which is how the drift helpers stayed.
+        path="run_training.py",
+        old="    from src.models.drift import save_baseline\n",
+        new="",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="coverage-exclude-lines-widened",
+        # One level above source and omit: it removes statements from the
+        # denominator, so measuring less raises the percentage.
+        path="pyproject.toml",
+        old='exclude_lines = [\n    "pragma: no cover",',
+        new='exclude_lines = [\n    "def ",\n    "pragma: no cover",',
+        gate="tests/test_gate_scope.py::test_coverage_excludes_only_the_three_justified_lines",
+    ),
+    Mutation(
+        name="doc-link-points-at-nothing",
+        path="README.md",
+        old="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json)",
+        new="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_VERSIONS.json)",
+        gate="tests/test_documented_numbers.py::test_every_relative_link_in_the_docs_resolves",
+    ),
+    Mutation(
+        name="numpy-reaching-package-unfrozen",
+        path=".github/dependabot.yml",
+        old=(
+            '      - dependency-name: "lightgbm"\n'
+            '        update-types: ["version-update:semver-minor"]\n'
+        ),
+        new="",
+        gate="tests/test_dependency_freeze.py",
+    ),
+    Mutation(
+        name="coverage-floor-decoyed-by-a-comment",
+        # The floor a comment advertises, above the one the step runs.
+        path=".github/workflows/ci.yml",
+        old=(
+            "        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks "
+            "--cov=api --cov=run_training --cov=streamlit_app "
+            "--cov-report=term-missing --cov-report=xml --cov-fail-under=85"
+        ),
+        new=(
+            "        # --cov-fail-under=85\n"
+            "        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks "
+            "--cov=api --cov=run_training --cov=streamlit_app "
+            "--cov-report=term-missing --cov-report=xml --cov-fail-under=10"
+        ),
+        gate="tests/test_gate_scope.py::test_the_stated_coverage_gate_matches_ci",
+    ),
+    Mutation(
+        name="type-check-narrowed-by-a-flag",
+        # Same reach as deleting a path, in a token no path list can see.
+        path=".github/workflows/ci.yml",
+        old="run_training.py --ignore-missing-imports\n",
+        new="run_training.py --ignore-missing-imports --exclude 'src/models/.*'\n",
+        gate="tests/test_gate_scope.py::test_the_tool_commands_carry_no_unapproved_argument",
+    ),
+    Mutation(
+        name="coverage-omit-written-as-an-absolute-pattern",
+        # coverage matches omit against the absolute path, so this drops the
+        # inference path while the repo-relative form matches nothing.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "*/src/models/*",\n    "tests/*",',
+        gate="tests/test_gate_scope.py::test_omit_skips_only_the_files_it_names",
+    ),
+    Mutation(
+        name="served-multiplier-rewritten",
+        # A figure at or above 1: the fractional scan once started at `0.`.
+        path="MODEL_CARD.md",
+        old="0.677x / 1.457x",
+        new="0.677x / 1.99x",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="false-figure-behind-a-historical-clause",
+        # One leading historical sentence used to exempt the rest of the line.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new=(
+            "An earlier revision used a different split. Calibration slope 0.91. "
+            "R² = 0.835 on the 20% test split"
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="gate-replay-step-dropped-from-ci",
+        # CI then proves the code passes its tests and nothing else.
+        path=".github/workflows/ci.yml",
+        old="        run: python scripts/verify_gates.py\n",
+        new="",
+        gate="tests/test_gate_scope.py::test_ci_runs_the_whole_mutation_replay",
+    ),
+    Mutation(
+        name="benchmark-runner-step-dropped",
+        # Leaves run_benchmark.py with no runner and no importer. A __main__
+        # guard used to excuse that on its own.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="coverage-floor-set-twice",
+        # pytest honours the last flag, a reader the first.
+        path=".github/workflows/ci.yml",
+        old="--cov-report=xml --cov-fail-under=85",
+        new="--cov-report=xml --cov-fail-under=85 --cov-fail-under=10",
+        gate="tests/test_gate_scope.py::test_the_stated_coverage_gate_matches_ci",
+    ),
+    Mutation(
+        name="mypy-scope-excluded-in-config",
+        # Narrows the check to 27 files with no command-line token to see.
+        path="pyproject.toml",
+        old='[tool.mypy]\npython_version = "3.12"',
+        new='[tool.mypy]\nexclude = ["src/models/.*"]\npython_version = "3.12"',
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
+    ),
+    Mutation(
+        name="mypy-errors-silenced-over-shipped-code",
+        # Still reports 34 files checked, and finds nothing in any of them.
+        path="pyproject.toml",
+        old='[[tool.mypy.overrides]]\nmodule = ["tests.*", "notebooks.*"]',
+        new=(
+            "[[tool.mypy.overrides]]\n"
+            'module = ["src.*"]\n'
+            "ignore_errors = true\n\n"
+            "[[tool.mypy.overrides]]\n"
+            'module = ["tests.*", "notebooks.*"]'
+        ),
+        gate="tests/test_gate_scope.py::test_no_mypy_override_reaches_shipped_code",
+    ),
+    Mutation(
+        name="coverage-omit-written-as-a-relative-path",
+        # coverage makes this absolute; neither plain form matches it.
+        path="pyproject.toml",
+        old='omit = [\n    "tests/*",',
+        new='omit = [\n    "./src/models/*",\n    "tests/*",',
+        gate="tests/test_gate_scope.py::test_omit_skips_only_the_files_it_names",
+    ),
+    Mutation(
+        name="benchmark-runner-step-commented-out",
+        # The module name survives in the comment, so raw text still found it.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        # run: python -m benchmarks.run_benchmark\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="replay-narrowed-and-its-exit-code-swallowed",
+        path=".github/workflows/ci.yml",
+        old="        run: python scripts/verify_gates.py\n",
+        new=(
+            "        run: python scripts/verify_gates.py "
+            "--name conformal-correction-removed || true\n"
+        ),
+        gate="tests/test_gate_scope.py::test_ci_runs_the_whole_mutation_replay",
+    ),
+    Mutation(
+        name="false-figure-behind-a-comma-joined-clause",
+        # The marker sits one comma-clause left of the figure.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new=(
+            "R² = 0.835 on the 20% test split, unlike the earlier ensemble, "
+            "which reached 0.9997"
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="one-place-percentage-rewritten",
+        # Below the two-place floor the fractional scan used to start at.
+        path="MODEL_CARD.md",
+        old="99.2% chained",
+        new="11.1% chained",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="readme-undercounts-the-ci-jobs",
+        path="README.md",
+        old="CI runs 5 jobs:",
+        new="CI runs 4 jobs:",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
+    Mutation(
+        name="coverage-report-include-shrinks-the-tree",
+        # A sibling of exclude_lines in the same table: 997 statements to 67.
+        path="pyproject.toml",
+        old="exclude_lines = [",
+        new='include = ["*/src/utils/*"]\nexclude_lines = [',
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
+    ),
+    Mutation(
+        name="ruff-scope-excluded-in-config",
+        # Reinstates the exclusion deleted in bc0dd71, with no gate reading it.
+        path="pyproject.toml",
+        old='[tool.ruff]\ntarget-version = "py312"',
+        new='[tool.ruff]\nexclude = ["src/models"]\ntarget-version = "py312"',
+        gate="tests/test_gate_scope.py::test_no_tool_table_carries_an_unapproved_key",
+    ),
+    Mutation(
+        name="coverage-switched-off-in-addopts",
+        # The floor still reads 85 and measures nothing.
+        path="pyproject.toml",
+        old='addopts = "-ra --import-mode=importlib"',
+        new='addopts = "-ra --import-mode=importlib --no-cov"',
+        gate="tests/test_gate_scope.py::test_pytest_adds_no_option_that_disarms_a_gate",
+    ),
+    Mutation(
+        name="benchmark-module-named-only-in-a-step-title",
+        # A step name executes nothing; raw text credited it as a runner.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        run: echo skipped\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
+    ),
+    Mutation(
+        name="false-figure-exempted-by-the-word-avoid",
+        # `void` matched inside `avoid` before the boundary was anchored.
+        path="README.md",
+        old="R² = 0.835 on the 20% test split",
+        new="To avoid overfitting we report R² = 0.9999 on the 20% test split",
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="deleted-component-shielded-by-an-earlier-mention",
+        # The scan took only the first occurrence on the line.
+        path="MODEL_CARD.md",
+        old="There is no classifier, no label encoder and no argmax.",
+        new=(
+            "There is no classifier, no label encoder and no argmax. "
+            "The API decodes with argmax over the tuned optimal_thresholds."
+        ),
+        gate="tests/test_documented_numbers.py",
+    ),
+    Mutation(
+        name="readme-stack-table-drops-a-ci-job",
+        path="README.md",
+        old="+ reproducibility (byte-identical retrain) ",
+        new="",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
+    Mutation(
+        name="shipped-regressor-repointed",
+        # The recorded decision and the fitted artefact must not drift apart.
+        path="src/config.py",
+        old='SHIPPED_REGRESSOR: str = "xgboost"',
+        new='SHIPPED_REGRESSOR: str = "lightgbm"',
+        gate="tests/test_config_artefact_agreement.py",
+    ),
+    Mutation(
+        name="readme-tree-drops-a-ci-job",
+        path="README.md",
+        old="5-job CI: lint + test + reproducibility",
+        new="4-job CI: lint + test",
+        gate="tests/test_gate_scope.py::test_readme_names_every_ci_job",
+    ),
+    Mutation(
+        name="readme-miscounts-the-test-suite",
+        path="README.md",
+        old="(32 files in total)",
+        new="(30 files in total)",
+        gate="tests/test_gate_scope.py::test_readme_states_the_real_size_of_the_test_suite",
+    ),
+    Mutation(
+        name="benchmark-runner-commented-inside-its-own-block",
+        # The command survives as a comment within the run: scalar.
+        path=".github/workflows/benchmark.yml",
+        old="        run: python -m benchmarks.run_benchmark\n",
+        new="        run: |\n          # python -m benchmarks.run_benchmark\n          echo skipped\n",
+        gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),
 ]

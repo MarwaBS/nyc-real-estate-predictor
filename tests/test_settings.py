@@ -1,9 +1,9 @@
-"""Tests for api.settings — the prod CORS startup guard.
+"""Tests for api.settings, the prod CORS startup guard.
 
 The guard (``validate_cors_not_wildcard_in_prod``) is the control that makes
 a prod deploy with wildcard CORS REFUSE to start. It previously had zero
 tests, so a regression would have shipped silently. Settings are constructed
-with explicit kwargs — in pydantic-settings, init kwargs take precedence over
+with explicit kwargs, in pydantic-settings, init kwargs take precedence over
 environment variables and ``.env``, so these tests are hermetic.
 """
 
@@ -42,6 +42,6 @@ def test_prod_explicit_origins_start_clean() -> None:
 
 
 def test_dev_wildcard_stays_permissive() -> None:
-    """Dev keeps the frictionless default — the guard is prod-only."""
+    """Dev keeps the frictionless default, the guard is prod-only."""
     settings = APISettings(env="dev", allowed_origins="*")
     assert settings.origins_list == ["*"]

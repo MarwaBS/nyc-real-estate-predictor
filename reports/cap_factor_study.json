@@ -1,0 +1,44 @@
+{
+  "model": "random_forest",
+  "shipped_model_test_r2_capped_target": 0.8351,
+  "shipped_model_test_r2_listed_target": 0.7883,
+  "test_rows_censored_by_the_cap": 72,
+  "n_test": 906,
+  "shipped_factor": 3.0,
+  "train_fit_price_bounds": [
+    -2492000.0,
+    4487000.0
+  ],
+  "common_support_ceiling": 2991500.0,
+  "n_train": 2896,
+  "rows": [
+    {
+      "factor": 1.5,
+      "val_r2_common": 0.6446,
+      "val_mae_common": 0.275,
+      "train_rows_at_cap": 323,
+      "pct_at_cap": 11.15
+    },
+    {
+      "factor": 3.0,
+      "val_r2_common": 0.6316,
+      "val_mae_common": 0.2792,
+      "train_rows_at_cap": 205,
+      "pct_at_cap": 7.08
+    },
+    {
+      "factor": 5.0,
+      "val_r2_common": 0.6261,
+      "val_mae_common": 0.2812,
+      "train_rows_at_cap": 141,
+      "pct_at_cap": 4.87
+    },
+    {
+      "factor": "none",
+      "val_r2_common": 0.6208,
+      "val_mae_common": 0.2827,
+      "train_rows_at_cap": 0,
+      "pct_at_cap": 0.0
+    }
+  ]
+}

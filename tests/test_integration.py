@@ -1,4 +1,4 @@
-"""Integration test — full pipeline: load data -> features -> train -> predict."""
+"""Integration test, full pipeline: load data -> features -> train -> predict."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ def test_full_pipeline_data_to_prediction(integration_data: pd.DataFrame) -> Non
     assert len(issues) == 0, f"Validation failed: {issues}"
     assert len(df) > 50, "Too many rows dropped during cleaning"
 
-    # 2. Feature engineering — the same pipeline training runs, no
+    # 2. Feature engineering, the same pipeline training runs, no
     # test-manufactured columns.
     df = add_numeric_features(df)
     df = add_geospatial_features(df)

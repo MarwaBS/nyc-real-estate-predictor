@@ -4,8 +4,8 @@
 # small (~300MB vs ~3GB) and means CI's pip-audit on this file only
 # flags CVEs in code that actually ships to users.
 #
-# Dependabot (see .github/dependabot.yml) manages weekly patch + minor
-# upgrades. Major-version bumps are always isolated PRs.
+# Dependabot proposes weekly patch and minor upgrades. Majors are ignored,
+# and so are minor bumps for the packages with numpy in their tree.
 
 # Core
 pandas==2.2.3  # frozen: fitted into the shipped pickles
@@ -16,6 +16,7 @@ scipy==1.13.1  # frozen: 1.18.0 is the first release requiring numpy>=2, which m
 # Gradient boosting candidates — compared on val in run_training.py, not shipped
 xgboost==2.1.4  # frozen: fitted into the shipped pickles
 lightgbm==4.6.0  # floor 4.6.0 fixes PYSEC-2024-231; a training-time candidate, not shipped
+# minor updates ignored: numpy is in its tree, so a minor bump can require numpy>=2
 
 # NOTE: geopy, h3, pandera, and folium are deliberately absent —
 # nothing in the tracked codebase imports any of them (haversine is
@@ -42,6 +43,8 @@ httpx==0.28.1
 
 # UI
 streamlit==1.54.0  # bumped 1.38.0 → 1.54.0 (fixes CVE-2026-33682)
+# minor updates ignored: numpy is in its tree. The next CVE fix at minor level
+# has to be taken by hand, as this one was.
 plotly==5.24.1
 
 # Image processing (transitive via streamlit / plotly; pin explicitly for CVE fixes)

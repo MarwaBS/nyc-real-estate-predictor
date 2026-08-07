@@ -1,4 +1,4 @@
-"""Data cleaning pipeline — deduplicate, impute, normalize, validate."""
+"""Data cleaning pipeline: deduplicate, impute, normalize, validate."""
 
 from __future__ import annotations
 
@@ -36,10 +36,10 @@ def deduplicate(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
-    """Impute missing values — borough-aware median for numerics."""
+    """Impute missing values, borough-aware median for numerics."""
     listings = df.copy()
 
-    # BEDS/BATH: borough median — housing stock differs by borough, so a
+    # BEDS/BATH: borough median, housing stock differs by borough, so a
     # global median drags Manhattan units toward outer-borough counts.
     for col in ["BEDS", "BATH"]:
         if col in listings.columns and listings[col].isna().any():
@@ -50,7 +50,7 @@ def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
             listings[col] = listings[col].fillna(listings[col].median())
             logger.info("Imputed %s: %d values filled", col, df[col].isna().sum())
 
-    # PROPERTYSQFT: median (no borough split — less correlated)
+    # PROPERTYSQFT: median (no borough split, less correlated)
     if "PROPERTYSQFT" in listings.columns and listings["PROPERTYSQFT"].isna().any():
         median_sqft = listings["PROPERTYSQFT"].median()
         listings["PROPERTYSQFT"] = listings["PROPERTYSQFT"].fillna(median_sqft)
@@ -69,7 +69,7 @@ def fit_cap_bounds(
     """Fit IQR cap bounds (Q1 - f*IQR, Q3 + f*IQR) per column.
 
     Fit/apply are split so the bounds can be fitted on the TRAIN split only
-    and applied everywhere — fitting on pooled data lets val/test quantiles
+    and applied everywhere, fitting on pooled data lets val/test quantiles
     shape the training target.
 
     factor=3.0 is a measured trade-off, not an inherited default: on held-out
@@ -115,7 +115,7 @@ def cap_outliers(
     columns: list[str] | None = None,
     factor: float = 3.0,
 ) -> pd.DataFrame:
-    """Fit-and-apply on the same frame — for callers whose evaluation data is
+    """Fit-and-apply on the same frame, for callers whose evaluation data is
     EXTERNAL (the benchmark trainer caps its whole Kaggle training set; its
     test rows are NYC.gov sales). Training with an internal test split must
     use fit_cap_bounds on train + apply_cap instead."""
@@ -222,7 +222,7 @@ def normalize_type(df: pd.DataFrame, col: str = "TYPE") -> pd.DataFrame:
 def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full cleaning pipeline end-to-end on a RAW frame.
 
-    Row-wise cleaning only — dedup, derivation, imputation and validity
+    Row-wise cleaning only, dedup, derivation, imputation and validity
     filters. Outlier capping is NOT done here: bounds are cross-row statistics
     and are fitted by the caller on the appropriate rows (fit_cap_bounds).
     """
@@ -257,8 +257,8 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     # Drop the 32-bit integer overflow sentinel. The raw snapshot holds exactly
     # one PRICE of 2,147,483,647 (2**31 - 1); the next highest real listing is
-    # 195,000,000, so this is a serialisation artefact, not a price, and is
-    # removed rather than left for the downstream IQR cap to clip. The threshold
+    # 195,000,000. That is a serialisation artefact rather than a price, so it
+    # is removed instead of left for the downstream IQR cap to clip. The threshold
     # catches this sentinel and anything above it; a merely absurd value (say
     # 2**31 - 2) is left for that cap, the right treatment for a possible price.
     before = len(df)

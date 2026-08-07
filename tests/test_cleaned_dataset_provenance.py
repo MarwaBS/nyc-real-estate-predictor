@@ -87,7 +87,7 @@ def test_the_overflow_sentinel_row_is_dropped_not_capped() -> None:
 
     Row count distinguishes drop from keep: cleaning the frame with and without
     the sentinel gives the same count only if the sentinel is dropped. A
-    magnitude assertion would not — the downstream train-fitted cap would clip
+    magnitude assertion would not, the downstream train-fitted cap would clip
     the value either way.
     """
     raw = load_raw()

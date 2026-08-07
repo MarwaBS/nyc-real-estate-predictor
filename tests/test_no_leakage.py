@@ -47,7 +47,7 @@ def test_assert_no_leakage_passes_clean_features() -> None:
 def test_assert_no_leakage_catches_the_target_itself(leaky: str) -> None:
     """The guard must reject the raw target, not just its derived spellings.
 
-    The enumerated-spellings version passed ``["BEDS", "PRICE"]`` — the guard
+    The enumerated-spellings version passed ``["BEDS", "PRICE"]``, the guard
     against leakage certified the most direct leak there is. Every case here
     fails against that implementation.
     """

@@ -38,15 +38,16 @@ jobs:
         run: ruff check .
       - name: ruff format --check
         run: ruff format --check .
+      - name: codespell
+        # Tracked text only, so untracked scratch files cannot fail the build.
+        run: codespell $(git ls-files '*.md' '*.py' '*.yml' '*.toml' '*.txt' '*.cfg')
       - name: mypy type check
-        # Run against src/ + api/ + benchmarks/ so the benchmark pipeline is
-        # type-checked too; `--ignore-missing-imports` prevents failures from
-        # third-party libs (slowapi, xgboost, etc.) that don't ship stubs.
-        run: mypy src/ api/ benchmarks/ --ignore-missing-imports
+        # Every tracked Python file outside tests/. `--ignore-missing-imports`
+        # covers the libraries that ship no stubs.
+        run: mypy src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py --ignore-missing-imports
       - name: bandit security scan
-        # Skip the tests tree (B101 asserts are normal in pytest) and the
-        # .venv. Fail on MEDIUM+ findings.
-        run: bandit -r src/ api/ benchmarks/ -n 3 -ll
+        # Same paths. Tests are left out because assert is normal in pytest.
+        run: bandit -r src/ api/ benchmarks/ streamlit_app/ scripts/ run_training.py -n 3 -ll
 
   test:
     runs-on: ubuntu-latest
@@ -59,17 +60,35 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
-        # Floor 78, comfortably under the actual coverage over the full source
-        # set (src/ + api/ + benchmarks/ + run_training.py). The gap gives churn
-        # headroom while losing a module's worth of coverage still fails. The
-        # omit list holds only the network-bound benchmark modules, which the
-        # External Benchmark workflow exercises end-to-end on every push.
-        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov-report=term-missing --cov-report=xml --cov-fail-under=78
+        # Floor 85, measured 89.67%, so there is room for 46 more uncovered
+        # statements. The number is a total over the whole tree, so a module
+        # smaller than that can lose all its tests and still pass.
+        run: pytest tests/ -v --tb=short --cov=src --cov=benchmarks --cov=api --cov=run_training --cov=streamlit_app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
       - name: Verify the gates can fail
         # The step above proves the code passes its tests; this one proves the
         # tests can fail. Without it, a gate that reads a committed artefact CI
         # never regenerates stays green on broken code.
         run: python scripts/verify_gates.py
+
+  reproducibility:
+    # A full training run takes minutes, so it runs weekly and on pull
+    # requests, which is where the training path changes.
+    if: github.event_name == 'schedule' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Retrain from the committed data, then re-check every shipped claim
+        # Model bytes are not portable: a pandas quantile moved one ulp here.
+        # The docs claim the reported numbers reproduce, so that is what runs.
+        run: |
+          python run_training.py
+          pytest tests/ -q --no-header
 
   security:
     runs-on: ubuntu-latest
