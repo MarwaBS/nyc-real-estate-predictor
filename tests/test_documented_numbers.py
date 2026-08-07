@@ -443,10 +443,9 @@ def test_the_benchmark_artefact_names_a_registered_contract_version() -> None:
 
 
 def test_readme_states_the_contract_version_the_results_were_produced_under() -> None:
-    """The contract can be bumped without re-running the benchmark, so the two
-    versions legitimately differ. What must not happen is the README calling the
-    older artefact current: it said "SCHEMA_MAP v3" while the live contract was
-    v4, which is the sealed document contradicting its own seal."""
+    """The contract can be bumped without re-running the benchmark, so README
+    must name the version the results were produced under, not the live one.
+    The registry seals v4 today while results.json still records v3."""
     produced_under = BENCH["schema_map_version"]
     stated = re.search(r"produced under SCHEMA_MAP (v\d+)", _read("README.md"))
     assert stated is not None, (

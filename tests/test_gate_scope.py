@@ -242,9 +242,9 @@ def test_coverage_measures_every_shipped_module() -> None:
 
 def test_coverage_excludes_only_the_three_justified_lines() -> None:
     """`exclude_lines` sits above `source` and `omit`, and no gate watched it.
-    Adding "def ", "return" and "if " takes 997 measurable statements to 36 and
-    the reported percentage rises to 97%. The justified set is closed, so
-    widening it is a visible edit here."""
+    Adding "def ", "return" and "if " takes 997 measurable statements to 259
+    and the reported percentage from 89.77% to 99%. The justified set is
+    closed, so widening it is a visible edit here."""
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["report"]
     assert set(config["exclude_lines"]) == {
         "pragma: no cover",
@@ -317,9 +317,10 @@ def test_every_invocation_measures_the_declared_module_set() -> None:
 
 
 def test_the_stated_coverage_gate_matches_ci() -> None:
-    """The floor comes from the step's ``run:`` scalar. Read as text, a
-    `# --cov-fail-under=85` comment satisfied this while the command ran 10.
-    Exactly one flag, because pytest honours the last and a reader the first."""
+    """README carried 70% in one place and 80% in two while CI ran 80. The
+    floor comes from the step's ``run:`` scalar, since a `# --cov-fail-under=85`
+    comment satisfied a text read while the command ran 10. Exactly one flag,
+    because pytest honours the last and a reader the first."""
     floors = re.findall(
         r"--cov-fail-under=(\d+)", _ci_step_command("Run tests with coverage")
     )
