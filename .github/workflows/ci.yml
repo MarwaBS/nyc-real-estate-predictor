@@ -71,9 +71,8 @@ jobs:
         run: python scripts/verify_gates.py
 
   reproducibility:
-    # A full training run takes minutes, so it runs weekly and on any change
-    # to the training path, which is what can make the artefacts stop
-    # regenerating byte for byte.
+    # A full training run takes minutes, so it runs weekly and on pull
+    # requests, which is where the training path changes.
     if: github.event_name == 'schedule' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -84,12 +83,16 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-      - name: Retrain and require byte-identical model artefacts
-        # reports/ carries run_date and commit_sha, which move by design; the
-        # models are the claim.
+      - name: Retrain from the committed data, then re-check every shipped claim
+        # Model bytes are not portable. This runner regenerated
+        # drift_baseline.json with p25 6.71517982298862 against the committed
+        # 6.7151798229886195, a last-ulp difference in a pandas quantile, and
+        # XGBoost's serialised bytes moved with it. The claim the docs make is
+        # that a fresh clone reproduces the reported numbers, so the suite is
+        # re-run against the artefacts this run just wrote.
         run: |
           python run_training.py
-          git diff --exit-code -- models/
+          pytest tests/ -q --no-header
 
   security:
     runs-on: ubuntu-latest
