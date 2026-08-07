@@ -3,10 +3,9 @@
 Published figures against the artefacts. Tool config and the import graph are
 in ``test_gate_scope.py``.
 
-Hand-maintained figures rot: README, MODEL_CARD, CHANGELOG, the ADRs and the
-public Space page have all carried figures from an earlier training run,
-including a regressor named as LightGBM when the shipped model was XGBoost.
-Nothing recomputed them, so nothing failed when they went stale.
+Hand-maintained figures rot. MODEL_CARD named the regressor as LightGBM while
+the shipped artefact was XGBoost. README carried the previous model's SHAP
+table. Nothing recomputed either, so nothing failed when they went stale.
 
 This reads the numbers back out of the prose and compares them to
 ``reports/training_metrics.json`` and ``benchmarks/results.json``. It is
@@ -63,7 +62,7 @@ def test_documents_name_the_regressor_that_actually_shipped() -> None:
     """MODEL_CARD named LightGBM while the artefact was XGBoost."""
     shipped = METRICS["regression"]["selected_model"]
     card = _read("MODEL_CARD.md")
-    claimed = re.search(r"\*\*Regressor\*\*\s*[-—]\s*`([^`]+)`", card)
+    claimed = re.search(r"\*\*Regressor\*\*\s*-\s*`([^`]+)`", card)
     assert claimed is not None, "MODEL_CARD no longer states a regressor"
 
     # Normalised: the artefact says "random_forest", prose says "Random Forest".
@@ -210,9 +209,9 @@ def test_no_live_doc_describes_a_component_that_was_deleted(doc: str) -> None:
 
 def _study_values() -> set[float]:
     """Seed-study and baseline quantities quoted beside the point estimates.
-    They are different quantities with their own gates, so the contradiction
-    scans must not flag them, the claim window can straddle a compound
-    sentence like "test R2 0.814 ± 0.028, zones macro F1 0.717 ± 0.020"."""
+    They have their own gates, so the contradiction scans must not flag them.
+    A claim window can straddle a compound sentence like "test R2 0.814 ±
+    0.028, zones macro F1 0.717 ± 0.020"."""
     values = {
         round(SEED_VARIANCE[k][s], 3)
         for k in (
@@ -354,7 +353,7 @@ def test_reader_facing_docs_declare_the_shipped_model(doc: str) -> None:
     converged. Each reader-facing surface instead carries one machine-readable
     field, compared to the artefact by string equality."""
     shipped = METRICS["regression"]["selected_model"]
-    claimed = re.search(r"\*\*Shipped model\*\*\s*[-—]\s*`([^`]+)`", _read(doc))
+    claimed = re.search(r"\*\*Shipped model\*\*\s*-\s*`([^`]+)`", _read(doc))
     assert claimed is not None, f"{doc} no longer declares a **Shipped model** field"
 
     def normalise(text: str) -> str:
@@ -562,7 +561,7 @@ def test_the_stated_feature_count_matches_the_fitted_model() -> None:
     features = METRICS["provenance"]["features"]
     card = _read("MODEL_CARD.md")
     stated = re.search(
-        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*[-—]\s*(\d+)\s*numeric", card
+        r"\*\*Feature set:\*\*\s*(\d+)\s*total\s*-\s*(\d+)\s*numeric", card
     )
     assert stated is not None, "MODEL_CARD no longer states a feature count"
 

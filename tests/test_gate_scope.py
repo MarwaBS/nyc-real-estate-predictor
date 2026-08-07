@@ -198,8 +198,8 @@ def test_no_tool_table_carries_an_unapproved_key(path: str) -> None:
 
 
 def test_pyproject_is_the_only_tool_config() -> None:
-    """Each is read instead of, or ahead of, the tables above, so the gates
-    here would be reading settings that no longer apply."""
+    """Each is read before the tables above or instead of them. The gates here
+    would be reading settings that no longer apply."""
     present = [n for n in _COMPETING_CONFIG if (ROOT / n).exists()]
     assert not present, f"tool config outside pyproject.toml: {present}"
 
@@ -335,7 +335,8 @@ def test_the_stated_coverage_gate_matches_ci() -> None:
 
 def test_ci_runs_the_whole_mutation_replay() -> None:
     """The exact command. A substring accepted `--name one`, which replays a
-    single entry, and `|| true`, which swallows the exit code."""
+    single entry. It also accepted a trailing `|| true`, which swallows the
+    exit code."""
     workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
     runs = [
         step.get("run", "").strip()

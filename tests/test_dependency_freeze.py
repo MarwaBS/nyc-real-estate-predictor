@@ -106,8 +106,8 @@ def test_the_include_spellings_are_followed(line: str) -> None:
 
 
 def _managed_pins() -> list[str]:
-    """Every pin Dependabot manages. Its pip entry sets `directory: "/"` with no
-    file restriction, and CI installs requirements-dev.txt, which pulls the
+    """Every pin Dependabot manages. Its pip entry sets `directory: "/"` with
+    no file restriction. CI installs requirements-dev.txt, which pulls the
     others into one resolve, so a bump in any of them can break it."""
     names = []
     for filename in _requirement_files():
