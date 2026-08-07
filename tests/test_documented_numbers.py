@@ -22,6 +22,7 @@ coverage is the headline set, not the whole document.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -654,10 +655,24 @@ def _runner_text() -> str:
     return "\n".join(parts)
 
 
+def _imported_modules(source: str) -> set[str]:
+    """Dotted module names an ``import`` statement names. Read from the parsed
+    tree: grepping the leaf name matched `save_drift_baseline` and kept
+    `src.models.drift` looking alive after its only import was deleted."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names |= {alias.name for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            names |= {f"{node.module}.{alias.name}" for alias in node.names}
+    return names
+
+
 def test_no_shipped_module_has_zero_importers() -> None:
-    """A13. A module nothing imports and no runner invokes is dead weight that
-    still has to be read, typed, linted and kept true. `check_drift` and its
-    helpers sat that way behind a passing test suite."""
+    """A13. A module nothing imports and no runner invokes is weight the reader
+    still has to carry. The drift comparison helpers sat that way behind a green
+    suite, kept alive by their own test file."""
     tracked = subprocess.run(
         ["git", "ls-files", "*.py"],
         cwd=ROOT,
@@ -666,31 +681,27 @@ def test_no_shipped_module_has_zero_importers() -> None:
         check=True,
     ).stdout.split()
     shipped = [f for f in tracked if not f.startswith(("tests/", "notebooks/"))]
-    # Tests are not importers. A module reachable only from its own test file is
-    # exactly the case this exists to catch: the suite keeps it alive and
-    # nothing ships it.
-    importers = "\n".join((ROOT / f).read_text(encoding="utf-8") for f in shipped)
     runners = _runner_text()
 
     orphans = []
     for path in shipped:
         module = path.removesuffix(".py").replace("/", ".")
-        leaf = module.rsplit(".", 1)[-1]
-        if leaf == "__init__":
+        if module.endswith("__init__"):
             continue
         source = (ROOT / path).read_text(encoding="utf-8")
-        if '__name__ == "__main__"' in source or path in runners:
+        # A runner names it either by path (`streamlit run streamlit_app/app.py`)
+        # or dotted (`uvicorn api.main:app`).
+        if '__name__ == "__main__"' in source or path in runners or module in runners:
             continue
-        # `import a.b.c`, `from a.b import c`, or `python -m a.b.c`
-        if re.search(
-            rf"(?<![\w.]){re.escape(module)}(?![\w])", importers.replace(path, "")
-        ):
-            continue
-        if re.search(
-            rf"(?<![\w.]){re.escape(leaf)}(?![\w])", importers.replace(path, "")
-        ):
-            continue
-        orphans.append(path)
+        # Tests are not importers: a module reachable only from its own test
+        # file is exactly what this catches.
+        imported_by = any(
+            module in _imported_modules((ROOT / other).read_text(encoding="utf-8"))
+            for other in shipped
+            if other != path
+        )
+        if not imported_by:
+            orphans.append(path)
     assert not orphans, f"shipped modules nothing imports or runs: {orphans}"
 
 
