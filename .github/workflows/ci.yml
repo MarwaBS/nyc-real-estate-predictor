@@ -84,12 +84,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Retrain from the committed data, then re-check every shipped claim
-        # Model bytes are not portable. This runner regenerated
-        # drift_baseline.json with p25 6.71517982298862 against the committed
-        # 6.7151798229886195, a last-ulp difference in a pandas quantile, and
-        # XGBoost's serialised bytes moved with it. The claim the docs make is
-        # that a fresh clone reproduces the reported numbers, so the suite is
-        # re-run against the artefacts this run just wrote.
+        # Model bytes are not portable: a pandas quantile moved one ulp here.
+        # The docs claim the reported numbers reproduce, so that is what runs.
         run: |
           python run_training.py
           pytest tests/ -q --no-header
