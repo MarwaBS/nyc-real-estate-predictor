@@ -74,6 +74,6 @@ Triage policy:
    alerts (HIGH priority).
 
 This file documents the policy so reviewers understand why the alert count
-is non-zero despite the runtime surface carrying no unignored pip-audit
-finding, `PYSEC-2024-277` being ignored with its rationale in `ci.yml` (verified by the
-CI `security` job running `pip-audit -r requirements.txt`).
+is non-zero while the runtime surface carries no unignored pip-audit finding.
+The CI `security` job runs `pip-audit -r requirements.txt`; `PYSEC-2024-277` is
+ignored there, with its rationale at the call site in `ci.yml`.

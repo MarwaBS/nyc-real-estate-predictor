@@ -156,7 +156,7 @@ def _run_drop_engine(
 def _build_features(kept_raw: pd.DataFrame) -> pd.DataFrame:
     """Assemble the benchmark feature frame from kept rows.
 
-    Emits exactly the three features shared with the Kaggle training data -
+    Emits exactly the three features shared with the Kaggle training data:
     ``borough`` (Census name), ``property_sqft`` (float), and ``zip_code``
     (string category), matching ``benchmarks.train_benchmark_model``'s
     ``BENCHMARK_FEATURES`` so the lean benchmark regressor scores this frame

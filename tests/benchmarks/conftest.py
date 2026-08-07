@@ -18,8 +18,8 @@ import pytest
 
 # Deterministic bulk rows appended to the curated fixture. schema-firewall
 # >= 0.1.1 refuses leakage checks below 100 finite paired samples (small-n
-# MI estimates are noise), so the fixture must yield >= 100 KEPT rows -
-# the curated set alone keeps only 15. The curated rows still carry all
+# MI estimates are noise), so the fixture must yield >= 100 KEPT rows.
+# The curated set alone keeps only 15. The curated rows still carry all
 # the drop-reason / borough coverage; these add statistical mass only.
 _BULK_VALID_ROWS = 150
 

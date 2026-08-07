@@ -1,6 +1,6 @@
 """The dashboard's model load must be as guarded as the API's.
 
-Regression for the audit finding that the dashboard used a bare ``joblib.load``
+Regression: the dashboard used a bare ``joblib.load``
 catching only ``FileNotFoundError``: a present-but-cross-version artefact
 bypassed the version guard and surfaced as a raw ``ModelVersionError`` traceback
 at predict time, instead of the clean "unavailable" message the API returns.

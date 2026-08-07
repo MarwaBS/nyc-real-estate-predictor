@@ -139,8 +139,8 @@ def predict(
 
     Rate-limited per client IP at the configured ``PREDICT_RATE_LIMIT``;
     requests beyond it receive HTTP 429 from slowapi's handler. The rate is
-    deployment-configurable, so no specific request count is quoted here -
-    this docstring is rendered into the public /docs page, where a hardcoded
+    deployment-configurable, so no specific request count is quoted here.
+    This docstring is rendered into the public /docs page, where a hardcoded
     number would misdescribe every deployment that overrides the default.
     The ``request`` parameter is required by slowapi's decorator contract.
 

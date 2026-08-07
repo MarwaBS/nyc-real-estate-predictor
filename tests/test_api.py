@@ -146,8 +146,8 @@ def test_health_reports_healthy_when_full_stack_loads(
     reason="serving artifacts missing (partial checkout), they are committed and pinned by models/MANIFEST.sha256",
 )
 def test_predict_returns_200_with_valid_input() -> None:
-    """With models present, /predict returns a real 200 and the documented shape -
-    a hard success assertion, not the old 'either 200 or 503'."""
+    """With models present, /predict returns a real 200 and the documented shape.
+    A hard success assertion, not the old 'either 200 or 503'."""
     response = client.post("/predict", json=VALID_PAYLOAD)
     assert response.status_code == 200, response.text
     body = response.json()
@@ -206,8 +206,8 @@ def test_predict_returns_503_when_models_absent(
 
 
 def test_predict_requires_api_key_returns_401() -> None:
-    """With API_KEY configured, a request missing X-API-Key is rejected 401 -
-    auth runs before model load, so this holds with or without models present."""
+    """With API_KEY configured, a request missing X-API-Key is rejected 401.
+    Auth runs before model load, so this holds with or without models present."""
     with reloaded_app(API_KEY="s3cret") as m:
         resp = TestClient(m.app).post("/predict", json=VALID_PAYLOAD)
         assert resp.status_code == 401

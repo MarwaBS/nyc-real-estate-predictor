@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 def prepare_data() -> pd.DataFrame:
     """Load and clean the raw snapshot; write the cleaned (uncapped) CSV.
 
-    Everything cross-row, cap bounds, zone cut-points, category vocabulary -
+    Everything cross-row (cap bounds, zone cut-points, category vocabulary)
     is fitted later, on the train split only, inside :func:`run_protocol`.
     """
     logger.info("Step 1: loading raw data and cleaning it")

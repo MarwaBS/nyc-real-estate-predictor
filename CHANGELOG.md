@@ -1,12 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. The format loosely
-follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
-project uses SemVer for tagged releases.
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed, the gates cover the code they claim to
+### Changed
+
+**The gates cover the code they claim to**
 
 - **The gates were rewritten to check properties, not the demonstrated
   example.** Each of the four added in the previous entry was walked around:
@@ -70,7 +71,9 @@ project uses SemVer for tagged releases.
   one the artefacts hold, with the historical exemption matched against the
   text before the claim rather than the whole line.
 
-### Changed, every cross-row statistic now fits on the train split only
+### Changed
+
+**Every cross-row statistic now fits on the train split only**
 
 - **The two disclosed leakage residuals are fixed.** IQR cap bounds, zone
   cut-points and the category vocabulary were fitted on pooled data; all
@@ -93,7 +96,9 @@ project uses SemVer for tagged releases.
   (0.696). Every borough still clears its majority-class floor.
 
 
-### Changed, one model, derived zones, conformal interval, borough floor
+### Changed
+
+**One model, derived zones, conformal interval, borough floor**
 
 - **The classifier is deleted; the zone is the predicted price bucketed.**
   `PRICE_ZONE` is a deterministic function of price, so a second model was
@@ -132,7 +137,9 @@ project uses SemVer for tagged releases.
   bins changed the classification target and the stratification, so the splits
   differ. Coverage rose 69% -> 87.49% (untested code deleted, gates added).
 
-### Fixed, rate limiting did not apply to rejected API keys
+### Fixed
+
+**Rate limiting did not apply to rejected API keys**
 
 - `SECURITY.md` scopes DoS out because `/predict` is rate-limited, but
   route-level `dependencies=[Depends(verify_api_key)]` resolved before
@@ -141,7 +148,9 @@ project uses SemVer for tagged releases.
   the control. The check now runs inside the handler, after the limiter -
   measured after: 403, 403, 403, 429...
 
-### Fixed, the coverage gate was measured over a subset
+### Fixed
+
+**The coverage gate was measured over a subset**
 
 - **The 88% floor described a hand-picked subset.** `pyproject.toml` omitted 8
   modules, and every one of them was at 0%, the omit list was exactly the set
@@ -163,7 +172,9 @@ project uses SemVer for tagged releases.
   nothing tied the endpoint to it. The response is now compared to the
   artefact's multipliers.
 
-### Fixed, the cleaned dataset had no producer (data provenance)
+### Fixed
+
+**The cleaned dataset had no producer (data provenance)**
 
 - **`output/cleaned_house_dataset.csv` was not the output of
   `src/data/cleaner.py`, and no code in the repo produced it.** It held a
@@ -189,7 +200,9 @@ project uses SemVer for tagged releases.
 - **`PROPERTY_CATEGORY` removed**, training, the API and the dashboard all
   hardcoded it to `"residential"`, so the one-hot encoder saw a single level.
 
-### Fixed, provenance fields that could not report the truth
+### Fixed
+
+**Provenance fields that could not report the truth**
 
 - **`working_tree_clean` could never be `true`.** It was sampled inside the
   metrics writer, after the run had written `models/`, the cleaned dataset and
@@ -205,7 +218,9 @@ project uses SemVer for tagged releases.
   artefact-reading gate only inspects the committed file and CI never
   retrains.
 
-### Changed, undefended constants replaced with measured ones (A5 defense drill)
+### Changed
+
+**Undefended constants replaced with measured ones (A5 defense drill)**
 
 - **The served price interval is calibrated, not asserted.** `±15%` was
   hardcoded in three files and derived from nothing; measured against the test
@@ -242,7 +257,9 @@ project uses SemVer for tagged releases.
   the only floating refs, and trivy is the action enforcing the HIGH/CRITICAL
   gate, an upstream change could silently redefine it.
 
-### Changed, test-set contamination removed (headline numbers move)
+### Changed
+
+**Test-set contamination removed (headline numbers move)**
 
 - **Three-way train/val/test split.** Model selection (both classifiers and
   all three regressors) previously compared candidates on the *test* split
@@ -352,7 +369,7 @@ project uses SemVer for tagged releases.
   governs: a clean `pip install -r requirements.txt` (and therefore the Docker
   image, which installs the same file) resolves starlette 1.3.1, never 1.3.0.
 
-## [1.0.0], 2026-04-18
+## [1.0.0] - 2026-04-18
 
 Initial production-grade ML pipeline.
 

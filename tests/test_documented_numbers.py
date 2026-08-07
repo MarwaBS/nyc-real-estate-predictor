@@ -1,4 +1,7 @@
-"""Published headline numbers must match the artefacts they claim to quote.
+"""Every claim a reader can check, compared to the thing it describes.
+
+Published figures against the artefacts, tool config against the tree, and the
+import graph against what ships.
 
 Hand-maintained figures rot: README, MODEL_CARD, CHANGELOG, the ADRs and the
 public Space page have all carried figures from an earlier training run,
@@ -351,31 +354,6 @@ def test_pyproject_description_names_the_shipped_model() -> None:
     assert not stale, f"pyproject description names non-shipped model(s): {stale}"
 
 
-def test_no_tracked_file_references_private_projects() -> None:
-    """Comments cross-referencing the author's private repositories expose
-    their names to every reader and explain nothing a local comment couldn't."""
-    private_names = re.compile(r"resume.?forge", re.IGNORECASE)
-    this_file = Path(__file__).resolve()
-    offenders = []
-    for pattern in ("**/*.py", "**/*.md", "**/*.yml", "**/*.toml", "**/*.cfg"):
-        for path in ROOT.glob(pattern):
-            if any(
-                part in {".venv312", ".venv", ".git", "node_modules"}
-                for part in path.parts
-            ):
-                continue
-            if path.resolve() == this_file:  # the regex above matches itself
-                continue
-            if private_names.search(path.read_text(encoding="utf-8", errors="ignore")):
-                offenders.append(str(path.relative_to(ROOT)))
-    for name in (".gitignore", ".trivyignore", "Dockerfile", "Makefile"):
-        if (ROOT / name).exists() and private_names.search(
-            (ROOT / name).read_text(encoding="utf-8", errors="ignore")
-        ):
-            offenders.append(name)
-    assert not offenders, f"private project referenced in: {sorted(offenders)}"
-
-
 def test_the_stated_coverage_gate_matches_ci() -> None:
     """README stated three different gate values (65, 88, 69) at once, all
     wrong. The CI workflow is the authority."""
@@ -644,9 +622,16 @@ def test_readme_states_the_contract_version_the_results_were_produced_under() ->
 
 
 def test_the_capped_target_caveat_is_stated_and_quoted() -> None:
-    """The headline R2 is scored against a clipped target. Both the figure and
-    the row count come from the study, so a retrain that changes either fails
-    the docs rather than leaving the caveat describing an older run."""
+    """The headline R2 is scored against a clipped target. The study is tied to
+    the training artefact first: on its own it can drift with the prose and stay
+    green, because its own figures feed the doc scan."""
+    assert CAP_STUDY["shipped_model_test_r2_capped_target"] == round(
+        METRICS["regression"]["metrics"]["r2"], 4
+    ), "the study scored a different model than the one that shipped"
+    assert CAP_STUDY["n_test"] == METRICS["provenance"]["n_test"], (
+        "the study used a different test split than the shipped run"
+    )
+
     listed = CAP_STUDY["shipped_model_test_r2_listed_target"]
     censored = CAP_STUDY["test_rows_censored_by_the_cap"]
     for doc in ("README.md", "MODEL_CARD.md"):

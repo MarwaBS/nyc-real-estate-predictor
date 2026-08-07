@@ -2,8 +2,8 @@
 
 The published macro-F1 was 0.724 because per-class thresholds were fitted
 against the test labels and the resulting score reported as a hold-out
-number; candidate selection read the same labels. Both are the same defect -
-a quantity chosen to maximise a test-set score cannot also be an unbiased
+number; candidate selection read the same labels. Both are the same defect.
+A quantity chosen to maximise a test-set score cannot also be an unbiased
 estimate of it, and both are structural, so they are pinned structurally.
 """
 

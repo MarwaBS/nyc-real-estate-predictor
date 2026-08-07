@@ -1,7 +1,7 @@
 """SHAP explainability helpers.
 
 ``run_training.py`` records `regression.shap_top10` from these, and the
-explainability notebook renders them, but nothing executed them under test -
+explainability notebook renders them, but nothing executed them under test.
 `src/models/explain.py` sat at 0% coverage, so a shape-handling regression
 would have surfaced only during a training run.
 """
@@ -43,8 +43,8 @@ def test_compute_shap_values_returns_one_row_per_sampled_input(fitted: tuple) ->
 
 
 def test_global_importance_ranks_the_dominant_feature_first(fitted: tuple) -> None:
-    """The ranking must reflect the signal, not just return without error -
-    a broken shape reduction would still produce a sorted frame."""
+    """The ranking must reflect the signal, not just return without error.
+    A broken shape reduction would still produce a sorted frame."""
     _, X, shap_values, _ = fitted
     importance = global_feature_importance(shap_values, list(X.columns))
     assert list(importance.columns) == ["feature", "mean_abs_shap"]

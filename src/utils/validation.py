@@ -65,8 +65,8 @@ def assert_no_leakage(feature_names: list[str] | np.ndarray) -> None:
     """Reject any feature derived from the price target.
 
     The rule is "the name mentions price", not a list of known spellings.
-    The list version passed a bare ``PRICE`` column, the target itself -
-    because only five derived spellings were enumerated, so the check
+    The list version passed a bare ``PRICE`` column, the target itself.
+    Only five derived spellings were enumerated, so the check
     certified as clean exactly the input it existed to reject. No legitimate
     feature in ``src.config`` mentions price, so anything that does is either
     the target or built from it.
