@@ -1,4 +1,4 @@
-"""FastAPI prediction service, /predict, /health, /docs."""
+"""FastAPI prediction service: /predict, /health, /docs."""
 
 from __future__ import annotations
 

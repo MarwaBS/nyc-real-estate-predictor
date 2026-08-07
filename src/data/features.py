@@ -1,4 +1,4 @@
-"""Feature engineering, all derived features, encoding prep, target creation.
+"""Feature engineering: all derived features, encoding prep, target creation.
 
 CRITICAL DESIGN RULE:
     PRICE_PER_SQFT must NEVER appear in any feature set.

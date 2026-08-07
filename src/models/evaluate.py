@@ -1,4 +1,4 @@
-"""Model evaluation, metrics, confusion matrix, reports, plots."""
+"""Model evaluation: metrics, confusion matrix, reports, plots."""
 
 from __future__ import annotations
 

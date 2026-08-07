@@ -1,4 +1,4 @@
-"""Data cleaning pipeline, deduplicate, impute, normalize, validate."""
+"""Data cleaning pipeline: deduplicate, impute, normalize, validate."""
 
 from __future__ import annotations
 
@@ -257,8 +257,8 @@ def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 
     # Drop the 32-bit integer overflow sentinel. The raw snapshot holds exactly
     # one PRICE of 2,147,483,647 (2**31 - 1); the next highest real listing is
-    # 195,000,000, so this is a serialisation artefact, not a price, and is
-    # removed rather than left for the downstream IQR cap to clip. The threshold
+    # 195,000,000. That is a serialisation artefact rather than a price, so it
+    # is removed instead of left for the downstream IQR cap to clip. The threshold
     # catches this sentinel and anything above it; a merely absurd value (say
     # 2**31 - 2) is left for that cap, the right treatment for a possible price.
     before = len(df)

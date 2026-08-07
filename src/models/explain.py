@@ -1,4 +1,4 @@
-"""Model explainability, SHAP values, feature importance, per-prediction explanations."""
+"""Model explainability: SHAP values, feature importance, per-prediction explanations."""
 
 from __future__ import annotations
 

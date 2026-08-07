@@ -1,1 +1,1 @@
-"""Shared utilities, geospatial, validation, logging."""
+"""Shared utilities: geospatial, validation, logging."""

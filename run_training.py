@@ -1,4 +1,4 @@
-"""End-to-end training orchestrator, load data, engineer features, train models, save artifacts.
+"""End-to-end training orchestrator: load data, engineer features, train models, save artifacts.
 
 Besides the model artefacts (committed and MANIFEST-pinned), every run
 writes ``reports/training_metrics.json``, the committed evidence artefact
@@ -384,7 +384,7 @@ def train_regression(
             y_test, best_pipeline.predict(X_test), log_target=True
         )
         logger.info(
-            "SELECTED %s, val R2=%.4f, test R2=%.4f",
+            "SELECTED %s: val R2=%.4f, test R2=%.4f",
             best_name,
             best_r2,
             best_metrics["r2"],
