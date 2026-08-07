@@ -344,6 +344,18 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_documented_numbers.py::test_no_shipped_module_has_zero_importers",
     ),
     Mutation(
+        name="coverage-exclude-lines-widened",
+        # One level above source and omit: it removes statements from the
+        # denominator, so measuring less raises the percentage.
+        path="pyproject.toml",
+        old='exclude_lines = [
+    "pragma: no cover",',
+        new='exclude_lines = [
+    "def ",
+    "pragma: no cover",',
+        gate="tests/test_documented_numbers.py::test_coverage_excludes_only_the_three_justified_lines",
+    ),
+    Mutation(
         name="doc-link-points-at-nothing",
         path="README.md",
         old="SCHEMA_MAP_VERSIONS.json`](benchmarks/SCHEMA_MAP_VERSIONS.json)",

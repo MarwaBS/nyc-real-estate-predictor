@@ -689,7 +689,7 @@ def _write_training_metrics(
 
 def main() -> None:
     """Run the full training pipeline."""
-    logger.info("NYC PRICE PREDICTION, TRAINING PIPELINE")
+    logger.info("NYC PRICE PREDICTION: TRAINING PIPELINE")
 
     # Sampled first: prepare_data writes the cleaned dataset, so anything
     # after this point sees a tree this script dirtied.

@@ -1,4 +1,4 @@
-"""Model drift detection, compare input feature distributions against baseline.
+"""Model drift detection. Compares input feature distributions against a baseline.
 
 Tracks per-feature statistics (mean, std, min, max, percentiles) from training
 data (``run_training.py`` writes ``models/drift_baseline.json`` at the end of

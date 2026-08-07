@@ -37,9 +37,9 @@ once, after selection is fixed.
 | Task | Model | Metric | Val (selection) | **Test (reported)** |
 |---|---|---|---|---|
 | Price Regression | **XGBoost** (selected on val) | R2 | 0.774 | **0.835** |
+| Price Zone (bucketed from the above) | - | Macro F1 | - | **0.712** |
 
 The test target is capped by the same train-fitted IQR rule as the training rows, so 72 of 906 test prices are clipped before scoring. Against listed prices the same model scores **0.7883** (`reports/cap_factor_study.json`).
-| Price Zone (bucketed from the above) |, | Macro F1 |, | **0.712** |
 
 Across **20 seeds** of the full protocol (split, train-only fitting and
 candidate selection re-run each time, `scripts/measure_seed_variance.py`,

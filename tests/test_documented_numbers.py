@@ -213,7 +213,6 @@ def _study_values() -> set[float]:
 
 #: A metric name, and a decimal figure of three places or more. Matching exactly
 #: three let a false figure ship by writing it at four.
-_METRIC_NAME = re.compile(r"macro[- ]?F1|R[²2]", re.IGNORECASE)
 _DECIMAL = re.compile(r"(?<![\d.])(0\.\d{3,})")
 
 
@@ -281,9 +280,10 @@ def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
     allowed = _artefact_floats()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
-        if _HISTORICAL.search(line):
-            continue
-        for value in _DECIMAL.findall(line):
+        for match in _DECIMAL.finditer(line):
+            if _HISTORICAL.search(line[: match.start()]):
+                continue
+            value = match.group(1)
             places = len(value.split(".")[1])
             # Compared at the precision the document chose, so a figure written
             # to more places than the artefact carries is still checked.
@@ -524,6 +524,19 @@ def test_coverage_measures_every_shipped_module() -> None:
     )
 
 
+def test_coverage_excludes_only_the_three_justified_lines() -> None:
+    """`exclude_lines` sits above `source` and `omit`, and no gate watched it.
+    Adding "def ", "return" and "if " takes 997 measurable statements to 36 and
+    the reported percentage rises to 97%. The justified set is closed, so
+    widening it is a visible edit here."""
+    config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["report"]
+    assert set(config["exclude_lines"]) == {
+        "pragma: no cover",
+        "if TYPE_CHECKING:",
+        "if __name__ == .__main__.:",
+    }, f"exclude_lines widened to {sorted(config['exclude_lines'])}"
+
+
 def test_no_omit_entry_removes_a_shipped_module() -> None:
     """`omit` is the other half of the same knob: entries there drop statements
     and lift the headline with every test still green.
@@ -711,6 +724,8 @@ _UNGATED_INTEGERS = {
     4_500,  # "4,500+ listings", rounded down from the cleaned count
     1_000,  # illustrative ZIP cardinality in the leakage-scope note
     2_147_483_647,  # the int32 overflow sentinel the cleaner drops
+    18_314,  # rows behind the superseded 0.375 benchmark score
+    1_130,  # "~1,130 listings each", the quartile size rounded
 }
 
 _SEPARATED_INTEGER = re.compile(r"(?<![\d.])\d{1,3}(?:,\d{3})+(?![\d])")
@@ -749,13 +764,11 @@ def test_every_count_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
     allowed = _artefact_integers()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
-        if _HISTORICAL.search(line):
-            continue
-        wrong += [
-            f"{doc}:{i}: {value} is in no artefact"
-            for value in _SEPARATED_INTEGER.findall(line)
-            if int(value.replace(",", "")) not in allowed
-        ]
+        for match in _SEPARATED_INTEGER.finditer(line):
+            if _HISTORICAL.search(line[: match.start()]):
+                continue
+            if int(match.group(0).replace(",", "")) not in allowed:
+                wrong.append(f"{doc}:{i}: {match.group(0)} is in no artefact")
     assert not wrong, "counts no artefact holds:\n" + "\n".join(wrong)
 
 
