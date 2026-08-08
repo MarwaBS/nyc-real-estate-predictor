@@ -194,8 +194,9 @@ python -m benchmarks.run_benchmark
 The `External Benchmark` CI workflow runs exactly this on every relevant
 push and weekly (NYC.gov drift watch), so the committed number is
 recomputed on a GitHub runner rather than the author's laptop. The recomputed
-value is uploaded as a run artefact; nothing compares it to the committed one,
-so drift is visible in the logs, not enforced.
+value is uploaded as a run artefact and compared to the committed one: the job
+fails if R2(log) moves more than 0.05, since NYC.gov republishes the 2024 files
+and an exact match would fail on their data rather than on this repo's.
 
 ### Layer separation
 

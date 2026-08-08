@@ -110,7 +110,20 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      - name: Print results summary (informational only, not a gate)
-        # Pure logging. Shows the raw result in CI output for quick
-        # human inspection. Does not compute, threshold, or interpret.
+      - name: Recomputed headline must stay within the reviewed band
+        # NYC.gov republishes the 2024 files, so an exact match would fail on
+        # their data. The band is judgement; one committed run exists.
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          new = json.load(open("benchmarks/results.json", encoding="utf-8-sig"))
+          old = json.loads(subprocess.run(
+              ["git", "show", "HEAD:benchmarks/results.json"],
+              capture_output=True, text=True, check=True).stdout.lstrip("﻿"))
+          a, b = new["performance"]["r2_log_space"], old["performance"]["r2_log_space"]
+          print(f"committed {b:.4f} | recomputed {a:.4f} | drift {abs(a - b):.4f}")
+          assert abs(a - b) <= 0.05, f"benchmark R2(log) moved {abs(a - b):.4f}; investigate"
+          PY
+
+      - name: Print results summary
         run: cat benchmarks/results.json

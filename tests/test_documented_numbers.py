@@ -302,6 +302,7 @@ _UNGATED_FIGURES = {
     78.5,  # SUBLOCALITY's own share of the borough derivation chain
     47.0,  # LOCALITY's own share of the same chain
     99.2,  # the chain's combined resolution rate
+    0.05,  # the benchmark drift band, chosen by judgement, not measured
     0.8154,  # test R2 from the Linux run that shipped the other candidate
 }
 
