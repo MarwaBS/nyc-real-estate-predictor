@@ -18,17 +18,19 @@ This repository contains **two separate evaluation surfaces** that should not be
 | Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177) | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
 | External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; recomputable by anyone while NYC.gov keeps publishing the 2024 files, the benchmark model ships in the repo and the data is a public download) |
 
-Both surfaces are reproducible from a fresh clone: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
+Both surfaces are re-runnable from a fresh clone under this repository's pinned environment: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. Byte-identical artefacts are proven for two runs on one CI runner, not across machines or across an unpinned rebuild (see [§Reproducibility](#reproducibility)). See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
 
 ---
 
 ## Results
 
-Every number in this section is read from the committed evidence artefact
-[`reports/training_metrics.json`](reports/training_metrics.json), written by
-`run_training.py` on each training run with full provenance (commit SHA,
-scikit-learn version, seed, split sizes). If a number here is not in that
-file, it does not belong here.
+Every reported metric in this section is sourced from the committed evidence
+artefact [`reports/training_metrics.json`](reports/training_metrics.json),
+written by `run_training.py` on each training run with full provenance (commit
+SHA, scikit-learn version, seed, split sizes). Displayed values are rounded for
+readability: `tests/test_documented_numbers.py` formats the artefact value to
+three decimals and fails the build unless that exact string appears here. If a
+number here is not in that file, it does not belong here.
 
 Headline scores are on the **test** split, produced by the model that the
 **val** split selected. Candidates are compared on val only; test is scored
