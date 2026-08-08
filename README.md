@@ -194,9 +194,12 @@ python -m benchmarks.run_benchmark
 The `External Benchmark` CI workflow runs exactly this on every relevant
 push and weekly (NYC.gov drift watch), so the committed number is
 recomputed on a GitHub runner rather than the author's laptop. The recomputed
-value is uploaded as a run artefact and compared to the committed one: the job
-fails if R2(log) moves more than 0.05, since NYC.gov republishes the 2024 files
-and an exact match would fail on their data rather than on this repo's.
+value is uploaded as a run artefact and compared to the committed one. The job
+fails if R2(log) moves more than 0.05, if the scored population moves more than
+10%, or if the set of drop reasons changes at all. A score on its own is not the
+claim, because an R2 over 100 rows reads like one over 18,321. Exact equality
+would fail on NYC.gov's data rather than on this repo's, so both bands are
+operational judgement rather than measured spreads.
 
 ### Layer separation
 
@@ -437,7 +440,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 5 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every tracked Python file outside `tests/`), `test` (pytest + 85% coverage gate over `src/ + api/ + benchmarks/ + streamlit_app/ + run_training.py`, then the mutation replay), `reproducibility` (retrain and require byte-identical models, on every pull request and weekly), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 5 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every tracked Python file outside `tests/`), `test` (pytest + 85% coverage gate over `src/ + api/ + benchmarks/ + streamlit_app/ + run_training.py`, then the mutation replay), `reproducibility` (retrain twice on one runner and require byte-identical models, on every push and pull request to `main` and weekly), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
