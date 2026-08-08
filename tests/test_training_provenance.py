@@ -95,7 +95,6 @@ def test_the_sampled_tree_state_is_the_one_that_reaches_the_artefact(
         run_protocol=manager.run_protocol,
         calibrate_price_interval=manager.calibrate,
         shap_top10=manager.shap,
-        save_drift_baseline=manager.save_drift,
         write_manifest=manager.manifest,
         MODELS_DIR=tmp_path / "models",
     ):

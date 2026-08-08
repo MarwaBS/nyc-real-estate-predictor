@@ -146,7 +146,7 @@ def test_type_and_security_checks_cover_every_tracked_module(tool: str) -> None:
 
 
 #: Every key each tool's pyproject table may carry. Gating one key leaves its
-#: siblings open: `[tool.coverage.report] include` cut 997 statements to 67.
+#: siblings open: `[tool.coverage.report] include` cut 969 statements to 67.
 _TOOL_TABLES = {
     "ruff": {"target-version", "lint"},
     "ruff.lint": {"select", "ignore", "per-file-ignores"},
@@ -242,8 +242,8 @@ def test_coverage_measures_every_shipped_module() -> None:
 
 def test_coverage_excludes_only_the_three_justified_lines() -> None:
     """`exclude_lines` sits above `source` and `omit`, and no gate watched it.
-    Adding "def ", "return" and "if " takes 997 measurable statements to 260
-    and the reported percentage from 89.67% to 99%. The justified set is
+    Adding "def ", "return" and "if " takes 969 measurable statements to 254
+    and the reported percentage from 89.89% to 99%. The justified set is
     closed, so widening it is a visible edit here."""
     config = tomllib.loads(_read("pyproject.toml"))["tool"]["coverage"]["report"]
     assert set(config["exclude_lines"]) == {
@@ -446,8 +446,8 @@ def _runner_text() -> str:
 
 def _imported_modules(source: str) -> set[str]:
     """Dotted module names an ``import`` statement names. Read from the parsed
-    tree: grepping the leaf name matched `save_drift_baseline` and kept
-    `src.models.drift` looking alive after its only import was deleted."""
+    tree, because grepping a leaf name matches any wrapper that repeats it and
+    keeps the module looking alive after its only import is deleted."""
     names: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -460,8 +460,8 @@ def _imported_modules(source: str) -> set[str]:
 
 def test_no_shipped_module_has_zero_importers() -> None:
     """A module nothing imports and no runner invokes is weight the reader
-    still has to carry. The drift comparison helpers sat that way behind a green
-    suite, kept alive by their own test file."""
+    still has to carry. Its own test file is not an importer, which is how a
+    dead module survives a green suite."""
     tracked = subprocess.run(
         ["git", "ls-files", "*.py"],
         cwd=ROOT,

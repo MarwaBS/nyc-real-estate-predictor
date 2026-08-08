@@ -484,7 +484,7 @@ nyc-real-estate-predictor/
 ├── tests/                        Unit + hostile-input firewall suite, 85% coverage gate
 │   ├── test_no_leakage.py        DATA LEAKAGE PREVENTION (critical)
 │   ├── test_documented_numbers.py  Published figures vs the artefacts
-│   ├── …                         (32 files in total)
+│   ├── …                         (31 files in total)
 │   └── benchmarks/               Schema-lock + drop-engine hostile-input suite
 │
 ├── docs/decisions/               Architecture Decision Records

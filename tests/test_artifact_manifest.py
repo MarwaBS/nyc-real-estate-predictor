@@ -10,9 +10,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import pandas as pd
-import pytest
-
 import run_training
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -20,16 +17,15 @@ MODELS_DIR = REPO_ROOT / "models"
 MANIFEST = MODELS_DIR / "MANIFEST.sha256"
 
 # Every committed model artefact whose bytes back a published number: the
-# served model + interval + drift baseline, plus the benchmark pair (not served,
-# but README quotes their R2(log), so an unpinned vintage there is the same
-# defect). Kept independent of run_training.GOVERNED_ARTIFACTS so this catches
-# the producer's list rotting rather than merely agreeing with it.
+# served model + interval, plus the benchmark pair (not served, but README
+# quotes their R2(log), so an unpinned vintage there is the same defect). Kept
+# independent of run_training.GOVERNED_ARTIFACTS so this catches the producer's
+# list rotting rather than merely agreeing with it.
 GOVERNED_ARTIFACTS = {
     "benchmark_baseline.json",
     "benchmark_regressor.joblib",
     "price_regressor_best.joblib",
     "price_interval.json",
-    "drift_baseline.json",
 }
 
 
@@ -92,22 +88,3 @@ def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
     produced = ("\n".join(lines) + "\n").encode("ascii")
     committed = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
     assert committed == produced
-
-
-def test_drift_baseline_failure_fails_the_run_before_the_manifest(
-    tmp_path, monkeypatch
-) -> None:
-    """The manifest step hashes whatever drift_baseline.json bytes exist, so
-    a baseline write that fails must abort the run, surviving it would
-    certify the previous run's baseline as this run's output."""
-    monkeypatch.setattr(run_training, "MODELS_DIR", tmp_path)
-    stale = tmp_path / "drift_baseline.json"
-    stale.write_text("{}", encoding="utf-8")
-
-    def failing_save(*args: object, **kwargs: object) -> None:
-        raise OSError("disk full")
-
-    monkeypatch.setattr("src.models.drift.save_baseline", failing_save)
-    with pytest.raises(OSError):
-        run_training.save_drift_baseline(pd.DataFrame({"BEDS": [1.0]}))
-    assert stale.read_text(encoding="utf-8") == "{}"

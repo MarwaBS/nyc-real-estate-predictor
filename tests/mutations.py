@@ -230,24 +230,6 @@ MUTATIONS: list[Mutation] = [
         gate="tests/test_logging_config.py",
     ),
     Mutation(
-        name="drift-baseline-failure-swallowed",
-        path="run_training.py",
-        old=(
-            "    from src.models.drift import save_baseline\n"
-            "\n"
-            '    save_baseline(X_train, MODELS_DIR / "drift_baseline.json")'
-        ),
-        new=(
-            "    from src.models.drift import save_baseline\n"
-            "\n"
-            "    try:\n"
-            '        save_baseline(X_train, MODELS_DIR / "drift_baseline.json")\n'
-            "    except Exception as exc:\n"
-            '        logger.warning("drift baseline failed (non-critical): %s", exc)'
-        ),
-        gate="tests/test_artifact_manifest.py",
-    ),
-    Mutation(
         name="benchmark-baseline-ungoverned",
         # Dropping it from the producer's governed set must fail a test at
         # HEAD, not only silently on the next retrain.
@@ -339,7 +321,7 @@ MUTATIONS: list[Mutation] = [
         # Drop the one production import and the module survives on its own
         # test file alone, which is how the drift helpers stayed.
         path="run_training.py",
-        old="    from src.models.drift import save_baseline\n",
+        old="    from src.models.explain import compute_shap_values, global_feature_importance\n",
         new="",
         gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),
@@ -523,7 +505,7 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         name="coverage-report-include-shrinks-the-tree",
-        # A sibling of exclude_lines in the same table: 997 statements to 67.
+        # A sibling of exclude_lines in the same table: 969 statements to 67.
         path="pyproject.toml",
         old="exclude_lines = [",
         new='include = ["*/src/utils/*"]\nexclude_lines = [',
@@ -607,7 +589,7 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         name="readme-miscounts-the-test-suite",
         path="README.md",
-        old="(32 files in total)",
+        old="(31 files in total)",
         new="(30 files in total)",
         gate="tests/test_gate_scope.py::test_readme_states_the_real_size_of_the_test_suite",
     ),

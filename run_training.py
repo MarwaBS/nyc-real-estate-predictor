@@ -535,21 +535,11 @@ def calibrate_price_interval(
     return record
 
 
-def save_drift_baseline(X_train: pd.DataFrame) -> None:
-    """Write the drift baseline or fail the run: the manifest step hashes
-    drift_baseline.json unconditionally, so a swallowed failure here would
-    seal the previous run's baseline into MANIFEST.sha256."""
-    from src.models.drift import save_baseline
-
-    save_baseline(X_train, MODELS_DIR / "drift_baseline.json")
-
-
 # Every committed artefact whose bytes back a published number, the benchmark
 # pair included, because README quotes their R2(log) (see the manifest test).
 GOVERNED_ARTIFACTS: tuple[str, ...] = (
     "benchmark_baseline.json",
     "benchmark_regressor.joblib",
-    "drift_baseline.json",
     "price_interval.json",
     "price_regressor_best.joblib",
 )
@@ -714,7 +704,6 @@ def main() -> None:
     best_reg = result["best_pipeline"]
     X_val, y_price_val = result["splits"]["val"]
     X_test, y_price_test = result["splits"]["test"]
-    X_train = result["splits"]["train"][0]
 
     # Calibrate the served price interval on val, report coverage on test.
     # Committed as an artefact rather than hardcoded so a retrain that shifts
@@ -751,10 +740,6 @@ def main() -> None:
         zone_bins=result["zone_bins"],
         baseline=result["baseline"],
     )
-
-    logger.info("Drift baseline")
-    save_drift_baseline(X_train)
-    logger.info("Drift baseline saved")
 
     # Regenerate the artefact manifest LAST, over the freshest bytes of every
     # governed artefact, so the committed hashes always have a producer.

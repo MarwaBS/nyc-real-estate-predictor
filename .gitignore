@@ -227,9 +227,6 @@ internal/
 INTERNAL/
 audits/
 sbom.cyclonedx.json
-# models/drift_baseline.json used to be ignored here — it is a SERVING
-# artifact (the drift monitor's reference distribution) and is now
-# committed + pinned by models/MANIFEST.sha256 like the rest.
 .venv312/
 # Pinned Python 3.12.13 env used to reproduce committed artifacts bit-for-bit
 # (the default .venv runs 3.13, which cannot install numpy 1.26.4 and so
