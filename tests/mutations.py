@@ -601,4 +601,18 @@ MUTATIONS: list[Mutation] = [
         new="        run: |\n          # python -m benchmarks.run_benchmark\n          echo skipped\n",
         gate="tests/test_gate_scope.py::test_no_shipped_module_has_zero_importers",
     ),
+    Mutation(
+        name="benchmark-python-setup-drifts-off-the-ci-version",
+        path=".github/workflows/benchmark.yml",
+        old="uses: actions/setup-python@v6",
+        new="uses: actions/setup-python@v5",
+        gate="tests/test_gate_scope.py::test_each_action_is_pinned_at_one_ref_everywhere",
+    ),
+    Mutation(
+        name="third-party-action-arrives-tag-pinned",
+        path=".github/workflows/benchmark.yml",
+        old="uses: actions/checkout@v7",
+        new="uses: some-vendor/deploy-action@v1",
+        gate="tests/test_gate_scope.py::test_third_party_actions_are_pinned_to_a_commit",
+    ),
 ]

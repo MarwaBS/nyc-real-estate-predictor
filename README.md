@@ -440,7 +440,7 @@ The suite covers:
   CRLF-invariance of the lock, drop-log reconciliation, NaN-target rules,
   statelessness, target-independence, collapse detectors
 
-CI runs 5 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every tracked Python file outside `tests/`), `test` (pytest + 85% coverage gate over `src/ + api/ + benchmarks/ + streamlit_app/ + run_training.py`, then the mutation replay), `reproducibility` (retrain and require byte-identical models, on every pull request and weekly), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
+CI runs 5 jobs: `lint` (ruff check + ruff format across the tree; mypy + bandit over every tracked Python file outside `tests/`), `test` (pytest + 85% coverage gate over `src/ + api/ + benchmarks/ + streamlit_app/ + run_training.py`, then the mutation replay), `reproducibility` (retrain twice on one runner and require byte-identical models, on every push and pull request to `main` and weekly), `security` (pip-audit + CycloneDX SBOM emission), `docker-build` (multi-stage build + Trivy HIGH/CRITICAL scan + `/health` smoke-run). The `External Benchmark` workflow additionally re-runs the firewall suite and the full benchmark (with the committed model) on benchmark-relevant pushes and weekly.
 
 ---
 
