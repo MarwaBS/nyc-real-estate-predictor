@@ -194,9 +194,12 @@ python -m benchmarks.run_benchmark
 The `External Benchmark` CI workflow runs exactly this on every relevant
 push and weekly (NYC.gov drift watch), so the committed number is
 recomputed on a GitHub runner rather than the author's laptop. The recomputed
-value is uploaded as a run artefact and compared to the committed one: the job
-fails if R2(log) moves more than 0.05, since NYC.gov republishes the 2024 files
-and an exact match would fail on their data rather than on this repo's.
+value is uploaded as a run artefact and compared to the committed one. The job
+fails if R2(log) moves more than 0.05, if the scored population moves more than
+10%, or if the set of drop reasons changes at all. A score on its own is not the
+claim, because an R2 over 100 rows reads like one over 18,321. Exact equality
+would fail on NYC.gov's data rather than on this repo's, so both bands are
+operational judgement rather than measured spreads.
 
 ### Layer separation
 

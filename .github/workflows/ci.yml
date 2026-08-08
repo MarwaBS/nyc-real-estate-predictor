@@ -1,3 +1,7 @@
+# Action pinning: `actions/*` and `docker/*` are pinned to a major tag, every
+# other action to a commit SHA. A tag is mutable, so a tag pin gives whoever
+# controls it push-time control over a job holding this repo's token.
+
 name: CI
 
 on:
@@ -141,9 +145,9 @@ jobs:
         # Default runner has ~14GB free. Our builder stage pulls pandas +
         # numpy + xgboost + lightgbm + streamlit + their transitives, plus
         # GHA cache layers; buildx occasionally runs out of inodes before
-        # the runtime layer is assembled. Jlumbroso's action frees ~15GB
-        # by removing preinstalled Android SDK, .NET, dotnet, CodeQL, etc.
-        # — tools we don't use in the build.
+        # the runtime layer is assembled. This frees ~15GB by removing the
+        # preinstalled Android SDK, .NET, CodeQL and similar, none of which
+        # the build uses.
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: true
@@ -180,9 +184,6 @@ jobs:
         # Container-layer vulnerability scan complementary to pip-audit.
         # `.trivyignore` at repo root holds managed-risk CVE IDs (currently
         # empty).
-        # SHA-pinned, not tag-pinned: a tag is a mutable ref the upstream owner
-        # can repoint at any commit, so `@v0.36.0` grants this third party
-        # push-time control over a job that reads the repo and its token.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nyc-price-prediction:ci

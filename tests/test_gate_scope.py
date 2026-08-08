@@ -421,6 +421,44 @@ def test_every_producer_still_has_the_artefact_it_writes() -> None:
     assert not missing, f"producers exempted for artefacts that are gone: {missing}"
 
 
+#: Namespaces that may carry a tag pin, per ci.yml's header. Anything else
+#: defaults to needing a SHA rather than to being exempt.
+_TAG_PINNABLE_OWNERS = {"actions", "docker"}
+
+
+def _action_refs() -> dict[str, set[str]]:
+    """Every `uses:` in every workflow, action name to the refs it is pinned at."""
+    refs: dict[str, set[str]] = {}
+    for file in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        workflow = yaml.safe_load(file.read_text(encoding="utf-8"))
+        for spec in workflow["jobs"].values():
+            for step in spec.get("steps", []):
+                if "uses" in step:
+                    action, _, ref = str(step["uses"]).partition("@")
+                    refs.setdefault(action, set()).add(ref)
+    return refs
+
+
+def test_third_party_actions_are_pinned_to_a_commit() -> None:
+    """A tag is mutable, so a tag pin gives whoever controls it push-time
+    control over a job holding this repo's token."""
+    loose = [
+        f"{action}@{ref}"
+        for action, pins in _action_refs().items()
+        if action.split("/")[0] not in _TAG_PINNABLE_OWNERS
+        for ref in pins
+        if not re.fullmatch(r"[0-9a-f]{40}", ref)
+    ]
+    assert not loose, f"third-party actions pinned to a mutable ref: {loose}"
+
+
+def test_each_action_is_pinned_at_one_ref_everywhere() -> None:
+    """benchmark.yml sat on setup-python@v5 while ci.yml had moved to @v6, so
+    the benchmark ran on an interpreter setup no CI job exercised."""
+    split = {a: sorted(p) for a, p in _action_refs().items() if len(p) > 1}
+    assert not split, f"actions pinned at different refs across workflows: {split}"
+
+
 def _runner_text() -> str:
     """What the runners execute: workflow `run`/`uses` values, other files with
     comments stripped. A name in a comment or a step's `name:` invokes nothing."""
