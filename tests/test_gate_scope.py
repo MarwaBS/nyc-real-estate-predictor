@@ -368,6 +368,32 @@ def test_every_mutation_gate_names_a_test_that_exists() -> None:
     assert not missing, f"mutation gates naming no test: {sorted(missing)}"
 
 
+def test_readme_discloses_that_encoded_columns_are_target_derived() -> None:
+    """`assert_no_leakage` matches names, so it cannot see a target-encoded column.
+    The README once read that guard as proof of "no price-derived column" while
+    ZIPCODE and SUBLOCALITY were encoded from the target."""
+    from src.config import TARGET_ENCODED_FEATURES
+
+    if not TARGET_ENCODED_FEATURES:
+        pytest.skip("nothing is target-encoded, so there is nothing to disclose")
+
+    # The line stating the guard's rule, not the tree diagram or the file table.
+    claims = [
+        line
+        for line in _read("README.md").splitlines()
+        if "rejects any feature name" in line
+    ]
+    assert len(claims) == 1, f"{len(claims)} lines state the guard's rule, expected 1"
+    claim = claims[0]
+
+    assert "target-encoded" in claim.lower(), (
+        "the assert_no_leakage claim does not disclose that "
+        f"{TARGET_ENCODED_FEATURES} are encoded from the price target"
+    )
+    undisclosed = [c for c in TARGET_ENCODED_FEATURES if c not in claim]
+    assert not undisclosed, f"columns the claim never names: {undisclosed}"
+
+
 def test_readme_names_every_ci_job() -> None:
     """All three places it describes them: fixing two left the third wrong."""
     jobs = list(yaml.safe_load(_read(".github/workflows/ci.yml"))["jobs"])

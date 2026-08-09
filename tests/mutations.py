@@ -615,4 +615,11 @@ MUTATIONS: list[Mutation] = [
         new="uses: some-vendor/deploy-action@v1",
         gate="tests/test_gate_scope.py::test_third_party_actions_are_pinned_to_a_commit",
     ),
+    Mutation(
+        name="readme-drops-the-target-encoding-disclosure",
+        path="README.md",
+        old="`ZIPCODE` and `SUBLOCALITY` are **target-encoded**",
+        new="`ZIPCODE` and `SUBLOCALITY` are **encoded**",
+        gate="tests/test_gate_scope.py::test_readme_discloses_that_encoded_columns_are_target_derived",
+    ),
 ]
