@@ -19,7 +19,7 @@ pandas-stubs>=2.2,<3.0.4  # minor updates ignored: numpy is in its tree
 
 # Security
 pip-audit>=2.10.1
-bandit>=1.7
+bandit>=1.9.4
 
 # External-benchmark data path (benchmarks/datasets/nyc_rolling_sales_2024.py):
 # `requests` downloads the NYC.gov rolling-sales workbooks and `openpyxl` is the
