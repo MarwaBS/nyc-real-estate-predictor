@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -190,6 +191,16 @@ def test_provenance_note_does_not_deny_reproducibility(metrics: dict) -> None:
     note = metrics["note"].lower()
     assert "not independently reproducible" not in note
     assert "no public remote" not in note
+
+
+def test_model_card_states_the_tree_state_the_artefact_records(metrics: dict) -> None:
+    """A retrain flips this flag, and the card quotes it by hand."""
+    card = (ROOT / "MODEL_CARD.md").read_text(encoding="utf-8")
+    stated = set(re.findall(r"`working_tree_clean: (true|false)`", card))
+    assert stated == {str(metrics["working_tree_clean"]).lower()}, (
+        f"MODEL_CARD states {sorted(stated)}; the artefact records "
+        f"{metrics['working_tree_clean']}"
+    )
 
 
 def test_reported_split_is_test_and_selection_split_is_val(metrics: dict) -> None:
