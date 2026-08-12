@@ -53,6 +53,7 @@ from benchmarks.invariants import (
     verify_schema_map_lock,
 )
 from benchmarks.mapping import MappingReport, apply_schema_map
+from src.config import SUBPROCESS_TIMEOUT_S
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = REPO_ROOT / "benchmarks" / "results.json"
@@ -107,6 +108,7 @@ def _git_commit_sha() -> str | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=SUBPROCESS_TIMEOUT_S,
         )
         return out.stdout.strip()
     except Exception:
@@ -153,6 +155,7 @@ def _git_working_tree_clean() -> bool | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=SUBPROCESS_TIMEOUT_S,
         )
         return out.stdout.strip() == ""
     except Exception:

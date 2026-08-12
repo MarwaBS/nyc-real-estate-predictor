@@ -8,6 +8,7 @@ deliberate retrain (one sha256 line per file in models/).
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 import run_training
@@ -88,3 +89,18 @@ def test_manifest_is_byte_identical_to_what_the_producer_writes() -> None:
     produced = ("\n".join(lines) + "\n").encode("ascii")
     committed = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
     assert committed == produced
+
+
+def test_model_card_states_the_manifest_size_as_a_word() -> None:
+    """`test_documented_numbers` reads digits, so a spelled-out cardinal rots
+    unseen."""
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+    card = (REPO_ROOT / "MODEL_CARD.md").read_text(encoding="utf-8")
+    expected = words[len(_manifest_entries())]
+    # The whole word, and every occurrence: `in` also accepts "twenty-four",
+    # and passes while a second, stale sentence says something else.
+    stated = set(re.findall(r"([\w-]+) governed files", card))
+    assert stated == {expected}, (
+        f"MODEL_CARD.md states {sorted(stated)} governed files; "
+        f"the manifest pins {len(_manifest_entries())} ({expected})"
+    )

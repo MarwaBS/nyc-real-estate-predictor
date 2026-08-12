@@ -42,6 +42,7 @@ from src.config import (
     PRICE_ZONE_LABELS,
     RANDOM_SEED,
     SHIPPED_REGRESSOR,
+    SUBPROCESS_TIMEOUT_S,
     TARGET_ENCODED_FEATURES,
     TEST_SIZE,
     VAL_SIZE,
@@ -588,6 +589,7 @@ def _git_commit_sha() -> str | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=SUBPROCESS_TIMEOUT_S,
         )
         return out.stdout.strip()
     except Exception:
@@ -613,6 +615,7 @@ def _git_working_tree_clean() -> bool | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=SUBPROCESS_TIMEOUT_S,
         )
         return out.stdout.strip() == ""
     except Exception:

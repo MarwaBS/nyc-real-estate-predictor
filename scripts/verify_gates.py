@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.config import SUBPROCESS_TIMEOUT_S  # noqa: E402
 from tests.mutations import MUTATIONS, Mutation  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
@@ -31,6 +32,7 @@ def _require_clean_tree(allow_dirty: bool) -> None:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     ).stdout.strip()
     if dirty and allow_dirty:
         print(
@@ -52,6 +54,7 @@ def _run_gate(mutation: Mutation) -> subprocess.CompletedProcess:
         cwd=REPO,
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     )
 
 

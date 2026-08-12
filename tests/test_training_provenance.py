@@ -21,6 +21,7 @@ from unittest import mock
 import pytest
 
 import run_training
+from src.config import SUBPROCESS_TIMEOUT_S
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTEFACT = ROOT / "reports" / "training_metrics.json"
@@ -127,7 +128,13 @@ def test_the_working_tree_sampler_reports_both_states(
     suite green while the flag could only report the good outcome."""
 
     def git(*args: str) -> None:
-        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", *args],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            timeout=SUBPROCESS_TIMEOUT_S,
+        )
 
     git("init", "-q")
     git("config", "user.email", "test@example.invalid")

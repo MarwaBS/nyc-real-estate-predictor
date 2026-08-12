@@ -83,3 +83,9 @@ BOROUGH_MAP: dict[str, str] = {
     "the bronx": "the bronx",
     "staten island": "staten island",
 }
+
+
+# Bounds every child spawned from tracked Python. Heaviest measured: one
+# mutation gate at 8.0s (tests/test_api.py, slowest of 35). 900 turns a hung
+# child into a failure instead of a job that runs to its six-hour ceiling.
+SUBPROCESS_TIMEOUT_S = 900

@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from src.config import SUBPROCESS_TIMEOUT_S
 from tests.mutations import MUTATIONS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,8 +41,21 @@ def _tracked_heads() -> set[str]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     ).stdout.split()
     return {path.split("/")[0] for path in tracked}
+
+
+def _tracked_python() -> list[str]:
+    """Every tracked .py path, so the sweep cannot narrow to a subdirectory."""
+    return subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
+    ).stdout.split()
 
 
 def _shipped_modules() -> set[str]:
@@ -285,6 +299,7 @@ def test_omit_skips_only_the_files_it_names() -> None:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     ).stdout.split()
     shipped = [
         path
@@ -423,6 +438,7 @@ def test_readme_states_the_real_size_of_the_test_suite() -> None:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     ).stdout.split()
     direct = [p for p in tracked if p.count("/") == 1]
     assert int(stated.group(1)) == len(direct), (
@@ -532,6 +548,7 @@ def test_no_shipped_module_has_zero_importers() -> None:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_S,
     ).stdout.split()
     shipped = [f for f in tracked if not f.startswith(("tests/", "notebooks/"))]
     runners = _runner_text()
@@ -555,3 +572,91 @@ def test_no_shipped_module_has_zero_importers() -> None:
         if not imported_by:
             orphans.append(path)
     assert not orphans, f"shipped modules nothing imports or runs: {orphans}"
+
+
+def _spellings(tree: ast.Module, exported: set[str]) -> set[str]:
+    """How this file can name those members. Read from its own imports, so an
+    aliased module or a bare `from subprocess import run` is not missed."""
+    modules: set[str] = {"subprocess"}
+    bare: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(
+                a.asname or a.name for a in node.names if a.name == "subprocess"
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == "subprocess":
+            bare.update(a.asname or a.name for a in node.names if a.name in exported)
+    return {f"{m}.{n}" for m in modules for n in exported} | bare
+
+
+def _has_deadline(call: ast.Call) -> bool:
+    """`timeout=None` restores the unbounded default and `timeout=0` is a
+    deadline no child can meet, so neither is a real bound and the
+    keyword's presence is not the property wanted.
+
+    A `**kwargs` splat carries no `arg`, so a spawn is flagged even when
+    the mapping holds a timeout; write the deadline at the call site."""
+    for word in call.keywords:
+        if word.arg == "timeout":
+            return not (isinstance(word.value, ast.Constant) and not word.value.value)
+    return False
+
+
+def _names_bound_to(tree: ast.Module, spawns: set[str]) -> set[str]:
+    """Local names holding a spawn, from a parameter default or an assignment.
+
+    One hop, and simple targets only. A tuple-unpacked target, a name bound
+    from another name or a lambda default is not followed.
+    """
+    held = (ast.Attribute, ast.Name)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            taking = node.args.posonlyargs + node.args.args
+            given = node.args.defaults
+            pairs = list(zip(taking[len(taking) - len(given) :], given, strict=True))
+            pairs += [
+                (a, d)
+                for a, d in zip(
+                    node.args.kwonlyargs, node.args.kw_defaults, strict=True
+                )
+                if d is not None
+            ]
+            names.update(
+                a.arg
+                for a, d in pairs
+                if isinstance(d, held) and ast.unparse(d) in spawns
+            )
+        elif isinstance(node, ast.Assign | ast.AnnAssign):
+            bound = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if isinstance(node.value, held) and ast.unparse(node.value) in spawns:
+                names.update(t.id for t in bound if isinstance(t, ast.Name))
+    return names
+
+
+def test_every_subprocess_call_is_bounded_by_a_timeout() -> None:
+    """An unbounded child runs to the job's six-hour ceiling. The replay spawns
+    pytest once per mutation, so one hang there costs the whole run.
+
+    Of the seven spawns `subprocess` exports, `getoutput`, `getstatusoutput`
+    and `Popen` take no `timeout`, so they are refused rather than waved
+    through by a rule they cannot satisfy.
+    """
+    takes_timeout = {"run", "call", "check_call", "check_output"}
+    takes_none = {"getoutput", "getstatusoutput", "Popen"}
+    unbounded: list[str] = []
+    refused: list[str] = []
+    for name in _tracked_python():
+        tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+        bounded = _spellings(tree, takes_timeout)
+        unboundable = _spellings(tree, takes_none)
+        aliases = _names_bound_to(tree, bounded)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                callee = ast.unparse(node.func)
+                if (callee in bounded or callee in aliases) and not _has_deadline(node):
+                    unbounded.append(f"{name}:{node.lineno} {callee}")
+            elif isinstance(node, ast.Name | ast.Attribute):
+                if ast.unparse(node) in unboundable:
+                    refused.append(f"{name}:{node.lineno} {ast.unparse(node)}")
+    assert unbounded == [] and refused == [], f"unbounded={unbounded} refused={refused}"
