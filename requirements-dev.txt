@@ -17,6 +17,9 @@ mypy>=2.3.0
 # mypy on five call sites that are correct at runtime.
 pandas-stubs>=2.2,<3.0.4  # minor updates ignored: numpy is in its tree
 
+# packaging: tests/test_dependency_freeze.py reads pin versions with it.
+packaging>=24
+
 # Security
 pip-audit>=2.10.1
 bandit>=1.9.4
