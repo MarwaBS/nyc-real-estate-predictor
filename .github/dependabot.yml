@@ -31,6 +31,7 @@ updates:
       - dependency-name: "xgboost"
       - dependency-name: "scipy"
       - dependency-name: "schema-firewall"
+      - dependency-name: "pandas-stubs"
 
       # numpy sits in their dependency tree, so a minor bump can start asking
       # for numpy 2 and leave the install with no solution. Patch updates,
@@ -44,8 +45,6 @@ updates:
       - dependency-name: "shap"
         update-types: ["version-update:semver-minor"]
       - dependency-name: "mlflow"
-        update-types: ["version-update:semver-minor"]
-      - dependency-name: "pandas-stubs"
         update-types: ["version-update:semver-minor"]
 
   - package-ecosystem: "docker"

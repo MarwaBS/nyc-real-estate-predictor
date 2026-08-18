@@ -15,7 +15,10 @@ mypy>=2.3.0
 # <3.0.4 caps at the last stubs release that types astype(str) as a string
 # series; 3.0.5 resolves .str on it to SeriesStringMethods[bool] and fails
 # mypy on five call sites that are correct at runtime.
-pandas-stubs>=2.2,<3.0.4  # minor updates ignored: numpy is in its tree
+pandas-stubs==3.0.3.260530  # frozen: 3.0.5 mistypes .astype(str).str
+# 3.0.5.260730 types astype(str).str as SeriesStringMethods[bool], so mypy
+# rejects .str.lower, .str.strip and .str.extract on it. The runtime dtype
+# is str, so the stub is wrong rather than the calls. Lift when that is fixed.
 
 # packaging: tests/test_dependency_freeze.py reads pin versions with it.
 packaging>=24
