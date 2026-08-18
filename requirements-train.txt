@@ -20,4 +20,3 @@ shap==0.45.1  # minor updates ignored: numpy is in its tree
 # mlflow: imported by run_training.py for experiment tracking.
 mlflow==3.15.0  # minor updates ignored: numpy is in its tree
 # 3.15.0 clears CVE-2026-64849, and it is stable rather than an rc.
-# tests/test_dependency_freeze.py holds that second half.
