@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
@@ -119,6 +120,37 @@ def _managed_pins() -> list[str]:
             if match:
                 names.append(_normalise(match.group(1)))
     return names
+
+
+#: ``name==version``, the only pin form that can carry a prerelease.
+EXACT = re.compile(r"^\s*([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*==\s*([^\s#]+)")
+
+
+def _exact_pins() -> dict[str, str]:
+    return {
+        _normalise(match.group(1)): match.group(2)
+        for filename in _requirement_files()
+        for line in (REPO_ROOT / filename).read_text(encoding="utf-8").splitlines()
+        if (match := EXACT.match(line))
+    }
+
+
+def test_the_scan_finds_the_exact_pins():
+    """An empty scan would leave the prerelease check below parametrised over
+    nothing, which passes without reading a single pin."""
+    pins = _exact_pins()
+    assert len(pins) >= 20, f"only {len(pins)} exact pins found, the pattern moved"
+
+
+@pytest.mark.parametrize("package,pinned", sorted(_exact_pins().items()))
+def test_no_pin_is_a_prerelease(package: str, pinned: str):
+    """Dependabot offers a prerelease only while the current pin is one. So
+    mlflow==3.13.0rc0 did not stay a single bad pin, it kept the package on the
+    prerelease track until a stable version replaced it."""
+    assert not Version(pinned).is_prerelease, (
+        f"{package}=={pinned} is a prerelease. Pin a stable release, or every "
+        f"later bump for it is offered from the prerelease track too"
+    )
 
 
 def _direct_dependencies(package: str) -> set[str]:

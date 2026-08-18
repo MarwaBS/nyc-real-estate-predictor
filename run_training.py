@@ -376,7 +376,15 @@ def train_regression(
                         "mae_usd": metrics.get("mae_usd", 0),
                     }
                 )
-                mlflow.sklearn.log_model(pipeline, f"model_{name}")
+                # mlflow 3.15 defaults to skops, which cannot serialize the
+                # fitted ColumnTransformer: pandas BlockValuesRefs has no
+                # __reduce__. Every run up to 3.13 used cloudpickle, so name it
+                # instead of inheriting whichever default the next release picks.
+                mlflow.sklearn.log_model(
+                    pipeline,
+                    f"model_{name}",
+                    serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE,
+                )
 
         if name == best_name:
             best_pipeline = pipeline
