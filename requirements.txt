@@ -51,7 +51,7 @@ plotly==5.24.1
 pillow==12.3.0  # bumped 12.2.0 → 12.3.0 (fixes PYSEC-2026-2253..2257; 12.2.0 fixed CVE-2026-25990, CVE-2026-40192)
 
 # Config
-python-dotenv==1.2.2  # bumped 1.0.1 → 1.2.2 (fixes CVE-2026-28684)
+python-dotenv==1.2.3  # bumped 1.0.1 → 1.2.2 (fixes CVE-2026-28684)
 
 # Model loading
 joblib==1.4.2  # frozen: the serializer that wrote the shipped pickles
