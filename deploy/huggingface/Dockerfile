@@ -42,9 +42,9 @@ WORKDIR /home/user/app
 
 # ── Python deps ──────────────────────────────────────────────────────────────
 # requirements.txt is the runtime-only set (pandas, numpy, sklearn, xgboost,
-# lightgbm, fastapi, slowapi, streamlit, etc.) — produced by the Phase H
+# lightgbm, fastapi, slowapi, streamlit, etc.) - produced by the Phase H
 # split that separated runtime from training. Training-only deps (shap,
-# mlflow) are in requirements-train.txt and are NOT installed here — the
+# mlflow) are in requirements-train.txt and are NOT installed here - the
 # Streamlit demo doesn't train.
 COPY --chown=user:user requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \

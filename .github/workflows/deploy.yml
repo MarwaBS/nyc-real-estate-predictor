@@ -1,15 +1,15 @@
 # Deploy the runtime snapshot to the Hugging Face Space + drift guard.
 #
 # WHY THIS EXISTS: the Space was originally assembled by hand (see
-# deploy/huggingface/DEPLOY.md) and then never re-pushed — it served a
+# deploy/huggingface/DEPLOY.md) and then never re-pushed - it served a
 # 3-month-old revision carrying the config-order label-decode bug for
 # months AFTER the repo fixed it (three times over). A demo that only a
 # human remembers to redeploy will always rot; deploys must ride main.
 #
-# Two jobs, one assembly script (deploy/huggingface/assemble.sh — shared
+# Two jobs, one assembly script (deploy/huggingface/assemble.sh - shared
 # so the deploy and the guard can never diverge):
 #
-#   deploy-space  — on every push to main: overlay the runtime snapshot
+#   deploy-space  - on every push to main: overlay the runtime snapshot
 #                   (code + Space Dockerfile/README/start.sh +
 #                   requirements.txt) onto a clone of the Space repo,
 #                   replacing the Space's models/ with the committed,
@@ -18,11 +18,11 @@
 #                   HF_TOKEN repository secret (write-scoped HF token);
 #                   fails loudly with instructions if it is missing.
 #
-#   space-drift   — on the weekly schedule: same overlay against the live
+#   space-drift   - on the weekly schedule: same overlay against the live
 #                   Space, but READ-ONLY (anonymous clone, no token). If
 #                   the overlay produces any diff, the Space is not
 #                   serving main's code and this job FAILS. A red run
-#                   here is the honest signal the demo has rotted — the
+#                   here is the honest signal the demo has rotted - the
 #                   exact condition that previously went unnoticed.
 
 name: Deploy
@@ -55,7 +55,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           if [ -z "${HF_TOKEN:-}" ]; then
-            echo "::error::HF_TOKEN secret is missing — the Space CANNOT be deployed and will drift from main. Create a WRITE token at https://huggingface.co/settings/tokens and add it as a repository secret named HF_TOKEN at https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "::error::HF_TOKEN secret is missing - the Space CANNOT be deployed and will drift from main. Create a WRITE token at https://huggingface.co/settings/tokens and add it as a repository secret named HF_TOKEN at https://github.com/${{ github.repository }}/settings/secrets/actions"
             exit 1
           fi
           # Fail fast on the two paste/permission mistakes that actually
@@ -92,7 +92,7 @@ jobs:
           # (assemble.sh replaces models/ wholesale from the repo's
           # committed, MANIFEST-pinned artifacts anyway). git lfs install
           # inside the clone wires the clean filter + pre-push hook so the
-          # .joblib files are stored/uploaded as LFS objects — HF's
+          # .joblib files are stored/uploaded as LFS objects - HF's
           # pre-receive rejects plain-git binaries.
           GIT_LFS_SKIP_SMUDGE=1 git clone --quiet \
             "https://MarwaBS:${TOKEN}@huggingface.co/spaces/MarwaBS/nyc-real-estate-predictor" \
@@ -106,12 +106,12 @@ jobs:
           cd /tmp/hf-space
           git add -A
           if git diff --cached --quiet; then
-            echo "Space already matches main — nothing to deploy."
+            echo "Space already matches main - nothing to deploy."
             exit 0
           fi
           git config user.name "MarwaBS"
           git config user.email "marwabensalem30@gmail.com"
-          git commit --quiet -m "Deploy ${GITHUB_SHA} — runtime snapshot from main"
+          git commit --quiet -m "Deploy ${GITHUB_SHA} - runtime snapshot from main"
           git push --quiet origin main
           echo "Deployed ${GITHUB_SHA} to ${SPACE_URL_PUBLIC}"
 
@@ -139,7 +139,7 @@ jobs:
           cd /tmp/hf-space
           git add -A
           if ! git diff --cached --quiet; then
-            echo "::error::The live Space does NOT match main — the public demo is serving stale code OR stale model artifacts. Files that differ:"
+            echo "::error::The live Space does NOT match main - the public demo is serving stale code OR stale model artifacts. Files that differ:"
             git diff --cached --stat
             exit 1
           fi

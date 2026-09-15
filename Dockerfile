@@ -9,7 +9,7 @@
 # set of runtime system deps (curl for healthcheck, ca-certificates for TLS).
 # The OS-patch layer is cache-busted weekly via CACHE_EPOCH: a RUN layer is
 # keyed on (parent digest, command string), so an unchanged `apt-get
-# upgrade -y` line is REUSED from cache, not re-executed — patches rot
+# upgrade -y` line is REUSED from cache, not re-executed - patches rot
 # inside the cache. (This shipped: curl CVE-2026-5773's deb12u15 fix was
 # published while the cached layer still carried deb12u14, and Trivy went
 # red on an untouched Dockerfile.)
@@ -51,7 +51,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # against. Without it
 # `joblib.load` raises `OSError: libgomp.so.1: cannot open shared object file`
 # and the container serves 503 for every prediction. It is listed here rather
-# than left to the builder stage because only /install is copied forward —
+# than left to the builder stage because only /install is copied forward -
 # system shared libraries installed in the builder do not survive into the
 # runtime image.
 #
@@ -61,7 +61,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #
 # CACHE_EPOCH (set to
 # the ISO year-week by CI) changes the command's cache key weekly, forcing
-# this layer — and only the layers below it — to rebuild so `apt-get
+# this layer - and only the layers below it - to rebuild so `apt-get
 # upgrade` actually re-runs against current Debian security repos. The
 # default keeps plain local `docker build` fully cached.
 ARG CACHE_EPOCH=static

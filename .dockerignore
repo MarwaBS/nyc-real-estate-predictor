@@ -1,4 +1,4 @@
-# The root Dockerfile ends with `COPY . ./` — without this file the whole
+# The root Dockerfile ends with `COPY . ./` - without this file the whole
 # repo lands in the runtime image: .git (full history), tests, docs, CI
 # config, local venvs. None of it is needed to serve, all of it widens the
 # image and its attack/leak surface. Keep this list in sync with what

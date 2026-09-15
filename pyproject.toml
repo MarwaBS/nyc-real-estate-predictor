@@ -58,8 +58,8 @@ omit = [
     "notebooks/*",
     # Network-bound: these download live NYC.gov data. Covered end-to-end by
     # the External Benchmark workflow on every push and weekly, which is a
-    # stronger check than a mock would be. mapping.py and invariants.py — the
-    # contract-bearing code — stay fully in scope.
+    # stronger check than a mock would be. mapping.py and invariants.py - the
+    # contract-bearing code - stay fully in scope.
     "benchmarks/run_benchmark.py",
     "benchmarks/datasets/*",
     "benchmarks/train_benchmark_model.py",

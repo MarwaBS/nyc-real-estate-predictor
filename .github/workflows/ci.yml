@@ -10,7 +10,7 @@ on:
   pull_request:
     branches: [main]
   # Weekly clock: pip-audit and Trivy verdicts decay as new advisories are
-  # disclosed against unchanged pins — a badge that only reruns on push stays
+  # disclosed against unchanged pins - a badge that only reruns on push stays
   # green over known-vulnerable deps (this exact failure shipped: pillow
   # PYSEC-2026-2253 sat behind a green push-only badge for a week). The cron
   # re-runs every gate against the live advisory feeds.
@@ -33,11 +33,11 @@ jobs:
         # The full dev toolchain, not a hand-picked subset. mypy's result
         # depends on which typed packages are importable, so a partial install
         # made CI's type check disagree with the one run locally against
-        # requirements-dev.txt — a gate that passes in one place and fails in
+        # requirements-dev.txt - a gate that passes in one place and fails in
         # the other proves nothing. ruff/bandit are pinned in that file too.
         run: pip install -r requirements-dev.txt
       - name: ruff check
-        # Whole tree, not a path list — a list drifts from the directories
+        # Whole tree, not a path list - a list drifts from the directories
         # that actually exist and quietly exempts them.
         run: ruff check .
       - name: ruff format --check
@@ -127,7 +127,7 @@ jobs:
         # no patched joblib release exists. Revisit if a fix ships.
         run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277
       - name: Generate SBOM (CycloneDX JSON)
-        # Software Bill of Materials — standard supply-chain artifact.
+        # Software Bill of Materials - standard supply-chain artifact.
         # Stored as a 90-day CI artifact.
         run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-277 --format=cyclonedx-json --output=sbom.cyclonedx.json
       - name: Upload SBOM artifact
@@ -162,7 +162,7 @@ jobs:
         # ISO year-week. Feeds the Dockerfile's CACHE_EPOCH arg so the
         # OS-patch layer's cache key rolls over weekly: a RUN layer is
         # otherwise reused verbatim from the GHA cache and `apt-get
-        # upgrade` never re-executes — which is how a fixed curl CVE
+        # upgrade` never re-executes - which is how a fixed curl CVE
         # (CVE-2026-5773, deb12u15) stayed in the image while the badge
         # was green. Within a week, builds stay fully cached.
         id: epoch
@@ -180,7 +180,7 @@ jobs:
             CACHE_EPOCH=${{ steps.epoch.outputs.week }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Trivy — scan built image for HIGH/CRITICAL CVEs
+      - name: Trivy - scan built image for HIGH/CRITICAL CVEs
         # Container-layer vulnerability scan complementary to pip-audit.
         # `.trivyignore` at repo root holds managed-risk CVE IDs (currently
         # empty).

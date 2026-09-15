@@ -1,6 +1,6 @@
 # Trivy container-scan ignores.
 #
-# Currently empty — this project has no documented managed-risk CVEs. Add
+# Currently empty - this project has no documented managed-risk CVEs. Add
 # CVE / GHSA IDs here only with inline rationale when a breaking fix is
 # not feasible.
 #
