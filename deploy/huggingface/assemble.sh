@@ -20,7 +20,7 @@
 # The serving artifacts are committed to this repo and pinned by
 # models/MANIFEST.sha256 (enforced by tests/test_artifact_manifest.py),
 # so the overlay ships them like any other file and the weekly drift
-# guard fails on ANY divergence — code or model. The Space's
+# guard fails on ANY divergence - code or model. The Space's
 # .gitattributes stays untouched (its LFS rules pick the .joblib files
 # up on add). The Space-only benchmark leftovers (e.g. old *.pt) are
 # removed so the Space carries exactly the manifest set.

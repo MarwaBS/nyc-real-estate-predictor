@@ -1,4 +1,4 @@
-# CODEOWNERS — authority boundary for the external benchmark firewall
+# CODEOWNERS - authority boundary for the external benchmark firewall
 #
 # Flags the listed owner as reviewer-of-record for the files below.
 # Branch protection on main requires the four CI status checks (lint,

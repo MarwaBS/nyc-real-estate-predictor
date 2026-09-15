@@ -43,7 +43,7 @@ for i in $(seq 1 60); do
 done
 
 if [[ "$READY" -ne 1 ]]; then
-    echo "[start.sh] API did not become healthy within 60s — aborting"
+    echo "[start.sh] API did not become healthy within 60s - aborting"
     kill "$API_PID" 2>/dev/null || true
     exit 1
 fi

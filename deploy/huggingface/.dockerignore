@@ -1,4 +1,4 @@
-# Exclude everything by default — we COPY explicit paths in the HF Dockerfile.
+# Exclude everything by default - we COPY explicit paths in the HF Dockerfile.
 # This keeps the build context small (faster pushes, smaller images).
 *
 

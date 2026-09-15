@@ -2,12 +2,12 @@
 # on every platform. This is load-bearing, not cosmetic: the benchmark's
 # schema lock (SCHEMA_MAP_VERSIONS.json) pins the SHA-256 of SCHEMA_MAP.md,
 # and a CRLF checkout (Windows default autocrlf) silently changes the bytes
-# being hashed — the determinism firewall must not itself be
+# being hashed - the determinism firewall must not itself be
 # platform-nondeterministic. (The hash is additionally computed over
 # LF-normalised bytes in benchmarks/invariants.py as belt-and-braces.)
 * text=auto eol=lf
 
-# Binary artefacts — never normalised.
+# Binary artefacts - never normalised.
 *.joblib binary
 *.pkl binary
 *.pt binary

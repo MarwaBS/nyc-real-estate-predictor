@@ -1,4 +1,4 @@
-# External Benchmark — NYC.gov 2024 Rolling Sales
+# External Benchmark - NYC.gov 2024 Rolling Sales
 #
 # Execution contract:
 #   A. CI must not reinterpret results. This workflow runs the pipeline
@@ -67,7 +67,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-          # NO pip cache — Rule B: stateless execution. Every run starts
+          # NO pip cache - Rule B: stateless execution. Every run starts
           # from a clean slate so results.json reflects the pinned
           # environment, not prior run residue.
 
@@ -89,13 +89,13 @@ jobs:
       - name: Run external benchmark (one-shot, no tuning)
         # Contract:
         #   * verifies the SCHEMA_MAP registry lock BEFORE anything runs
-        #     (a hash mismatch aborts here — it is never recorded as data)
+        #     (a hash mismatch aborts here - it is never recorded as data)
         #   * downloads NYC.gov 2024 Rolling Sales (network fetch)
         #   * applies the sealed SCHEMA_MAP version via apply_schema_map,
         #     then enforces drop-log reconciliation + finite targets
         #   * runs leakage invariants on the mapped X
         #   * scores with the COMMITTED lean benchmark model
-        #     (models/benchmark_regressor.joblib) — CI computes the same
+        #     (models/benchmark_regressor.joblib) - CI computes the same
         #     R² a stranger's clone computes; no skipped-inference path
         #   * writes benchmarks/results.json exactly once
         # CI failure at this step means the PIPELINE crashed (network,
