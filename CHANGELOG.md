@@ -7,6 +7,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The seed-variance study measures the protocol the code runs.**
+  `reports/seed_variance.json` was last written before `SHIPPED_REGRESSOR`
+  fixed the choice, so its spread came from seeds that shipped Random Forest
+  or LightGBM. Re-run at HEAD it scores the shipped XGBoost on every seed and
+  records each seed's val winner separately: test R2 0.816 +/- 0.028, zones
+  F1 0.721 +/- 0.017, xgboost best on val in 16 of 20. The cap-factor study
+  now fits single-threaded like training; its output did not change. The
+  thread-count gate reads every tracked non-test module, not only
+  `run_training.py`.
+
 **The gates cover the code they claim to**
 
 - **The gates were rewritten to check properties, not the demonstrated

@@ -44,11 +44,11 @@ once, after selection is fixed.
 The test target is capped by the same train-fitted IQR rule as the training rows, so 72 of 906 test prices are clipped before scoring. Against listed prices the same model scores **0.7883** (`reports/cap_factor_study.json`).
 
 Across **20 seeds** of the full protocol (split, train-only fitting and
-candidate selection re-run each time, `scripts/measure_seed_variance.py`,
+every candidate re-scored on val each time, `scripts/measure_seed_variance.py`,
 recorded in [`reports/seed_variance.json`](reports/seed_variance.json)):
-test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**, against a
+test R² **0.816 ± 0.028**, zones macro F1 **0.721 ± 0.017**, against a
 per-borough-median baseline of 0.170 ± 0.017 R² and 0.242 ± 0.058 F1.
-XGBoost wins selection in 16/20 runs (candidates Random Forest 3, LightGBM 1), at 4,526
+XGBoost has the best val R² in 16/20 runs (Random Forest 3, LightGBM 1), at 4,526
 rows the candidate ranking is seed-sensitive, which is exactly why the
 spread is published next to the point estimates.
 
@@ -260,7 +260,7 @@ src/data/features.py        Geospatial (haversine distances), numeric, target en
     v
 src/models/pipelines.py     sklearn Pipeline + ColumnTransformer (reproducible preprocessing)
     |
-    +---> run_training.py                       Candidate training + selection on val
+    +---> run_training.py                       Candidate training + val scores
     |
     +---> src/models/explain.py                SHAP (global + per-prediction) + fairness
     |

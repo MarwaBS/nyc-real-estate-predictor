@@ -22,6 +22,7 @@ import pytest
 
 import run_training
 from src.config import SUBPROCESS_TIMEOUT_S
+from tests.test_gate_scope import _tracked_python
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTEFACT = ROOT / "reports" / "training_metrics.json"
@@ -30,11 +31,15 @@ ARTEFACT = ROOT / "reports" / "training_metrics.json"
 def test_every_estimator_is_built_single_threaded() -> None:
     """With n_jobs=-1 the thread count decides the order the float sums
     accumulate. Two Linux runs of one commit scored val R2 0.7740 and 0.7719,
-    and the lower one shipped a different candidate."""
-    tree = ast.parse((ROOT / "run_training.py").read_text(encoding="utf-8"))
+    and the lower one shipped a different candidate. Every tracked non-test
+    module is read, because the scripts that produce published studies fit
+    estimators too. Only explicit n_jobs arguments are checked; an estimator
+    built without one is not seen."""
+    sources = [p for p in _tracked_python() if not p.startswith("tests/")]
     threads = [
         node.value
-        for node in ast.walk(tree)
+        for path in sources
+        for node in ast.walk(ast.parse((ROOT / path).read_text(encoding="utf-8")))
         if isinstance(node, ast.keyword) and node.arg == "n_jobs"
     ]
     assert threads, "no n_jobs argument left; the estimators moved"

@@ -1,10 +1,11 @@
 """Measure seed variance of the full training protocol.
 
 Runs :func:`run_training.run_protocol`, the exact pipeline that produces the
-shipped artefacts, candidate selection included, across N seeds and records
-the spread of the headline metrics next to the naive baseline. Writes
-``reports/seed_variance.json``, which the README/MODEL_CARD tables are gated
-against.
+shipped artefacts, across N seeds. Records the spread of the shipped
+regressor's test metrics next to the naive baseline, and which candidate
+scores best on val at each seed, the evidence behind ``SHIPPED_REGRESSOR``.
+Writes ``reports/seed_variance.json``, which the README/MODEL_CARD tables are
+gated against.
 
     python scripts/measure_seed_variance.py [--seeds 20]
 """
@@ -33,9 +34,10 @@ def main() -> int:
     per_seed = []
     for seed in range(args.seeds):
         result = run_protocol(df_clean, seed=seed)
+        val = result["reg_record"]["candidates_val"]
         row = {
             "seed": seed,
-            "selected_model": result["reg_record"]["selected_model"],
+            "val_winner": max(val, key=lambda name: val[name]["r2"]),
             "test_r2": round(result["reg_record"]["metrics"]["r2"], 4),
             "zones_macro_f1": round(result["clf_record"]["metrics"]["macro_f1"], 4),
             "baseline_test_r2": result["baseline"]["test_r2"],
@@ -57,16 +59,16 @@ def main() -> int:
         "n_seeds": args.seeds,
         "protocol": (
             "run_training.run_protocol per seed: split (price-qcut stratified), "
-            "train-only cap bounds / zone bins / category vocabulary, candidate "
-            "selection on val, single test read"
+            "train-only cap bounds / zone bins / category vocabulary, every "
+            "candidate scored on val, the shipped regressor read once on test"
         ),
         "test_r2": agg("test_r2"),
         "zones_macro_f1": agg("zones_macro_f1"),
         "baseline_test_r2": agg("baseline_test_r2"),
         "baseline_zones_macro_f1": agg("baseline_zones_macro_f1"),
-        "selected_model_counts": {
-            name: sum(1 for r in per_seed if r["selected_model"] == name)
-            for name in sorted({r["selected_model"] for r in per_seed})
+        "val_winner_counts": {
+            name: sum(1 for r in per_seed if r["val_winner"] == name)
+            for name in sorted({r["val_winner"] for r in per_seed})
         },
         "per_seed": per_seed,
     }
@@ -74,7 +76,7 @@ def main() -> int:
     print(f"\nwrote {OUT}")
     print(f"test R2      {record['test_r2']}")
     print(f"zones F1     {record['zones_macro_f1']}")
-    print(f"selection    {record['selected_model_counts']}")
+    print(f"val winner   {record['val_winner_counts']}")
     return 0
 
 
