@@ -1,4 +1,4 @@
-"""Download and parse NYC.gov Rolling Sales 2024 into a single DataFrame.
+"""Download and parse NYC.gov Rolling Sales into a single DataFrame.
 
 Data source: https://www.nyc.gov/site/finance/property/property-rolling-sales-data.page
 

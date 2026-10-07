@@ -1,4 +1,4 @@
-# External Benchmark - NYC.gov 2024 Rolling Sales
+# External Benchmark - NYC.gov Rolling Sales
 #
 # Execution contract:
 #   A. CI must not reinterpret results. This workflow runs the pipeline
@@ -8,8 +8,10 @@
 #      no cached artefacts influence the scored frame.
 #   C. Required status check is structural. CI fails only on: schema
 #      violation, leakage detection, determinism failure, structural
-#      health-check failure, or pipeline crash. Low R² / low F1 / poor
-#      prediction numbers are reported, never enforced.
+#      health-check failure, pipeline crash, the recomputed score or scored
+#      rows leaving their band around the sealed run, or the set of drop
+#      reasons changing. A low
+#      R² / low F1 on its own is reported, never enforced.
 #   D. Benchmark output is an immutable per-run artefact, uploaded once
 #      and never rewritten within the same run.
 #
@@ -17,7 +19,8 @@
 # runs when benchmark-relevant files change), so its job can NOT be a
 # required status check - a required check that doesn't report wedges
 # every non-benchmark PR in "expected" forever. main's required checks
-# are the four always-run CI jobs (lint/test/security/docker-build);
+# are the five always-run CI jobs (lint/test/security/docker-build/
+# reproducibility);
 # this job gates benchmark-touching PRs by failing them when it runs.
 
 name: External Benchmark
@@ -90,7 +93,7 @@ jobs:
         # Contract:
         #   * verifies the SCHEMA_MAP registry lock BEFORE anything runs
         #     (a hash mismatch aborts here - it is never recorded as data)
-        #   * downloads NYC.gov 2024 Rolling Sales (network fetch)
+        #   * downloads NYC.gov Rolling Sales (network fetch)
         #   * applies the sealed SCHEMA_MAP version via apply_schema_map,
         #     then enforces drop-log reconciliation + finite targets
         #   * runs leakage invariants on the mapped X

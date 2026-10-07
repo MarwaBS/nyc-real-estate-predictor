@@ -1,8 +1,10 @@
 """The single conversion from a predicted price to a served zone.
 
 The zone is a deterministic function of price -- ``cut(PRICE,
-PRICE_ZONE_BINS)`` -- and training scores zones through this same function,
-so the reported macro-F1 describes exactly what serving returns.
+PRICE_ZONE_BINS)``. Training buckets its predictions by the same rule,
+``bisect_left`` over its train-fitted cut-points, and those equal
+``PRICE_ZONE_BINS`` for the shipped seed (tests/test_config_artefact_agreement.py),
+so the reported macro-F1 describes what serving returns.
 """
 
 from __future__ import annotations

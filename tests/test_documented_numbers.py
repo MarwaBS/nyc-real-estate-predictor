@@ -603,11 +603,18 @@ def test_seed_variance_claims_match_the_recorded_study() -> None:
         spread = SEED_VARIANCE[key]
         claim = f"{spread['mean']:.3f} ± {spread['std']:.3f}"
         assert claim in readme, f"README does not quote the {key} spread {claim}"
-    # The selection-count claim must match too.
-    counts = SEED_VARIANCE["selected_model_counts"]
+    # The val-winner count must match too.
+    counts = SEED_VARIANCE["val_winner_counts"]
     winner = max(counts, key=lambda k: counts[k])
     n = SEED_VARIANCE["n_seeds"]
-    assert f"{counts[winner]}/{n}" in _read("README.md")
+    # Anchored on the claim's phrase: a bare "16/20" also matches the 64/16/20 split.
+    win_claim = f"in {counts[winner]}/{n} runs"
+    assert win_claim in readme
+    assert win_claim in _read("MODEL_CARD.md")
+    runners_up = (
+        f"Random Forest {counts['random_forest']}, LightGBM {counts['lightgbm']}"
+    )
+    assert runners_up in readme, f"README does not quote the runners-up as {runners_up}"
 
 
 def test_the_shipped_seed_metrics_sit_inside_the_recorded_spread() -> None:

@@ -86,7 +86,7 @@ def main() -> int:
                 n_estimators=500,
                 min_samples_leaf=10,
                 random_state=RANDOM_SEED,
-                n_jobs=-1,
+                n_jobs=1,
             )
         )
         model.fit(features.loc[idx_train], df.loc[idx_train, "LOG_PRICE"])

@@ -194,8 +194,8 @@ def run_protocol(
     seed: int,
     save_path: Path | None = None,
 ) -> dict[str, Any]:
-    """The full training protocol for one seed: build_splits, then candidate
-    selection on val and a single test read."""
+    """The full training protocol for one seed: build_splits, every candidate
+    scored on val, and a single test read of the shipped regressor."""
     prep = build_splits(df_clean, seed)
     df = prep["df"]
     idx_train = prep["idx"]["train"]
@@ -284,13 +284,13 @@ def train_regression(
     seed: int = RANDOM_SEED,
     save_path: Path | None = None,
 ) -> tuple[dict[str, Any], Any]:
-    """Train candidates, pick the winner on VAL, score it once on TEST.
+    """Train every candidate, score each on VAL, score the shipped one once on TEST.
 
-    Three candidates compared on R2 is three draws; picking the max of those
-    on test would report the luckiest draw as a hold-out estimate.
+    The shipped regressor is ``SHIPPED_REGRESSOR``, recorded rather than
+    re-picked: the val lead is smaller than the drift between two machines.
 
-    Returns the selected model's record (name, metrics) for the committed
-    training-metrics artefact.
+    Returns the shipped model's record (name, metrics, every candidate's val
+    scores) for the committed training-metrics artefact.
     """
     logger.info("Training regression models")
 

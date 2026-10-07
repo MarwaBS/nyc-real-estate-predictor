@@ -16,9 +16,9 @@ This repository contains **two separate evaluation surfaces** that should not be
 | Surface | Data | Purpose | Primary result | Evidence artefact |
 |---|---|---|---|---|
 | Trained-model evaluation | Kaggle 2023 listings (4,526 rows; BEDS, BATH, LAT/LON, SUBLOCALITY) | Model quality on matched distribution | R² = 0.835 on the 20% test split (naive borough-median baseline: 0.177) | [`reports/training_metrics.json`](reports/training_metrics.json) (committed; the raw CSV is committed too, so `python run_training.py` reproduces this from a fresh clone) |
-| External benchmark | NYC.gov 2024 Rolling Sales (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real 2024 sales** | [`benchmarks/results.json`](benchmarks/results.json) (committed; recomputable by anyone while NYC.gov keeps publishing the 2024 files, the benchmark model ships in the repo and the data is a public download) |
+| External benchmark | NYC.gov Rolling Sales, a rolling 12-month window (~80k rows; no BEDS / BATH / LAT/LON) | Out-of-distribution scoring of a lean shared-feature model under a sealed schema contract | **R²(log) = 0.250 on 18,321 real sales** (sealed run, 2026-07-20) | [`benchmarks/results.json`](benchmarks/results.json) (committed. NYC.gov replaces the files as the window moves, so a re-run scores newer sales; CI requires its score and row count to stay within their bands of the sealed run and its drop reasons to be the same) |
 
-Both surfaces are re-runnable from a fresh clone under this repository's pinned environment: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. Training is re-runnable from the committed raw CSV; the benchmark is re-runnable only while NYC.gov keeps serving the 2024 file, since it is fetched rather than committed. Byte-identical artefacts are proven for two runs on one CI runner, not across machines or across an unpinned rebuild (see [§Reproducibility](#reproducibility)). See [§External Benchmark](#external-benchmark--nycgov-2024) for the full information-boundary statement.
+Both surfaces are re-runnable from a fresh clone under this repository's pinned environment: `python -m benchmarks.run_benchmark` downloads the public NYC.gov data, verifies the schema lock, and recomputes the benchmark number, while `python run_training.py` cleans the committed raw Kaggle CSV and regenerates every flagship artefact and the metrics file behind the R² above. Training is re-runnable from the committed raw CSV; the benchmark re-runs against whatever 12-month window NYC.gov serves that day, since it is fetched rather than committed, so it reproduces the sealed number only within its CI bands. Byte-identical artefacts are proven for two runs on one CI runner, not across machines or across an unpinned rebuild (see [§Reproducibility](#reproducibility)). See [§External Benchmark](#external-benchmark-nycgov-rolling-sales) for the full information-boundary statement.
 
 ---
 
@@ -44,11 +44,11 @@ once, after selection is fixed.
 The test target is capped by the same train-fitted IQR rule as the training rows, so 72 of 906 test prices are clipped before scoring. Against listed prices the same model scores **0.7883** (`reports/cap_factor_study.json`).
 
 Across **20 seeds** of the full protocol (split, train-only fitting and
-candidate selection re-run each time, `scripts/measure_seed_variance.py`,
+every candidate re-scored on val each time, `scripts/measure_seed_variance.py`,
 recorded in [`reports/seed_variance.json`](reports/seed_variance.json)):
-test R² **0.814 ± 0.028**, zones macro F1 **0.717 ± 0.020**, against a
+test R² **0.816 ± 0.028**, zones macro F1 **0.721 ± 0.017**, against a
 per-borough-median baseline of 0.170 ± 0.017 R² and 0.242 ± 0.058 F1.
-XGBoost wins selection in 16/20 runs (candidates Random Forest 3, LightGBM 1), at 4,526
+XGBoost has the best val R² in 16/20 runs (Random Forest 3, LightGBM 1), at 4,526
 rows the candidate ranking is seed-sensitive, which is exactly why the
 spread is published next to the point estimates.
 
@@ -118,14 +118,14 @@ at train time, which fails the run rather than publishing a breach.
 
 ---
 
-## External Benchmark, NYC.gov 2024
+## External Benchmark, NYC.gov Rolling Sales
 
 **What this is.** A schema-constrained out-of-distribution benchmark, gated on
 the checks listed under B below
 and recomputable from public data: a lean regressor trained only on the three
 features the Kaggle training data and NYC.gov Rolling Sales genuinely share
-(borough, property square footage, ZIP) is scored against real 2024 sale
-transactions, under a SHA-sealed transformation contract that the
+(borough, property square footage, ZIP) is scored against a rolling 12 months
+of real sale transactions, under a SHA-sealed transformation contract that the
 orchestrator verifies before anything runs.
 **What this is not.** A production housing-price predictor. Not the flagship
 model (which needs BEDS/BATH/coordinates that NYC.gov does not publish).
@@ -181,7 +181,7 @@ cleaner never created. Retrained on the reproducible dataset, the score is
 regressed against.
 
 **Read the number honestly:** 0.250 R²(log) is what borough + sqft + ZIP
-explain about 2024 family-dwelling sale prices, full stop. It is *supposed*
+explain about recent family-dwelling sale prices, full stop. It is *supposed*
 to be far below the flagship's in-distribution 0.835, the point of the
 benchmark is that this gap is measured and sealed, not hidden.
 
@@ -219,7 +219,7 @@ One-shot orchestration: verify lock → download → map → enforce invariants 
 ### Information-boundary statement
 
 **Flagship performance is bounded by the observable features in NYC.gov
-2024, not by model quality.** The flagship regressor requires BEDS, BATH,
+Rolling Sales, not by model quality.** The flagship regressor requires BEDS, BATH,
 coordinate-derived distances, and SUBLOCALITY; NYC.gov Rolling Sales
 publishes none of these, and no amount of cleaning or retraining can
 recover information the data source does not contain. That is why the
@@ -235,7 +235,9 @@ into the contract, see SCHEMA_MAP.md §6 and §8.
 ### What will NOT change to "improve" this number
 
 - The sealed `SCHEMA_MAP.md` (locked by SHA in `SCHEMA_MAP_VERSIONS.json`,
-  enforced by CI **and** by the orchestrator before every run).
+  enforced by CI **and** by the orchestrator before every run). Its title
+  still reads "Rolling Sales 2024"; the data it maps is the rolling 12-month
+  window described above, and retitling it would break the seal.
 - Drop rules within a sealed version (changing them = bump the version,
   reseal, rerun, and treat all prior results as invalid, SCHEMA_MAP §9).
 - Model features (the benchmark model is the benchmark model; retraining is
@@ -260,7 +262,7 @@ src/data/features.py        Geospatial (haversine distances), numeric, target en
     v
 src/models/pipelines.py     sklearn Pipeline + ColumnTransformer (reproducible preprocessing)
     |
-    +---> run_training.py                       Candidate training + selection on val
+    +---> run_training.py                       Candidate training + val scores
     |
     +---> src/models/explain.py                SHAP (global + per-prediction) + fairness
     |
@@ -534,7 +536,7 @@ nyc-real-estate-predictor/
 
 ## Reproducibility
 
-The training environment and the serving environment MUST run the **same** `scikit-learn` line. A silent prediction-corruption incident on 2026-04-19 (Manhattan condo predicted at $2) traced to a `scikit-learn==1.5.2` runtime loading a pickle produced under 1.8.0, sklearn emitted `InconsistentVersionWarning` but the pipeline continued with corrupted internal state. Postmortem in [`MODEL_CARD.md`](MODEL_CARD.md#production-incidents-postmortem).
+The training environment and the serving environment MUST run the **same** `scikit-learn` line. A silent prediction-corruption incident on 2026-04-19 (Manhattan condo predicted at $2) traced to a `scikit-learn==1.5.2` runtime loading a pickle produced under 1.8.0, sklearn emitted `InconsistentVersionWarning` but the pipeline continued with corrupted internal state. Postmortem in [`MODEL_CARD.md`](MODEL_CARD.md#failure-modes-observed).
 
 Exact pins, training + runtime are now identical:
 
