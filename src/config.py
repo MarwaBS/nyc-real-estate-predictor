@@ -15,16 +15,14 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW_DIR = PROJECT_ROOT / "Resources"
-DATA_PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 MODELS_DIR = PROJECT_ROOT / "models"
 
 RAW_DATASET = DATA_RAW_DIR / "NY-House-Dataset.csv"
 CLEANED_DATASET = PROJECT_ROOT / "output" / "cleaned_house_dataset.csv"
 
 # Ensure output dirs exist (best-effort, read-only runtimes like HF Spaces skip silently)
-for _dir in (DATA_PROCESSED_DIR, MODELS_DIR):
-    with contextlib.suppress(PermissionError, OSError):
-        _dir.mkdir(parents=True, exist_ok=True)
+with contextlib.suppress(PermissionError, OSError):
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Model / training constants

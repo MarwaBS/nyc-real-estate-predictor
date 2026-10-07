@@ -30,7 +30,6 @@ mlruns/
 # provenance flag to false mid-run.
 mlflow.db
 data/raw/
-data/processed/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
