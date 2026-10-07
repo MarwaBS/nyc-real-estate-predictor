@@ -9,7 +9,7 @@
 
 > No shipped feature *names* the target: `assert_no_leakage` rejects any feature name containing `price`, and the leakage suite fails the build if one reappears. That is a name check, so state the rest plainly: `ZIPCODE` and `SUBLOCALITY` are **target-encoded**, which makes them price-derived by construction. They are fitted on the train split only, inside the sklearn `Pipeline`, so the row being predicted never contributes to its own encoding. That is what keeps them out of train/test leakage, not the name rule. `PRICE_PER_SQFT` was different in kind: a per-row ratio of the target, which let the model read the answer back and produced R2=0.997. It is removed and [documented as ADR-001](docs/decisions/001-remove-price-per-sqft.md).
 
-> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT, and the broader bug classes documented in JAMA, *Nature Communications*, and the Kaggle Santander 2019 reveal, is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job, which runs on pushes touching `benchmarks/`, `requirements.txt` or `pyproject.toml`, and weekly.
+> **Built on a published library we own.** The leakage-firewall logic that catches PRICE_PER_SQFT, and the broader leakage classes documented in *JAMA Network Open*, *Nature Machine Intelligence* and *Nature Communications*, is extracted as a standalone package: [**`schema-firewall`** on PyPI](https://pypi.org/project/schema-firewall/) ([source](https://github.com/MarwaBS/schema-firewall)). This repo pins `schema-firewall==0.1.3` in [`requirements.txt`](requirements.txt) and re-validates the integration in its `External Benchmark` CI job, which runs on pushes touching `benchmarks/`, `requirements.txt` or `pyproject.toml`, and weekly.
 
 This repository contains **two separate evaluation surfaces** that should not be conflated:
 
@@ -556,4 +556,4 @@ All pins live in [`requirements.txt`](requirements.txt) (serving) and [`requirem
 
 ## License
 
-MIT
+MIT, for the code and documentation. `Resources/NY-House-Dataset.csv` is "New York Housing Market" by Nidula Elgiriyewithana on Kaggle (doi:10.34740/KAGGLE/DSV/7351086). Kaggle lists its licence as "Other (specified in description)" and the description states none, so it is third-party data, not covered by this repository's MIT licence.
