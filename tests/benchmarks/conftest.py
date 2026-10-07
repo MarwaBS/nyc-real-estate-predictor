@@ -1,7 +1,7 @@
 """Fixtures for the external-benchmark firewall suite.
 
 Provides a synthetic NYC.gov Rolling Sales sample frame that matches the
-column names the real 2024 dataset uses, without depending on an external
+column names the real dataset uses, without depending on an external
 download. Every valid row respects the sealed SCHEMA_MAP contract (1-3
 family dwellings, where NYC.gov's GROSS SQUARE FEET is the home's own
 footage and therefore comparable to the Kaggle PROPERTYSQFT the benchmark
@@ -26,7 +26,7 @@ _BULK_VALID_ROWS = 150
 
 @pytest.fixture
 def nyc_rolling_sales_fixture() -> pd.DataFrame:
-    """Synthetic sample mirroring the NYC.gov Rolling Sales 2024 schema.
+    """Synthetic sample mirroring the NYC.gov Rolling Sales schema.
 
     Not the real dataset, the real download happens at run time. This
     fixture exists only to drive the hostile-input test suite with

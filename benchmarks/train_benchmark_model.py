@@ -7,7 +7,7 @@ transaction records, so it cannot be validated against that external source.
 This lean model trains on only the three features that the Kaggle training
 data and NYC.gov Rolling Sales genuinely share, **borough**, **property
 square footage**, and **ZIP**, so :mod:`benchmarks.run_benchmark` can score
-real, unseen NYC.gov 2024 sales and report an honest out-of-distribution R².
+real, unseen NYC.gov sales and report an honest out-of-distribution R².
 
 It is deliberately lower-accuracy than the flagship: the point is *honest
 external validation on real data*, not peak in-distribution accuracy. The

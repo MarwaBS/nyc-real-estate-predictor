@@ -1,4 +1,4 @@
-"""Schema mapping from NYC.gov Rolling Sales 2024 to the model feature space.
+"""Schema mapping from NYC.gov Rolling Sales to the model feature space.
 
 Contract: ``benchmarks/SCHEMA_MAP.md`` (version pinned in
 ``SCHEMA_MAP_VERSIONS.json``). This module is the reference

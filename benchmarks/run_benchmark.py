@@ -7,7 +7,7 @@ violation raises and fails the run; nothing is merely recorded):
    equal the registry entry sealed for the current SCHEMA_MAP_VERSION
    (:func:`benchmarks.invariants.verify_schema_map_lock`). A run against
    an unsealed contract is invalid by definition, so it never starts.
-2. Download NYC.gov 2024 Rolling Sales (5 boroughs) via
+2. Download NYC.gov Rolling Sales (5 boroughs) via
    :func:`benchmarks.datasets.nyc_rolling_sales_2024.download_nyc_rolling_sales`.
 3. Apply :func:`benchmarks.mapping.apply_schema_map` to produce
    ``(X, target, report)`` under the SCHEMA_MAP.md contract, then enforce:
