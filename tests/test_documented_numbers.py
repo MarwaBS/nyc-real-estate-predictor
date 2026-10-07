@@ -232,6 +232,9 @@ def _study_values() -> set[float]:
 
 #: Any decimal figure. The trailing guard drops versions (`1.26.4`).
 _DECIMAL = re.compile(r"(?<![\d.])(\d+\.\d+)(?!\.?\d)")
+# A DOI prefix (doi:10.NNNN) identifies, it does not measure. Only that prefix is
+# blanked, to the same length, so the positions the historical check reads stay put.
+_NOT_A_FIGURE = re.compile(r"\bdoi:10\.\d+")
 
 
 def _artefact_floats() -> set[float]:
@@ -318,7 +321,8 @@ def test_every_figure_in_a_live_doc_is_in_the_artefacts(doc: str) -> None:
     allowed = _artefact_floats()
     wrong = []
     for i, line in enumerate(_read(doc).splitlines(), 1):
-        for match in _DECIMAL.finditer(line):
+        scanned = _NOT_A_FIGURE.sub(lambda m: " " * len(m.group()), line)
+        for match in _DECIMAL.finditer(scanned):
             if _is_historical(line, match.start()):
                 continue
             value = match.group(1)

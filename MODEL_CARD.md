@@ -45,7 +45,7 @@ Format loosely follows *"Model Cards for Model Reporting"* (Mitchell et al., 201
 
 ## Evaluation data
 
-- **Datasets:** `Resources/NY-House-Dataset.csv` (Kaggle public snapshot, 4,801 rows cleaned to 4,526). The raw CSV is committed, so `python run_training.py` regenerates the cleaned dataset and every artefact below from a fresh clone.
+- **Datasets:** `Resources/NY-House-Dataset.csv`, "New York Housing Market" by Nidula Elgiriyewithana on Kaggle (doi:10.34740/KAGGLE/DSV/7351086). Kaggle lists its licence as "Other (specified in description)" and the description states none, so it is third-party data, not covered by this repository's MIT licence (4,801 rows cleaned to 4,526). The raw CSV is committed, so `python run_training.py` regenerates the cleaned dataset and every artefact below from a fresh clone.
 - **Motivation:** illustrative; chosen for small-enough-to-experiment-with size while having enough geospatial and categorical signal to make feature engineering non-trivial.
 - **Preprocessing:** `src/data/cleaner.py` handles dedupe, borough/ZIP derivation, borough-aware imputation, overflow-sentinel removal, outlier capping, and normalisation. Target `PRICE_ZONE` is derived at the **equal-frequency quartiles** of the training price distribution ($499,000 / $825,000 / $1,496,000), so the four zones carry ~1,130 listings each. The previous [0, 500k, 1M, 2M] were round numbers with no derivation and split the data 1610/1183/929/805.
 
